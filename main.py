@@ -54,6 +54,9 @@ def setup_world():
     record_label_office = PointOfInterest("Indie Hits Records", "A small but ambitious record label.", poi_type="RECORD_LABEL",
                                            interaction_options=["Submit Demo (requires 500 fame)", "Talk to A&R Rep (requires Manager)"])
     city_center.add_poi(record_label_office)
+    downtown_cafe = PointOfInterest("The Daily Grind Cafe", "Popular hangout, good coffee, free Wi-Fi.", poi_type="CAFE",
+                                     interaction_options=["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"])
+    city_center.add_poi(downtown_cafe)
 
 
     # Define Travel Connections (Location Name -> {cost, time})
@@ -134,6 +137,29 @@ def setup_world():
     }
     NPC_REGISTRY[vic.npc_id] = vic
     rusty_mug_club.owner_npc_id = vic.npc_id
+
+    # Potential Bandmate - Alex Miles
+    alex = NPC(npc_id="alex001", name="Alex 'Shredder' Miles", personality_key="potential_bandmate_guitarist", home_location=pro_music_store)
+    alex.current_location = pro_music_store # Starts at the pro music store
+    # alex.skills = {"guitar": 18, "songwriting": 7} # Store skills if NPC class supports it, or for dev reference
+    alex.schedule = {
+        "Weekday_Afternoon": pro_music_store, # Using keys from get_time_slot_key
+        "Weekday_Evening": rusty_mug_club,
+        "Weekend_Afternoon": pro_music_store, # Assuming Weekend maps to Saturday/Sunday
+        "Weekend_Evening": rusty_mug_club,
+    }
+    NPC_REGISTRY[alex.npc_id] = alex
+
+    # Music Blogger - Casey Jones
+    casey = NPC(npc_id="casey001", name="Casey 'The Cynic' Jones", personality_key="music_blogger_critical", home_location=downtown_cafe) # Home is the cafe
+    casey.current_location = downtown_cafe # Starts at the cafe
+    casey.schedule = {
+        "Weekday_Morning": downtown_cafe,
+        "Weekday_Afternoon": downtown_cafe,
+        "Weekday_Evening": rusty_mug_club, # Checks out gigs at Rusty Mug
+        "Weekend_Evening": grande_theater, # Might check out bigger shows at Grande Theater too
+    }
+    NPC_REGISTRY[casey.npc_id] = casey
 
 
 # --- Time and Scheduling Helpers ---
