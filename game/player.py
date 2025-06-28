@@ -14,30 +14,50 @@ class Player:
         self.money = 500 # Starting money
 
         self.gear_inventory = [] # List of GearItem objects
-        self.gear_capacity = 10  # Max total size of gear player can carry
+        self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
+        self.has_bike = False # Player starts without a bike
 
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
+
+    def get_current_gear_capacity(self, travel_mode=None):
+        """Calculates current gear capacity based on situation or travel mode."""
+        if travel_mode == "walk":
+            return max(1, int(self.base_gear_capacity / 2)) # Walking reduces capacity, min 1
+        elif travel_mode == "bike":
+            if self.has_bike:
+                return self.base_gear_capacity
+            else: # Cannot use bike mode if no bike
+                return 0 # Or handle error upstream
+        elif travel_mode == "taxi": # Taxis can usually carry a good amount of gear
+            return self.base_gear_capacity * 3
+        # Default capacity when not specifically traveling or using high-capacity transport (e.g. at home, in a venue)
+        # This could also be a very large number if we assume no limit when 'static'.
+        # For now, let's assume default is like having access to your "stuff" nearby.
+        return self.base_gear_capacity * 2
+
 
     def get_current_gear_load(self):
         """Calculates the total size of all gear in the inventory."""
         return sum(item.size for item in self.gear_inventory)
 
     def can_carry_gear(self, gear_item_or_size):
-        """Checks if adding a new item (or a specific size) exceeds capacity."""
+        """Checks if adding a new item (or a specific size) exceeds default/current non-travel capacity."""
         load_to_add = gear_item_or_size.size if isinstance(gear_item_or_size, GearItem) else gear_item_or_size
-        return (self.get_current_gear_load() + load_to_add) <= self.gear_capacity
+        # Use default capacity (travel_mode=None) for general inventory checks
+        return (self.get_current_gear_load() + load_to_add) <= self.get_current_gear_capacity()
 
     def add_gear(self, gear_item):
         if not isinstance(gear_item, GearItem):
             print(f"Error: Cannot add '{gear_item}'. Not a valid GearItem.")
             return False
-        if self.can_carry_gear(gear_item):
+        if self.can_carry_gear(gear_item): # Checks against default capacity
             self.gear_inventory.append(gear_item)
             print(f"{gear_item.name} added to inventory.")
             return True
         else:
-            print(f"Cannot carry {gear_item.name}. Not enough capacity. (Load: {self.get_current_gear_load()}/{self.gear_capacity}, Item size: {gear_item.size})")
+            default_capacity = self.get_current_gear_capacity()
+            print(f"Cannot carry {gear_item.name}. Not enough capacity. (Load: {self.get_current_gear_load()}/{default_capacity}, Item size: {gear_item.size})")
             return False
 
     def remove_gear(self, item_id_or_instance):
@@ -99,7 +119,9 @@ class Player:
         status += f"Location: {location_str}{poi_str}\n"
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
         status += f"Skills: {self.skills}\n"
-        status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.gear_capacity})\n"
+        # Display default capacity (not tied to a specific travel mode)
+        status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"
+        status += f"Has Bike: {'Yes' if self.has_bike else 'No'}\n"
 
         if self.has_manager:
             status += "Manager: Yes"
@@ -151,7 +173,17 @@ if __name__ == '__main__':
 
     # Test Gear Inventory
     assert p.get_current_gear_load() == 0
-    assert p.gear_capacity == 10
+    # Test default capacity (travel_mode=None gives base_gear_capacity * 2 = 20 for default base of 10)
+    assert p.get_current_gear_capacity() == 20
+    assert p.base_gear_capacity == 10 # Check base
+    assert not p.has_bike
+
+    # Test mode-specific capacities
+    assert p.get_current_gear_capacity("walk") == 5 # base_gear_capacity / 2
+    assert p.get_current_gear_capacity("bike") == 0 # No bike yet
+    p.has_bike = True
+    assert p.get_current_gear_capacity("bike") == 10 # With bike, it's base_gear_capacity
+    assert p.get_current_gear_capacity("taxi") == 30 # base_gear_capacity * 3
 
     strings = GearItem("s001", "Strings", "Guitar strings", "ACCESSORY", 1, 10)
     guitar = GearItem("g001", "Basic Guitar", "An acoustic guitar", "INSTRUMENT", 5, 100)
@@ -168,9 +200,26 @@ if __name__ == '__main__':
     assert p.get_current_gear_load() == 6 # Amp not added
     assert amp not in p.gear_inventory
 
-    p.gear_capacity = 15 # Increase capacity
+    # Test adding when capacity is based on default (travel_mode=None, capacity = 20)
+    p.base_gear_capacity = 10 # Reset for clarity, default capacity is 20
+    p.gear_inventory = [strings, guitar] # Load is 1+5=6
+    assert p.get_current_gear_load() == 6
+
+    # Amp size is 7. 6 + 7 = 13. Default capacity is 20. So this should pass.
     assert p.add_gear(amp)
     assert p.get_current_gear_load() == 13
+    assert amp in p.gear_inventory
+
+    # Another amp would be 13 + 7 = 20. Should pass.
+    amp2 = GearItem("a002", "Second Amp", "Another practice amp", "AMPLIFIER", 7, 150)
+    assert p.add_gear(amp2)
+    assert p.get_current_gear_load() == 20
+
+    # One more small item (size 1) should fail (20+1 > 20)
+    extra_strings = GearItem("s002", "Extra Strings", "More strings", "ACCESSORY", 1, 10)
+    assert not p.add_gear(extra_strings)
+    assert p.get_current_gear_load() == 20
+
 
     assert p.remove_gear("g001")
     assert p.get_current_gear_load() == 8

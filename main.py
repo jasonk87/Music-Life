@@ -169,9 +169,54 @@ def setup_world():
     city_center.add_poi(crash_pad_motel)
 
 
-    # Define Travel Connections (Location Name -> {cost, time})
+    # Define Travel Connections (Location Name -> {cost, time}) # INTER-CITY
     home_town.add_travel_connection(city_center.name, cost=20, time_hours=2)
     city_center.add_travel_connection(home_town.name, cost=20, time_hours=2)
+
+    # --- Define Intra-City POI Connections ---
+    # Your Hometown Connections
+    home_town.intra_city_poi_connections[frozenset({player_home.poi_id, music_shop_home.poi_id})] = {
+        "walk": {"time": 15, "cost": 0},
+        "bike": {"time": 5, "cost": 0, "requires_bike": True},
+        "taxi": {"time": 3, "cost": 8}
+    }
+    home_town.intra_city_poi_connections[frozenset({player_home.poi_id, community_hall.venue_id})] = {
+        "walk": {"time": 10, "cost": 0},
+        "bike": {"time": 3, "cost": 0, "requires_bike": True},
+        "taxi": {"time": 2, "cost": 6}
+    }
+    home_town.intra_city_poi_connections[frozenset({player_home.poi_id, bus_stop_hometown.poi_id})] = {
+        "walk": {"time": 20, "cost": 0},
+        "bike": {"time": 7, "cost": 0, "requires_bike": True},
+        "taxi": {"time": 5, "cost": 10}
+    }
+    home_town.intra_city_poi_connections[frozenset({music_shop_home.poi_id, community_hall.venue_id})] = {
+        "walk": {"time": 5, "cost": 0},
+        "bike": {"time": 2, "cost": 0, "requires_bike": True},
+        # No direct taxi, too short / must walk from player_home
+    }
+    # City Center Connections (Example - can be expanded)
+    # Assuming city_bus_station, rusty_mug_club, pro_music_store, downtown_cafe, city_airport, crash_pad_motel are defined POI/Venue objects
+    city_center.intra_city_poi_connections[frozenset({city_bus_station.poi_id, rusty_mug_club.venue_id})] = {
+        "walk": {"time": 25, "cost": 0},
+        "bike": {"time": 10, "cost": 0, "requires_bike": True}, # Player might not have bike in new city initially
+        "taxi": {"time": 7, "cost": 12}
+    }
+    city_center.intra_city_poi_connections[frozenset({rusty_mug_club.venue_id, pro_music_store.poi_id})] = {
+        "walk": {"time": 10, "cost": 0},
+        "bike": {"time": 4, "cost": 0, "requires_bike": True},
+        "taxi": {"time": 3, "cost": 7}
+    }
+    city_center.intra_city_poi_connections[frozenset({downtown_cafe.poi_id, rusty_mug_club.venue_id})] = {
+        "walk": {"time": 12, "cost": 0},
+        "bike": {"time": 5, "cost": 0, "requires_bike": True},
+        "taxi": {"time": 4, "cost": 9}
+    }
+    city_center.intra_city_poi_connections[frozenset({city_bus_station.poi_id, city_airport.poi_id})] = {
+        "walk": {"time": 60, "cost": 0}, # Long walk
+        # "bike": {"time": 25, "cost": 0, "requires_bike": True}, # Maybe not bikeable easily
+        "taxi": {"time": 15, "cost": 25} # Airport taxi usually more
+    }
 
     # Events (now primarily associated with Venues)
     open_mic_event = Event(
@@ -417,7 +462,7 @@ def talk_to_npc_instance(player, npc_instance):
             print(f"{npc_instance.name} nods or waves goodbye.")
             npc_instance.add_memory(f"Had a conversation with {player.name} that ended.") # Generic memory
             # Future: Small relationship impact based on how convo ended or overall sentiment.
-            advance_game_time(hours=1)
+            advance_game_time(minutes=60) # 1 hour
             update_npc_locations(current_game_time)
             break
 
@@ -431,7 +476,7 @@ def talk_to_npc_instance(player, npc_instance):
         if "LLM Error" in npc_response or "An unexpected error occurred" in npc_response:
             print("It seems there's an issue with the LLM service for this conversation.")
             npc_instance.add_memory(f"Had a communication problem while talking to {player.name}.")
-            advance_game_time(hours=1) # Still consumes some time
+            advance_game_time(minutes=60) # Still consumes some time (1 hour)
             update_npc_locations(current_game_time)
             break
 
@@ -508,19 +553,23 @@ def main():
         print(f"--- Current Location: {player.location.name} ---")
         print(f"--- {get_current_time_str()} ---")
         print(f"--- Player: {player.name} | Fame: {player.fame} | Money: ${player.money} ---")
+        print(f"--- Currently at: {player.current_poi.name if player.current_poi else player.current_location.name} ---")
+
 
         main_menu_options = {
             "1": "Practice a skill",
-            "2": "Travel to another location",
-            "3": "Explore current location (View Venues & POIs)",
-            "4": "Check available gigs at current location",
-            "5": "Prepare for a gig",
-            "6": "Attempt a gig",
-            "7": "View detailed player stats",
-            "8": "Talk to someone",
-            "9": "Advance time by 1 hour (debug)",
+            "2": "Travel to another City", # Renamed for clarity
+            "3": "Travel within this City (to another POI)", # New option
+            "4": "Explore current POI/Area", # Renamed/Refocused
+            "5": "Check available gigs (at current City)", # Clarified scope
+            "6": "Prepare for a gig",
+            "7": "Attempt a gig",
+            "8": "View detailed player stats",
+            "9": "Talk to someone (at current POI/Area)", # Clarified scope
+            "00": "Advance time by 1 hour (debug)", # Changed to 00 to avoid conflict if we have 10+ options
             "0": "Quit game"
         }
+        # Adjust numbering for subsequent elif blocks
         choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
 
         if choice is None: # Invalid input after multiple tries
@@ -537,14 +586,14 @@ def main():
                     print("Practice time must be positive.")
                     continue
                 player.practice_skill(skill_to_practice, hours_to_practice)
-                advance_game_time(hours=hours_to_practice)
+                advance_game_time(minutes=hours_to_practice*60)
                 update_npc_locations(current_game_time) # Update NPC locations after time passes
             except ValueError:
                 print("Invalid number of hours.")
 
-        elif choice == "2": # Travel
-            print("\n--- Travel ---")
-            connections = player.location.travel_connections
+        elif choice == "2": # Travel to another City
+            print("\n--- Travel to another City ---") # Title updated
+            connections = player.current_location.travel_connections # Use current_location
             if not connections:
                 print("There are no travel connections from your current location.")
             else:
@@ -567,7 +616,7 @@ def main():
                         destination_location = WORLD_MAP.get(chosen_dest_name)
                         if destination_location:
                             player.travel(destination_location, travel_details['time_hours'])
-                            advance_game_time(hours=travel_details['time_hours'])
+                            advance_game_time(minutes=travel_details['time_hours']*60)
                                 update_npc_locations(current_game_time) # Update NPC locations
                             print(f"Paid ${travel_details['cost']} for travel. Remaining money: ${player.money}")
                         else:
@@ -576,34 +625,135 @@ def main():
                         print(f"Not enough money to travel to {chosen_dest_name}. Need ${travel_details['cost']}, have ${player.money}.")
             print("--------------------")
 
-        elif choice == "3": # Explore Location
-            print(f"\n--- Exploring {player.location.name} ---")
-            print(f"Description: {player.location.description}")
+        elif choice == "3": # Travel within this City (New)
+            print(f"\n--- Travel within {player.current_location.name} ---")
+            if not player.current_poi:
+                print("You are at a general city location, not a specific Point of Interest. Explore first or select a POI.")
+                # Or, list all POIs in the city as if player is at a "city entrance" POI.
+                # For now, require player to be at a POI to travel from it.
+                # This could be improved by having a "current_general_area" if current_poi is None.
+                # Or if current_poi is None, they are at the "city entrance" POI (e.g. bus station if they just arrived).
+                # Let's assume for now player.current_poi must be set to use this.
+                # A good first action after arriving in a city would be to travel from the arrival POI (e.g. bus station).
+                # If player.current_poi is None when arriving in a new city, they should be placed at a default entry POI.
+                # This is handled by player.travel() setting current_poi to None.
+                # The game loop or "Explore POI/Area" should then guide them.
+                # For now, if current_poi is None, let's allow travel from "city entrance" conceptually
+                # by listing all POIs as destinations.
 
-            if player.location.venues:
-                print("\nVenues:")
-                for i, venue in enumerate(player.location.venues):
-                    print(f"  {i+1}. {venue.name} ({venue.venue_type}) - {venue.description}")
-                    # Potential future: list events at this venue here, or offer to enter venue
-            else:
-                print("\nNo notable venues here.")
+            current_city_object = player.current_location
+            dest_poi_options = []
+            # Gather all POIs and Venues in the current city
+            all_city_pois_and_venues = current_city_object.points_of_interest + current_city_object.venues
 
-            if player.location.points_of_interest:
-                print("\nPoints of Interest:")
-                for i, poi in enumerate(player.location.points_of_interest):
-                    print(f"  {i+1}. {poi.name} ({poi.poi_type}) - {poi.description}")
-                    if poi.interaction_options:
-                        print(f"     Interact: {', '.join(poi.interaction_options)}")
-                    # Potential future: allow selecting POI to interact
+            for poi_obj in all_city_pois_and_venues:
+                if poi_obj != player.current_poi: # Don't list current POI as destination
+                    dest_poi_options.append(poi_obj)
+
+            if not dest_poi_options:
+                print("No other specific points of interest to travel to in this city.")
             else:
-                print("\nNothing else of interest here.")
-            advance_game_time(hours=1) # Exploring takes time
-            update_npc_locations(current_game_time) # Update NPC locations
+                print("Where would you like to go in the city?")
+                dest_display_list = [f"{poi.name} ({poi.category if hasattr(poi,'category') else poi.venue_type})" for poi in dest_poi_options]
+                dest_choice_idx_str = present_choices(dest_display_list, "Choose destination POI:")
+
+                if dest_choice_idx_str:
+                    chosen_destination_poi = dest_poi_options[int(dest_choice_idx_str) - 1]
+
+                    # Determine origin POI ID (can be tricky if player.current_poi is None)
+                    # For now, let's assume if player.current_poi is None, they are at a conceptual "city_entrance"
+                    # and we need connections FROM that entrance, or we just use a default travel time.
+                    # This part of the design needs refinement if player.current_poi can be None often.
+                    # For this iteration, we will assume player.current_poi is usually set.
+                    # If not, this travel option might not work perfectly or offer limited modes.
+
+                    origin_poi_id = player.current_poi.poi_id if hasattr(player.current_poi, 'poi_id') else \
+                                    (player.current_poi.venue_id if hasattr(player.current_poi, 'venue_id') else None)
+
+                    dest_poi_id = chosen_destination_poi.poi_id if hasattr(chosen_destination_poi, 'poi_id') else \
+                                  chosen_destination_poi.venue_id
+
+                    if not origin_poi_id:
+                        print("Cannot determine your precise starting point for intra-city travel. Try exploring first.")
+                        # Or provide default "from city edge" travel times
+                    else:
+                        connection_key = frozenset({origin_poi_id, dest_poi_id})
+                        travel_modes_data = current_city_object.intra_city_poi_connections.get(connection_key)
+
+                        if not travel_modes_data:
+                            print(f"No direct travel route defined between {player.current_poi.name} and {chosen_destination_poi.name}. You might need to find another way or this is an oversight in city planning!")
+                        else:
+                            print(f"Travel modes to {chosen_destination_poi.name}:")
+                            available_modes_for_choice = {}
+                            mode_map = {}
+                            choice_num = 1
+
+                            if "walk" in travel_modes_data:
+                                mode_info = travel_modes_data["walk"]
+                                available_modes_for_choice[str(choice_num)] = f"Walk: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
+                                mode_map[str(choice_num)] = ("walk", mode_info)
+                                choice_num += 1
+                            if player.has_bike and "bike" in travel_modes_data:
+                                mode_info = travel_modes_data["bike"]
+                                available_modes_for_choice[str(choice_num)] = f"Bike: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
+                                mode_map[str(choice_num)] = ("bike", mode_info)
+                                choice_num += 1
+                            if "taxi" in travel_modes_data:
+                                mode_info = travel_modes_data["taxi"]
+                                available_modes_for_choice[str(choice_num)] = f"Taxi: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
+                                mode_map[str(choice_num)] = ("taxi", mode_info)
+                                choice_num += 1
+
+                            if not available_modes_for_choice:
+                                print("No travel modes available for this route (this shouldn't happen if data exists).")
+                            else:
+                                mode_choice_key = present_choices(available_modes_for_choice, "Choose travel mode:")
+                                if mode_choice_key and mode_choice_key in mode_map:
+                                    chosen_mode_name, chosen_mode_details = mode_map[mode_choice_key]
+
+                                    # Check affordability for taxi
+                                    if chosen_mode_name == "taxi" and player.money < chosen_mode_details['cost']:
+                                        print(f"Not enough money for a taxi. Need ${chosen_mode_details['cost']}.")
+                                    # Check gear capacity
+                                    elif player.get_current_gear_load() > player.get_current_gear_capacity(chosen_mode_name):
+                                        print(f"Too much gear to travel by {chosen_mode_name}. Your load: {player.get_current_gear_load()}, Capacity for {chosen_mode_name}: {player.get_current_gear_capacity(chosen_mode_name)}.")
+                                    else:
+                                        if chosen_mode_name == "taxi":
+                                            player.money -= chosen_mode_details['cost']
+                                            print(f"Paid ${chosen_mode_details['cost']} for the taxi.")
+
+                                        player.travel_within_city(chosen_destination_poi, chosen_mode_details['time'])
+                                        advance_game_time(minutes=chosen_mode_details['time'])
+                                        update_npc_locations(current_game_time)
             print("--------------------")
 
-        elif choice == "4": # Check available gigs
-            print(f"\n--- Gigs at {player.location.name} ---")
-            all_gigs_at_location = player.location.get_all_events_at_location()
+
+        elif choice == "4": # Explore current POI/Area (was 3)
+            print(f"\n--- Exploring {player.current_poi.name if player.current_poi else player.current_location.name} ---")
+            if player.current_poi:
+                print(f"Description: {player.current_poi.description}")
+                if player.current_poi.interaction_options:
+                    print(f"Available interactions: {', '.join(player.current_poi.interaction_options)}")
+                # TODO: Implement actual POI interactions based on player.current_poi.interaction_options
+                # For now, just listing them.
+            else: # Exploring general city location if no specific POI
+                print(f"Description: {player.current_location.description}")
+                if player.current_location.venues:
+                    print("\nVenues in this city:")
+                    for i, venue_obj in enumerate(player.current_location.venues): # Renamed venue to venue_obj
+                        print(f"  {i+1}. {venue_obj.name} ({venue_obj.venue_type}) - {venue_obj.description}")
+                if player.current_location.points_of_interest: # This will list ALL POIs, including player_home etc.
+                    print("\nOther Points of Interest in this city:")
+                    for i, poi_obj in enumerate(player.current_location.points_of_interest): # Renamed poi to poi_obj
+                        print(f"  {i+1}. {poi_obj.name} ({poi_obj.category}) - {poi_obj.description}")
+
+            advance_game_time(minutes=30) # Exploring takes some time (reduced from 60)
+            update_npc_locations(current_game_time)
+            print("--------------------")
+
+        elif choice == "5": # Check available gigs (was 4)
+            print(f"\n--- Gigs available in {player.current_location.name} ---") # Title updated
+            all_gigs_at_location = player.current_location.get_all_events_at_location() # Use current_location
             active_gigs = [event for event in all_gigs_at_location if event.is_active]
 
             if not active_gigs:
@@ -628,9 +778,9 @@ def main():
                         print("   Preparation: Not Required.")
             print("--------------------")
 
-        elif choice == "5": # Prepare for a gig
+        elif choice == "6": # Prepare for a gig (was 5)
             print(f"\n--- Prepare for a Gig ---")
-            all_gigs_at_location = player.location.get_all_events_at_location()
+            all_gigs_at_location = player.current_location.get_all_events_at_location()
             preparable_gigs = [e for e in all_gigs_at_location if e.is_active and e.preparation_tasks_required and not e.are_preparations_complete()]
             if not preparable_gigs:
                 print("No gigs available here that require further preparation or all preparations are done.")
@@ -665,12 +815,12 @@ def main():
                             task_to_complete = task_map[task_choice_key]
                             print(f"Completing task: {task_to_complete}...")
                             chosen_event.complete_preparation_task(task_to_complete)
-                            advance_game_time(hours=2) # Generic time for a prep task
+                            advance_game_time(minutes=120) # Generic time for a prep task (2 hours)
                             update_npc_locations(current_game_time) # Update NPC locations
             print("--------------------")
 
 
-        elif choice == "6": # Attempt a gig (was 5)
+        elif choice == "7": # Attempt a gig (was 6)
             print(f"\n--- Attempt a Gig ---")
             all_gigs_at_location = player.location.get_all_events_at_location()
             performable_gigs = [
@@ -696,10 +846,10 @@ def main():
                     can_perform, message = chosen_event.can_perform(player)
                         if not can_perform:
                             print(f"Cannot perform {chosen_event.name}: {message}")
-                            advance_game_time(hours=1)
+                            advance_game_time(minutes=60) # 1 hour
                             update_npc_locations(current_game_time)
                         elif chosen_event.perform_event(player):
-                            advance_game_time(hours=3)
+                            advance_game_time(minutes=180) # 3 hours
                             update_npc_locations(current_game_time)
                             player.check_for_manager_unlock()
 
@@ -721,7 +871,7 @@ def main():
                                 elif chosen_event in player.location.events_available:
                                     player.location.remove_location_event(chosen_event)
                         else: # Failed performance
-                            advance_game_time(hours=1)
+                            advance_game_time(minutes=60) # 1 hour
                             update_npc_locations(current_game_time)
                             # Relationship/Memory update with Venue Owner for failure
                             venue_owner_npc_id = getattr(chosen_event.location, 'owner_npc_id', None)
@@ -736,15 +886,125 @@ def main():
                     print("Invalid input.")
             print("--------------------")
 
-        elif choice == "7": # View player stats (was 6)
+        elif choice == "8": # View player stats (was 7)
             print("\n--- Player Stats ---")
             print(player)
             print(get_current_time_str())
             print("--------------------")
 
-        elif choice == "8": # Talk to NPC
+        elif choice == "9": # Talk to someone (was 8)
             print("--- Talk to Someone ---")
-            npcs_at_location = []
+            # Logic needs to find NPCs at player.current_poi or in player.current_location (if no POI)
+            # For simplicity, let's find NPCs whose current_location is either the player's current_poi
+            # or if player.current_poi is None, then whose current_location is player.current_location (the city).
+            # Or, more accurately, NPCs whose current_location (which can be a POI/Venue) is *within* player.current_location (city).
+
+            npcs_to_list = []
+            target_area_name = player.current_poi.name if player.current_poi else player.current_location.name
+
+            for npc_instance in NPC_REGISTRY.values():
+                npc_is_at_player_poi = player.current_poi and npc_instance.current_location == player.current_poi
+
+                # Check if NPC is at a POI/Venue that is within the player's current city.
+                # And if player is at a general city level (no POI), then NPC must also be at that general city level OR at a POI/Venue in that city.
+                # This logic ensures we list NPCs in the same "space" as the player.
+
+                npc_general_location = None
+                if hasattr(npc_instance.current_location, 'parent_location_id'): # if NPC is at a POI/Venue with a parent city
+                    npc_general_location = WORLD_MAP.get(npc_instance.current_location.parent_location_id)
+                elif isinstance(npc_instance.current_location, Location): # if NPC is at a general city location
+                    npc_general_location = npc_instance.current_location
+
+                if npc_is_at_player_poi:
+                    npcs_to_list.append(npc_instance)
+                # If player is at a general city level (current_poi is None)
+                # OR if the NPC is at another POI/Venue within the same city as the player.
+                elif (not player.current_poi and npc_general_location == player.current_location) or \
+                     (player.current_poi and npc_general_location == player.current_location and npc_instance.current_location != player.current_poi) :
+                     # The above line means: if player is at a POI, list other NPCs in the same city but not at the *exact* same POI,
+                     # under the assumption "Talk to someone" might mean shout across the street or find someone nearby.
+                     # This might be too broad. Let's simplify: only list NPCs at the player's *exact* POI.
+                     # If player.current_poi is None, then list NPCs whose current_location is player.current_location (the city itself).
+                     pass # Let's refine this.
+
+            # Refined logic for listing NPCs:
+            # List NPCs if their current_location (which can be a POI/Venue object)
+            # is the same as player.current_poi OR
+            # if player.current_poi is None, list NPCs whose current_location is player.current_location (the city)
+            # OR NPCs whose current_location (a POI/Venue) has player.current_location as its parent.
+            npcs_at_player_exact_poi = []
+            npcs_at_player_city_general = []
+
+            for npc in NPC_REGISTRY.values():
+                if player.current_poi and npc.current_location == player.current_poi:
+                    npcs_at_player_exact_poi.append(npc)
+                elif not player.current_poi and npc.current_location == player.current_location: # Player at city level, NPC at city level
+                     npcs_at_player_city_general.append(npc)
+                # What if player is at city level, and NPC is at a POI in that city?
+                # Or player is at POI X, and NPC is at POI Y (in same city)?
+                # The "Talk to" menu should primarily list NPCs immediately available.
+                # The previous logic was:
+                # if npc.current_location == player.location: npcs_at_location.append(npc)
+                # elif hasattr(npc.current_location, 'name') and hasattr(player.location, 'venues') and npc.current_location in player.location.venues: npcs_at_location.append(npc)
+                # elif hasattr(npc.current_location, 'name') and hasattr(player.location, 'points_of_interest') and npc.current_location in player.location.points_of_interest: npcs_at_location.append(npc)
+                # This needs to be adapted for player.current_poi.
+
+            # Simpler approach: list NPCs at the player's current_poi.
+            # If player.current_poi is None, it means they are at the general city level.
+            # At general city level, who can they talk to? Perhaps no one specific, or only NPCs also at "general city level".
+            # This makes "Explore POI/Area" more important to find where NPCs are.
+
+            npcs_available_to_talk = []
+            if player.current_poi:
+                for npc in NPC_REGISTRY.values():
+                    if npc.current_location == player.current_poi:
+                        npcs_available_to_talk.append(npc)
+            else: # Player is at general city level, not a specific POI
+                # Only list NPCs also at general city level (e.g. Sarah Fan in Hometown if she's not at a specific POI)
+                 for npc in NPC_REGISTRY.values():
+                    if npc.current_location == player.current_location: # Both at general city level
+                        npcs_available_to_talk.append(npc)
+
+            if not npcs_available_to_talk:
+                print(f"There's no one specific to talk to at {target_area_name} right now.")
+                # Fallback to generic fan if desired
+                if not player.current_poi : # Only offer generic fan at general city level for now
+                    print("A passerby notices you, though...")
+                    temp_fan_npc = NPC(npc_id="temp_event_fan", name="Passerby Fan", personality_key="friendly_fan")
+                    initial_fan_message = "Hey, aren't you that musician, {player_name}?"
+                    print(f"{temp_fan_npc.name}: \"{initial_fan_message.format(player_name=player.name)}\"")
+                    talk_to_npc_instance(player, temp_fan_npc)
+            else:
+                npc_options_list = [f"{npc.name}" for npc in npcs_available_to_talk] # Simpler display now
+                npc_map = {str(i+1): npc for i, npc in enumerate(npcs_available_to_talk)}
+
+                chosen_npc_key = present_choices(npc_options_list, f"Who would you like to talk to at {target_area_name}?")
+                if chosen_npc_key and chosen_npc_key in npc_map:
+                    talk_to_npc_instance(player, npc_map[chosen_npc_key])
+
+        elif choice == "00": # Debug: Advance time by 1 hour (was 9, then 8)
+            advance_game_time(minutes=60) # 1 hour
+            update_npc_locations(current_game_time) # Explicitly call after debug time advance
+
+        elif choice == "0":
+            print("Thanks for playing!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+        print(f"\n--- {get_current_time_str()} ---")
+
+        # Check for random events after most actions or time advances
+        # practice (1), travel city(2), travel POI(3), explore(4), prepare(6), perform(7), advance time (00)
+        if choice in ["1", "2", "3", "4", "6", "7", "00"]:
+            if not ("LLM Error" in locals().get('npc_response', '') or "An unexpected error occurred" in locals().get('npc_response', '')):
+                event_triggered = check_for_random_event(player, chance=0.3)
+                if event_triggered:
+                    player.check_for_manager_unlock()
+
+
+if __name__ == "__main__":
+    main()
             # Check NPCs whose current_location is the player's general location,
             # or a venue/POI within that general location.
             for npc in NPC_REGISTRY.values():
@@ -776,7 +1036,7 @@ def main():
                     talk_to_npc_instance(player, npc_map[chosen_npc_key])
 
         elif choice == "9": # Debug: Advance time by 1 hour (was 8)
-            advance_game_time(hours=1)
+            advance_game_time(minutes=60) # 1 hour
             update_npc_locations(current_game_time) # Explicitly call after debug time advance
 
         elif choice == "0":

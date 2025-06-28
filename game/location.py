@@ -14,8 +14,11 @@ class Location:
         self.venues = [] # List of Venue objects in this location
         self.points_of_interest = [] # List of PointOfInterest objects
 
-        # travel_connections: dict mapping Location object or name to details like {"cost": 50, "time_hours": 2}
+        # travel_connections: dict mapping Location object or name to details like {"cost": 50, "time_hours": 2} (Inter-city)
         self.travel_connections = travel_connections if travel_connections else {}
+
+        # Intra-city connections: dict mapping frozenset({poi_id1, poi_id2}) to travel mode details
+        self.intra_city_poi_connections = {}
 
     def add_venue(self, venue):
         if isinstance(venue, Venue) and venue not in self.venues:
