@@ -3,7 +3,8 @@
 class PointOfInterest:
     def __init__(self, poi_id, name, description, category="GENERAL",
                  interaction_options=None, parent_location_id=None,
-                 rest_quality=0.0, stress_modifier_hourly=0):
+                 rest_quality=0.0, stress_modifier_hourly=0,
+                 studio_quality=0.0, hourly_rate=0): # New studio params
         self.poi_id = poi_id
         self.name = name
         self.description = description
@@ -15,9 +16,11 @@ class PointOfInterest:
 
         self.shop_inventory_item_ids = None
 
-        # Attributes for accommodation/rest POIs
         self.rest_quality = rest_quality
         self.stress_modifier_hourly = stress_modifier_hourly
+
+        self.studio_quality = studio_quality
+        self.hourly_rate = hourly_rate
 
         # For intra-city travel, connections could be stored here or centrally in the City(Location)
         # self.intra_city_connections = {} # poi_id: {"walk_time": X, "bike_time": Y ...}
@@ -28,6 +31,8 @@ class PointOfInterest:
             details += f" [Shop with {len(self.shop_inventory_item_ids)} item types]"
         if self.category == "HOME" or self.category.startswith("ACCOMMODATION"):
             details += f" [RestQ: {self.rest_quality}, StressMod/hr: {self.stress_modifier_hourly}]"
+        if self.category == "STUDIO_RECORDING":
+            details += f" [StudioQ: {self.studio_quality}, Rate: ${self.hourly_rate}/hr]"
         return details + f" - {self.description}"
 
     def get_interactions(self):
@@ -69,8 +74,25 @@ if __name__ == "__main__":
     assert poi2.rest_quality == 0.8
     assert poi2.stress_modifier_hourly == -10
     assert poi2.shop_inventory_item_ids is None # Not a shop
+    assert poi2.studio_quality == 0.0 # Default for non-studio
+    assert poi2.hourly_rate == 0 # Default for non-studio
     print(poi2)
     assert "[Shop with" not in str(poi2)
     assert "[RestQ: 0.8, StressMod/hr: -10]" in str(poi2)
+    assert "[StudioQ:" not in str(poi2)
+
+    poi3 = PointOfInterest(
+        poi_id="studio_starlight",
+        name="Starlight Studio",
+        description="A decent recording studio.",
+        category="STUDIO_RECORDING",
+        studio_quality=0.6,
+        hourly_rate=50
+    )
+    assert poi3.category == "STUDIO_RECORDING"
+    assert poi3.studio_quality == 0.6
+    assert poi3.hourly_rate == 50
+    print(poi3)
+    assert "[StudioQ: 0.6, Rate: $50/hr]" in str(poi3)
 
     print("PointOfInterest class basic tests passed.")

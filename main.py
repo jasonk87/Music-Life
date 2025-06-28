@@ -195,6 +195,18 @@ def setup_world():
     )
     city_center.add_poi(crash_pad_motel)
 
+    starlight_studio = PointOfInterest(
+        poi_id="citycenter_starlight_studio",
+        name="Starlight Recording Studio",
+        description="A decent local recording studio. Sessions can be booked by the hour.",
+        category="STUDIO_RECORDING",
+        interaction_options=["Book recording session", "Talk to Sound Engineer (if available)"],
+        parent_location_id=city_center.name,
+        studio_quality=0.6, # Mid-tier studio
+        hourly_rate=50      # $50 per hour
+    )
+    city_center.add_poi(starlight_studio)
+
 
     # Define Travel Connections (Location Name -> {cost, time}) # INTER-CITY
     home_town.add_travel_connection(city_center.name, cost=20, time_hours=2)
@@ -1069,6 +1081,72 @@ def main():
                             except ValueError:
                                 print("Invalid number of hours entered.")
                         # --- END WRITE SONG LOGIC ---
+
+                        # --- BOOK RECORDING SESSION LOGIC ---
+                        elif player.current_poi.category == "STUDIO_RECORDING" and chosen_interaction_text == "Book recording session":
+                            print(f"\n--- Book Recording Session at {player.current_poi.name} ---")
+                            studio = player.current_poi
+                            print(f"Studio Quality: {studio.studio_quality:.2f}/1.0, Hourly Rate: ${studio.hourly_rate}")
+
+                            if not player.songs_written:
+                                print("You have no original songs written to record!")
+                            else:
+                                unrecorded_songs = [song for song in player.songs_written if not song.is_recorded]
+                                if not unrecorded_songs:
+                                    print("All your current songs have already been recorded.")
+                                else:
+                                    print("Which song would you like to record?")
+                                    song_display_list = [f"{song.title} (Quality: {song.song_quality:.2f})" for song in unrecorded_songs]
+                                    song_choice_key = present_choices(song_display_list, "Choose a song: (0 to cancel)")
+
+                                    if song_choice_key and song_choice_key != "0":
+                                        song_to_record = unrecorded_songs[int(song_choice_key) - 1]
+
+                                        try:
+                                            hours_str = input(f"How many hours to book for '{song_to_record.title}' (e.g., 2, 4, 8)? > ")
+                                            hours_booked = int(hours_str)
+                                            if hours_booked <= 0:
+                                                print("Booking time must be positive.")
+                                            else:
+                                                total_booking_cost = hours_booked * studio.hourly_rate
+                                                print(f"Booking {hours_booked} hours will cost ${total_booking_cost}.")
+                                                if player.money >= total_booking_cost:
+                                                    confirm_booking = input("Confirm booking? (y/n) > ").lower()
+                                                    if confirm_booking == 'y':
+                                                        player.money -= total_booking_cost
+
+                                                        # Recording Quality Calculation
+                                                        base_rq = song_to_record.song_quality * 0.5
+                                                        # Assuming primary skill for recording is the highest instrument skill or vocals if higher
+                                                        # This is a simplification. A better system would know song instrumentation.
+                                                        primary_perf_skill = max(player.skills.get("guitar",0), player.skills.get("vocals",0), player.skills.get("drums",0), player.skills.get("bass",0), player.skills.get("piano",0), 0)
+                                                        skill_factor = (primary_perf_skill / 20.0) * 0.25 # Max 0.25 from performance skill
+                                                        studio_factor = studio.studio_quality * 0.3 # Max 0.3 from studio
+                                                        time_factor = min(0.20, (hours_booked / 8.0) * 0.20) # Max 0.2 for 8+ hours
+                                                        energy_factor = -0.15 if player.energy < 30 else (0.05 if player.energy > 80 else 0)
+                                                        stress_factor = -0.15 if player.stress > 70 else (0.05 if player.stress < 20 else 0)
+                                                        random_element = random.uniform(-0.05, 0.05)
+
+                                                        final_recording_quality = min(1.0, max(0.05, base_rq + skill_factor + studio_factor + time_factor + energy_factor + stress_factor + random_element))
+
+                                                        song_to_record.mark_as_recorded(final_recording_quality)
+
+                                                        advance_game_time(minutes=hours_booked * 60)
+                                                        update_npc_locations(current_game_time)
+
+                                                        player.energy = max(0, player.energy - (hours_booked * 7)) # Recording is tiring
+                                                        player.stress = min(100, player.stress + (hours_booked * 4)) # And stressful
+
+                                                        print(f"\nPaid ${total_booking_cost}. You spent {hours_booked} hours recording '{song_to_record.title}'.")
+                                                        print(f"Achieved recording quality: {song_to_record.recording_quality:.2f}/1.0.")
+                                                        print(f"Energy: {player.energy}/100, Stress: {player.stress}/100. Money: ${player.money}")
+                                                    else:
+                                                        print("Booking cancelled.")
+                                                else:
+                                                    print(f"Not enough money. Need ${total_booking_cost}, have ${player.money}.")
+                                        except ValueError:
+                                            print("Invalid number of hours.")
+                        # --- END BOOK RECORDING SESSION LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
