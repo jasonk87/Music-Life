@@ -143,8 +143,10 @@ def setup_world():
         name="Your Apartment",
         description="Your starting digs. A bit small, but it's home.",
         category="HOME",
-        interaction_options=["Rest (advance 8 hours)", "Practice (at home, less effective?)"], # Example interactions
-        parent_location_id=home_town.name
+        interaction_options=["Rest (8 hours)", "Practice guitar (at home)"],
+        parent_location_id=home_town.name,
+        rest_quality=0.8, # Decent rest at home
+        stress_modifier_hourly=-10 # Good stress relief
     )
     home_town.add_poi(player_home)
 
@@ -184,8 +186,10 @@ def setup_world():
         name="Sleep EZ Motel",
         description="A cheap, somewhat clean room for the night. Better than the streets.",
         category="ACCOMMODATION_CHEAP",
-        interaction_options=["Rent Room ($50/night)", "Sleep (if rented)"],
-        parent_location_id=city_center.name
+        interaction_options=["Rent Room ($50/night)", "Sleep (8 hours, if rented)"],
+        parent_location_id=city_center.name,
+        rest_quality=0.4, # Not great rest
+        stress_modifier_hourly=-2 # Minimal stress relief, maybe even slightly stressful
     )
     city_center.add_poi(crash_pad_motel)
 
@@ -583,9 +587,9 @@ def main():
     # Game Loop
     while True:
         clear_screen_ish()
-        print(f"--- Current Location: {player.location.name} ---")
+        print(f"--- Current Location: {player.current_location.name} ---") # Was player.location, fixed to current_location
         print(f"--- {get_current_time_str()} ---")
-        print(f"--- Player: {player.name} | Fame: {player.fame} | Money: ${player.money} ---")
+        print(f"--- Player: {player.name} | Fame: {player.fame} | Money: ${player.money} | Energy: {player.energy}/100 | Stress: {player.stress}/100 ---")
         print(f"--- Currently at: {player.current_poi.name if player.current_poi else player.current_location.name} ---")
 
 
@@ -873,6 +877,71 @@ def main():
                                         else:
                                             print("Travel cancelled.")
                         # --- END INTER-CITY TRAVEL BOOKING LOGIC ---
+
+                        # --- REST/SLEEP LOGIC ---
+                        elif player.current_poi.category == "HOME" and chosen_interaction_text == "Rest (8 hours)":
+                            hours_to_rest = 8
+                            energy_gained = int(hours_to_rest * 10 * player.current_poi.rest_quality)
+                            stress_change = int(hours_to_rest * player.current_poi.stress_modifier_hourly)
+
+                            player.energy = min(100, player.energy + energy_gained)
+                            player.stress = max(0, player.stress + stress_change)
+
+                            advance_game_time(minutes=hours_to_rest * 60)
+                            update_npc_locations(current_game_time)
+                            print(f"You rest for {hours_to_rest} hours at {player.current_poi.name}.")
+                            print(f"Energy restored to {player.energy}/100. Stress changed to {player.stress}/100.")
+
+                        elif player.current_poi.category == "ACCOMMODATION_CHEAP" and chosen_interaction_text.startswith("Rent Room"):
+                            # Example: "Rent Room ($50/night)"
+                            try:
+                                cost_str = chosen_interaction_text.split('$')[1].split('/')[0]
+                                rent_cost = int(cost_str)
+                                if player.money >= rent_cost:
+                                    player.money -= rent_cost
+                                    # Simple rental: lasts until next morning (e.g. 6 AM) or for 1 sleep.
+                                    # For now, let's make it allow one sleep.
+                                    # A more robust way: store checkout time.
+                                    from game.game_time import GameTime # For creating new GameTime obj for checkout
+                                    checkout_time = GameTime(year=current_game_time.year, month=current_game_time.month, day=current_game_time.day, hour=current_game_time.hour, minute=current_game_time.minute)
+                                    checkout_time.advance_time(minutes=24*60) # Valid for 24 hours from now (simplification)
+
+                                    player.rented_accommodation_info = {
+                                        "poi_id": player.current_poi.poi_id,
+                                        "checkout_time_obj": checkout_time
+                                    }
+                                    print(f"You rented a room at {player.current_poi.name} for ${rent_cost}. It's yours until {checkout_time}.")
+                                    print(f"Remaining money: ${player.money}")
+                                else:
+                                    print(f"Not enough money to rent a room. Need ${rent_cost}.")
+                            except (IndexError, ValueError):
+                                print("Error parsing rent cost from interaction text.")
+
+                        elif player.current_poi.category == "ACCOMMODATION_CHEAP" and chosen_interaction_text.startswith("Sleep"):
+                            can_sleep = False
+                            if player.rented_accommodation_info and \
+                               player.rented_accommodation_info["poi_id"] == player.current_poi.poi_id:
+                                # Simple check: if current time is before checkout time.
+                                # This needs GameTime comparison logic if we get more complex.
+                                # For now, just assume if they have info, they can sleep once.
+                                can_sleep = True
+
+                            if can_sleep:
+                                hours_to_sleep = 8 # Typically from interaction text "Sleep (8 hours, if rented)"
+                                energy_gained = int(hours_to_sleep * 10 * player.current_poi.rest_quality)
+                                stress_change = int(hours_to_sleep * player.current_poi.stress_modifier_hourly)
+
+                                player.energy = min(100, player.energy + energy_gained)
+                                player.stress = max(0, player.stress + stress_change)
+
+                                advance_game_time(minutes=hours_to_sleep * 60)
+                                update_npc_locations(current_game_time)
+                                print(f"You sleep for {hours_to_sleep} hours at {player.current_poi.name}.")
+                                print(f"Energy restored to {player.energy}/100. Stress changed to {player.stress}/100.")
+                                player.rented_accommodation_info = None # Slept, rental used up for this simple model
+                            else:
+                                print(f"You haven't rented a room here, or your rental has expired.")
+                        # --- END REST/SLEEP LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 

@@ -17,8 +17,13 @@ class Player:
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
+        self.energy = 100 # Max 100
+        self.stress = 0   # Max 100 (lower is better)
+
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
+
+        self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
 
     def get_current_gear_capacity(self, travel_mode=None):
         """Calculates current gear capacity based on situation or travel mode."""
@@ -110,8 +115,18 @@ class Player:
 
         self.current_poi = arrival_poi # Could be None if no suitable hub found
 
+        # Update energy and stress due to travel
+        # travel_time is in hours for inter-city
+        stress_increase = travel_time * 2 # Example: +2 stress per hour
+        energy_decrease = travel_time * 3 # Example: -3 energy per hour
+
+        self.stress = min(100, self.stress + stress_increase)
+        self.energy = max(0, self.energy - energy_decrease)
+
         arrival_poi_name = f"at {arrival_poi.name}" if arrival_poi else "at the city outskirts"
         print(f"{self.name} has arrived in {destination_location.name} ({arrival_poi_name}).")
+        print(f"The journey was tiring. (Stress: +{stress_increase}, Energy: -{energy_decrease})")
+
 
     def travel_within_city(self, destination_poi, time_taken): # New method for intra-city
         if not self.current_location:
@@ -137,8 +152,8 @@ class Player:
         status = f"Player: {self.name}\n"
         status += f"Location: {location_str}{poi_str}\n"
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
+        status += f"Energy: {self.energy}/100, Stress: {self.stress}/100\n"
         status += f"Skills: {self.skills}\n"
-        # Display default capacity (not tied to a specific travel mode)
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"
         status += f"Has Bike: {'Yes' if self.has_bike else 'No'}\n"
 
@@ -155,10 +170,12 @@ if __name__ == '__main__':
     assert p.name == "Test Dummy"
     assert p.money == 500
     assert p.fame == 0
+    assert p.energy == 100
+    assert p.stress == 0
     assert not p.has_manager
 
     p.practice_skill("guitar", 2)
-    assert p.skills["guitar"] == 0.2
+    assert p.skills["guitar"] == 0.2 # Note: practice_skill doesn't currently affect energy/stress
     p.practice_skill("guitar", 3)
     assert p.skills["guitar"] == 0.5
     p.practice_skill("vocals", 5)
