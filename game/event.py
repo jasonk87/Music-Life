@@ -119,30 +119,74 @@ class Event:
             return False
 
         print(f"{player.name} is performing at {self.name} at {self.location.name}!")
+import random # Needed for incident chance
+
+# ... (rest of the class definition up to perform_event)
+
+    def perform_event(self, player):
+        # The needs_rental flag is now passed from can_perform
+        can_perform, message, needs_rental = self.can_perform(player)
+        if not can_perform:
+            print(f"Cannot perform {self.name}: {message}")
+            return False
+
+        print(f"{player.name} is performing at {self.name} at {self.location.name}!")
         # Add more event logic here (e.g., minigame, skill checks for quality)
         print(f"The event was a success!")
 
-        actual_payout = self.payout
+        # --- Gear Incident Chance ---
+        incident_chance = 0.10 # 10% chance of a gear incident
+        if random.random() < incident_chance:
+            # Identify player's owned gear that could be relevant (instruments, amps)
+            relevant_owned_gear = [
+                item for item in player.gear_inventory
+                if item.gear_type.startswith("INSTRUMENT") or item.gear_type == "AMPLIFIER"
+            ]
+            if relevant_owned_gear:
+                affected_gear = random.choice(relevant_owned_gear)
+                repair_cost = random.randint(5, 25) # Random repair cost
+
+                incident_description = "had a minor issue" # Default fallback
+                gt = affected_gear.gear_type
+                if gt == "AMPLIFIER":
+                    incident_description = "a tube blew"
+                elif gt == "INSTRUMENT_ACOUSTIC":
+                    incident_description = "a string snapped"
+                elif gt == "INSTRUMENT_ELECTRIC" or gt == "INSTRUMENT_BASS":
+                    incident_description = "a cable shorted out or a knob came loose"
+                elif gt == "INSTRUMENT_DRUMS":
+                    incident_description = "a drum skin split or a cymbal cracked"
+
+                print(f"\nOh no! During the performance, your {affected_gear.name} had an issue ({incident_description})!")
+                print(f"Immediate repair/replacement cost: ${repair_cost}.")
+
+                if player.money >= repair_cost:
+                    player.money -= repair_cost
+                    print(f"${repair_cost} deducted for repairs.")
+                else:
+                    print(f"You couldn't afford the immediate ${repair_cost} repair. This might cause issues later!")
+                    # Player money doesn't go negative for this simple incident for now.
+                    # Or: player.money -= repair_cost (allowing negative)
+                    # Or: Store as debt (more complex)
+            else:
+                # Player owns no relevant gear (maybe rented everything or it's a vocals-only event)
+                # Could have a non-gear incident like "mic feedback" or "sore throat" here.
+                # For now, if no player-owned gear, no player-gear-damage incident.
+                print("\nLuckily, all your owned gear made it through the performance unscathed (or you didn't use any!).")
+
+        # --- Payout and Fame ---
         if needs_rental:
-            venue = self.location # Assuming self.location is the Venue object
+            venue = self.location
             if hasattr(venue, 'can_rent_gear') and venue.can_rent_gear and venue.gear_rental_fee > 0:
-                actual_payout -= venue.gear_rental_fee
-                player.money -= venue.gear_rental_fee # Deduct fee directly, or from payout
+                player.money -= venue.gear_rental_fee
                 print(f"A gear rental fee of ${venue.gear_rental_fee} was deducted.")
-                if actual_payout < 0: # Should not happen if fee > payout, but good to note
-                    print(f"Warning: Gear rental fee exceeded event payout!")
 
         player.fame += self.fame_reward
-        # player.money += actual_payout # Money is already adjusted if fee was deducted directly.
-                                      # If fee is deducted from payout, then use this line.
-                                      # Let's stick to deducting fee directly from player.money for now.
-                                      # So, player gets full advertised payout, then pays fee.
-        player.money += self.payout # Player receives full payout
-                                    # Fee was already deducted from player.money if applicable.
+        player.money += self.payout
 
-        print(f"{player.name} gained {self.fame_reward} fame. Total fame: {player.fame}.")
-        print(f"{player.name} earned ${self.payout} (Advertised). Final money: ${player.money} (after any fees).")
-        self.is_active = False # Assuming events are one-time, can be changed
+        print(f"\n{player.name} gained {self.fame_reward} fame. Total fame: {player.fame}.")
+        print(f"{player.name} earned ${self.payout} (Advertised). Final money after gig & incidents: ${player.money}.")
+        self.is_active = False
         return True
 
     def __str__(self):
