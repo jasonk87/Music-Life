@@ -81,18 +81,44 @@ GEAR_CATALOG = {
         size=20, # Very large, player likely won't carry this
         cost=1500,
         properties={"quality": 0.8}
-    )
-    # Future items could include:
-    # "decent_acoustic_guitar",
-    # "effect_pedal_distortion", "effect_pedal_delay", "microphone_basic",
-    # "drum_sticks", "keyboard_portable"
+    ),
+    # Merchandise Items
+    "merch_tshirt_basic": GearItem(
+        item_id="merch_tshirt_basic",
+        name="Basic Band T-Shirt",
+        description="A simple black t-shirt with your band's current name/logo.",
+        gear_type="MERCHANDISE",
+        size=1, # Each shirt takes up a small amount of space
+        cost=7, # Player's cost to order/buy stock
+        base_sell_price=15 # Player's price to fans at gigs
+    ),
+    "merch_poster_small": GearItem(
+        item_id="merch_poster_small",
+        name="Small Gig Poster",
+        description="A glossy 11x17 poster from your recent local gig.",
+        gear_type="MERCHANDISE",
+        size=0, # Assume they roll up small, negligible for a few
+        cost=2,
+        base_sell_price=5
+    ),
+    "merch_cd_demo": GearItem(
+        item_id="merch_cd_demo",
+        name="Demo CD (Home Burned)",
+        description="A CD-R with a few of your latest demo tracks. DIY packaging.",
+        gear_type="MERCHANDISE",
+        size=0, # Negligible
+        cost=1, # Cost of blank CD and case
+        base_sell_price=5 # Sell for a bit more
+    ),
 }
 
 if __name__ == '__main__':
     # Test that all items can be created and accessed
-    assert len(GEAR_CATALOG) == 9 # Updated count
+    assert len(GEAR_CATALOG) == 12 # Updated count (9 + 3 new merch)
     assert GEAR_CATALOG["worn_acoustic_guitar"].name == "Worn Acoustic Guitar"
-    assert GEAR_CATALOG["practice_amp_small"].cost == 100
+    assert GEAR_CATALOG["merch_tshirt_basic"].cost == 7
+    assert GEAR_CATALOG["merch_tshirt_basic"].base_sell_price == 15
+    assert GEAR_CATALOG["merch_poster_small"].size == 0
     assert GEAR_CATALOG["guitar_picks_assorted"].size == 0
     print(f"{len(GEAR_CATALOG)} gear items loaded from catalog.")
     for item_id, item in GEAR_CATALOG.items():

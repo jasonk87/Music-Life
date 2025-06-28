@@ -143,7 +143,7 @@ def setup_world():
         name="Your Apartment",
         description="Your starting digs. A bit small, but it's home.",
         category="HOME",
-        interaction_options=["Rest (8 hours)", "Practice guitar (at home)"],
+        interaction_options=["Rest (8 hours)", "Practice guitar (at home)", "Order Merchandise Stock"],
         parent_location_id=home_town.name,
         rest_quality=0.8, # Decent rest at home
         stress_modifier_hourly=-10 # Good stress relief
@@ -942,6 +942,74 @@ def main():
                             else:
                                 print(f"You haven't rented a room here, or your rental has expired.")
                         # --- END REST/SLEEP LOGIC ---
+
+                        # --- ORDER MERCHANDISE STOCK LOGIC ---
+                        elif player.current_poi.category == "HOME" and chosen_interaction_text == "Order Merchandise Stock":
+                            print("\n--- Order Merchandise Stock ---")
+                            available_merch_to_order = {
+                                item_id: item for item_id, item in GEAR_CATALOG.items()
+                                if item.gear_type == "MERCHANDISE"
+                            }
+                            if not available_merch_to_order:
+                                print("No merchandise designs are currently available to order.")
+                            else:
+                                merch_display_list = []
+                                merch_map = {} # Maps display index to item_id
+                                for i, (item_id, item) in enumerate(available_merch_to_order.items()):
+                                    merch_display_list.append(f"{item.name} (Cost: ${item.cost}/unit, Size: {item.size}/unit)")
+                                    merch_map[str(i+1)] = item_id
+
+                                merch_choice_key = present_choices(merch_display_list, "Which merchandise to order? (0 to cancel)")
+                                if merch_choice_key and merch_choice_key != "0" and merch_choice_key in merch_map:
+                                    chosen_item_id = merch_map[merch_choice_key]
+                                    chosen_merch_item_template = available_merch_to_order[chosen_item_id]
+
+                                    try:
+                                        quantity_str = input(f"How many units of '{chosen_merch_item_template.name}' to order? (e.g., 10, 25, 50) > ")
+                                        quantity = int(quantity_str)
+                                        if quantity <= 0:
+                                            print("Order quantity must be positive.")
+                                        else:
+                                            total_cost = quantity * chosen_merch_item_template.cost
+                                            total_size = quantity * chosen_merch_item_template.size # Assuming size is per unit
+
+                                            print(f"Ordering {quantity} x '{chosen_merch_item_template.name}' will cost ${total_cost} and require {total_size} capacity.")
+
+                                            if player.money >= total_cost:
+                                                # Check capacity for adding all these items
+                                                # Player.can_carry_gear currently checks for one item.
+                                                # We need a check for total additional load.
+                                                if (player.get_current_gear_load() + total_size) <= player.get_current_gear_capacity():
+                                                    confirm_order = input("Confirm order? (y/n) > ").lower()
+                                                    if confirm_order == 'y':
+                                                        player.money -= total_cost
+                                                        for _ in range(quantity):
+                                                            # Create new instances for each unit if not stackable by design
+                                                            # For now, GearItem is not stackable, so add multiple instances
+                                                            # This means item_id in inventory might not be unique
+                                                            player.add_gear(GearItem( # Create new instance from template
+                                                                item_id=chosen_merch_item_template.item_id, # Could make this unique per instance later
+                                                                name=chosen_merch_item_template.name,
+                                                                description=chosen_merch_item_template.description,
+                                                                gear_type=chosen_merch_item_template.gear_type,
+                                                                size=chosen_merch_item_template.size,
+                                                                cost=chosen_merch_item_template.cost, # Store its original buy cost
+                                                                base_sell_price=chosen_merch_item_template.base_sell_price,
+                                                                properties=chosen_merch_item_template.properties.copy()
+                                                            ))
+                                                        print(f"Successfully ordered {quantity} of {chosen_merch_item_template.name}.")
+                                                        print(f"Money remaining: ${player.money}. Current gear load: {player.get_current_gear_load()}/{player.get_current_gear_capacity()}")
+                                                        advance_game_time(minutes=60) # Ordering takes some time (e.g., online, phone call)
+                                                        update_npc_locations(current_game_time)
+                                                    else:
+                                                        print("Order cancelled.")
+                                                else:
+                                                    print(f"Not enough inventory capacity for {quantity} units. Need {total_size}, have {player.get_current_gear_capacity() - player.get_current_gear_load()} available.")
+                                            else:
+                                                print(f"Not enough money. Need ${total_cost}, have ${player.money}.")
+                                    except ValueError:
+                                        print("Invalid quantity entered.")
+                        # --- END ORDER MERCHANDISE STOCK LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 

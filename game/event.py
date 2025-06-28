@@ -184,8 +184,82 @@ import random # Needed for incident chance
         player.fame += self.fame_reward
         player.money += self.payout
 
+        # --- Sell Merchandise Phase ---
+        player_merch_items = [item for item in player.gear_inventory if item.gear_type == "MERCHANDISE"]
+        if player_merch_items:
+            print("\n--- Sell Merchandise ---")
+            # Consolidate merch by item_id for selling choice
+            sellable_merch_summary = {}
+            for item in player_merch_items:
+                if item.item_id not in sellable_merch_summary:
+                    sellable_merch_summary[item.item_id] = {"name": item.name, "sell_price": item.base_sell_price, "stock": 0, "item_template": item}
+                sellable_merch_summary[item.item_id]["stock"] += 1
+
+            if not sellable_merch_summary: # Should not happen if player_merch_items is not empty
+                print("No merchandise available to sell.")
+            else:
+                print("You have some merchandise to sell:")
+                merch_options_list = []
+                merch_map = {} # Maps choice index to item_id
+                choice_idx = 1
+                for item_id, details in sellable_merch_summary.items():
+                    merch_options_list.append(f"{details['name']} (Stock: {details['stock']}, Sell Price: ${details['sell_price']})")
+                    merch_map[str(choice_idx)] = item_id
+                    choice_idx +=1
+                merch_options_list.append("Don't sell anything now.")
+
+                # Using game.main.present_choices requires importing it or moving it to a shared util
+                # For now, simulate a simple input choice for this event-specific interaction
+                # This part would ideally use the main loop's present_choices
+                for i, option_text in enumerate(merch_options_list):
+                    print(f"{i+1}. {option_text}")
+
+                merch_sell_choice_str = input("Choose merch to sell (number) or pass: ")
+
+                if merch_sell_choice_str.isdigit():
+                    chosen_option_idx = int(merch_sell_choice_str)
+                    if chosen_option_idx > 0 and chosen_option_idx <= len(sellable_merch_summary): # Check if a merch item was chosen
+                        chosen_item_id_to_sell = merch_map[str(chosen_option_idx)]
+                        item_details = sellable_merch_summary[chosen_item_id_to_sell]
+                        item_template = item_details["item_template"] # The actual GearItem template
+
+                        # Sales calculation (simplified)
+                        venue_capacity = self.location.capacity if hasattr(self.location, 'capacity') else 50 # Default if not a venue
+                        # Fame factor: 0.0 to 2.0 (for fame 0 to 1000). Min 0.01 interest.
+                        fame_effect = (player.fame / 500.0) if player.fame > 0 else 0.0
+                        base_interest_pct = 0.01 + fame_effect * 0.05 # Base 1% + up to 10% from fame (max 11% of capacity)
+
+                        # Random sales percentage of interested people (e.g. 10% to 50% of those interested might buy)
+                        random_sales_conversion_pct = random.uniform(0.1, 0.5)
+
+                        potential_buyers = int(venue_capacity * base_interest_pct)
+                        potential_sales_units = int(potential_buyers * random_sales_conversion_pct)
+
+                        actual_sales_units = min(potential_sales_units, item_details["stock"])
+
+                        if actual_sales_units > 0:
+                            earnings = actual_sales_units * item_template.base_sell_price
+                            player.money += earnings
+
+                            # Remove sold items from player inventory (one by one)
+                            items_removed_count = 0
+                            temp_inventory = list(player.gear_inventory) # Iterate over a copy
+                            for item_instance in temp_inventory:
+                                if items_removed_count < actual_sales_units and item_instance.item_id == chosen_item_id_to_sell:
+                                    player.remove_gear(item_instance) # remove_gear takes instance or ID
+                                    items_removed_count += 1
+
+                            print(f"You sold {actual_sales_units} of '{item_template.name}' for ${earnings}!")
+                        else:
+                            print(f"Didn't manage to sell any '{item_template.name}' this time.")
+                    else: # Chose "Don't sell anything" or invalid number
+                        print("Decided not to sell merchandise right now.")
+                else: # Invalid input
+                    print("No valid merchandise selling choice made.")
+        # --- End Sell Merchandise Phase ---
+
         print(f"\n{player.name} gained {self.fame_reward} fame. Total fame: {player.fame}.")
-        print(f"{player.name} earned ${self.payout} (Advertised). Final money after gig & incidents: ${player.money}.")
+        print(f"{player.name} earned ${self.payout} (Advertised from gig). Final money after gig, incidents & merch: ${player.money}.")
         self.is_active = False
         return True
 
