@@ -12,11 +12,16 @@ class PointOfInterest:
         self.owner_npc_id = None # Optional: store the ID of the NPC who owns/manages this POI
         self.parent_location_id = parent_location_id # ID of the city (Location object) this POI belongs to
 
+        self.shop_inventory_item_ids = None # List of item_ids if this POI is a shop
+
         # For intra-city travel, connections could be stored here or centrally in the City(Location)
         # self.intra_city_connections = {} # poi_id: {"walk_time": X, "bike_time": Y ...}
 
     def __str__(self):
-        return f"{self.name} ({self.category}) - {self.description}"
+        details = f"{self.name} (ID: {self.poi_id}, Category: {self.category})"
+        if self.shop_inventory_item_ids is not None:
+            details += f" [Shop with {len(self.shop_inventory_item_ids)} item types]"
+        return details + f" - {self.description}"
 
     def get_interactions(self):
         return self.interaction_options
@@ -40,7 +45,10 @@ if __name__ == "__main__":
     assert poi1.category == "SHOP_MUSIC"
     assert poi1.parent_location_id == "hometown"
     assert "Browse Guitars" in poi1.get_interactions()
+    poi1.shop_inventory_item_ids = ["item1", "item2"] # Simulate a shop
     print(poi1)
+    assert "[Shop with 2 item types]" in str(poi1)
+
 
     poi2 = PointOfInterest(
         poi_id="home_player_apt",
@@ -49,7 +57,9 @@ if __name__ == "__main__":
         category="HOME"
     )
     assert poi2.category == "HOME"
-    assert poi2.owner_npc_id is None # owner_npc_id is optional
+    assert poi2.owner_npc_id is None
+    assert poi2.shop_inventory_item_ids is None # Not a shop
     print(poi2)
+    assert "[Shop with" not in str(poi2)
 
     print("PointOfInterest class basic tests passed.")

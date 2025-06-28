@@ -8,6 +8,8 @@ from game.game_time import current_game_time, advance_game_time, get_current_tim
 from game.dialogue import generate_npc_response, NPC_PERSONALITIES # Removed reset_dialogue_history
 from game.random_events import check_for_random_event, check_for_post_gig_random_event
 
+from game_data.gear_catalog import GEAR_CATALOG # Import the gear items
+
 # --- Game World Setup ---
 from game.npc import NPC # Import NPC class
 
@@ -48,9 +50,14 @@ def setup_world():
         name="Old Timer's Music Shop",
         description="Sells basic gear and instruments.",
         category="SHOP_MUSIC",
-        interaction_options=["Browse Gear", "Talk to Owner (Old Timer Joe)"],
+        interaction_options=["Browse items for sale", "Talk to Old Timer Joe"], # Updated interaction
         parent_location_id=home_town.name
     )
+    music_shop_home.shop_inventory_item_ids = [
+        "worn_acoustic_guitar",
+        "guitar_strings_basic",
+        "guitar_picks_assorted"
+    ]
     home_town.add_poi(music_shop_home)
     rehearsal_space_home = PointOfInterest(
         poi_id="hometown_rehearsal_garage",
@@ -92,9 +99,16 @@ def setup_world():
         name="Pro Audio Central",
         description="High-end instruments and recording gear.",
         category="SHOP_MUSIC",
-        interaction_options=["Browse Instruments", "Buy Pro Gear", "Talk to Sales Rep"],
+        interaction_options=["Browse items for sale", "Talk to Sales Rep"], # Updated interaction
         parent_location_id=city_center.name
     )
+    pro_music_store.shop_inventory_item_ids = [
+        "basic_electric_guitar",
+        "practice_amp_small",
+        "guitar_strings_basic",
+        "guitar_picks_assorted"
+        # Can add more expensive/pro items from catalog here later
+    ]
     city_center.add_poi(pro_music_store)
     record_label_office = PointOfInterest(
         poi_id="citycenter_indiehits_records",
@@ -541,9 +555,18 @@ def main():
     # Initial NPC location update based on game start time
     update_npc_locations(current_game_time)
 
+    # Give player starting gear
+    starting_guitar = GEAR_CATALOG.get("worn_acoustic_guitar")
+    if starting_guitar:
+        player.add_gear(starting_guitar)
+    starting_picks = GEAR_CATALOG.get("guitar_picks_assorted")
+    if starting_picks:
+        player.add_gear(starting_picks)
+    # No amp to start, player will need to buy or rent for electric gigs.
+
 
     print(f"\n--- {get_current_time_str()} ---")
-    print(player) # Player's __str__ should now show POI
+    print(player) # Player's __str__ should now show POI and gear
     # print(f"Current Location: {player.current_location.name if player.current_location else 'N/A'}") # Old way
     # print(f"Current POI: {player.current_poi.name if player.current_poi else 'N/A'}") # For direct check
 
@@ -733,9 +756,62 @@ def main():
             if player.current_poi:
                 print(f"Description: {player.current_poi.description}")
                 if player.current_poi.interaction_options:
-                    print(f"Available interactions: {', '.join(player.current_poi.interaction_options)}")
-                # TODO: Implement actual POI interactions based on player.current_poi.interaction_options
-                # For now, just listing them.
+                    # Let player choose an interaction from the POI's list
+                    interaction_choice_key = present_choices(
+                        player.current_poi.interaction_options,
+                        title=f"Actions at {player.current_poi.name}:"
+                    )
+
+                    if interaction_choice_key:
+                        chosen_interaction_text = player.current_poi.interaction_options[int(interaction_choice_key) -1]
+                        print(f"You chose to: {chosen_interaction_text}")
+
+                        # --- SHOPPING LOGIC ---
+                        if player.current_poi.category == "SHOP_MUSIC" and chosen_interaction_text == "Browse items for sale":
+                            if player.current_poi.shop_inventory_item_ids:
+                                shop_stock_display = []
+                                item_map = {} # Maps display index to actual GearItem object
+                                current_item_idx = 1
+                                for item_id in player.current_poi.shop_inventory_item_ids:
+                                    item = GEAR_CATALOG.get(item_id)
+                                    if item:
+                                        shop_stock_display.append(f"{item.name} - ${item.cost} (Size: {item.size}) - {item.description}")
+                                        item_map[str(current_item_idx)] = item
+                                        current_item_idx +=1
+
+                                if not shop_stock_display:
+                                    print(f"{player.current_poi.name} seems to be out of stock right now.")
+                                else:
+                                    item_to_buy_key = present_choices(shop_stock_display, title=f"Items for sale at {player.current_poi.name}: (0 to cancel)")
+
+                                    if item_to_buy_key and item_to_buy_key != "0" and item_to_buy_key in item_map:
+                                        selected_item = item_map[item_to_buy_key]
+                                        print(f"You selected: {selected_item.name}")
+
+                                        if player.money >= selected_item.cost:
+                                            if player.can_carry_gear(selected_item): # Checks default capacity
+                                                player.money -= selected_item.cost
+                                                player.add_gear(selected_item) # This already prints success
+                                                print(f"Remaining money: ${player.money}")
+                                            else:
+                                                # add_gear prints its own capacity error, but we can add context
+                                                print(f"You can't carry {selected_item.name} right now.")
+                                        else:
+                                            print(f"Not enough money to buy {selected_item.name}. Need ${selected_item.cost}, have ${player.money}.")
+                                    elif item_to_buy_key == "0":
+                                        print("Cancelled shopping.")
+                                    # else: present_choices handles invalid input from item list
+                            else:
+                                print(f"{player.current_poi.name} has nothing for sale right now.")
+                        # --- END SHOPPING LOGIC ---
+
+                        # TODO: Implement other POI interactions here based on chosen_interaction_text
+                        # e.g., "Talk to Old Timer Joe", "Rent Room ($50/night)"
+                        else:
+                             print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
+
+                else: # No interaction options defined for the POI
+                    print("There's not much to do here specifically.")
             else: # Exploring general city location if no specific POI
                 print(f"Description: {player.current_location.description}")
                 if player.current_location.venues:
