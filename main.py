@@ -5,10 +5,12 @@ from game.venue import Venue
 from game.poi import PointOfInterest
 from game.event import Event
 from game.game_time import current_game_time, advance_game_time, get_current_time_str
-from game.dialogue import generate_npc_response, NPC_PERSONALITIES # Removed reset_dialogue_history
+from game.dialogue import generate_npc_response, NPC_PERSONALITIES
 from game.random_events import check_for_random_event, check_for_post_gig_random_event
+from game.song import Song # Import Song class
+import random # For songwriting inspiration
 
-from game_data.gear_catalog import GEAR_CATALOG # Import the gear items
+from game_data.gear_catalog import GEAR_CATALOG
 
 # --- Game World Setup ---
 from game.npc import NPC # Import NPC class
@@ -143,7 +145,7 @@ def setup_world():
         name="Your Apartment",
         description="Your starting digs. A bit small, but it's home.",
         category="HOME",
-        interaction_options=["Rest (8 hours)", "Practice guitar (at home)", "Order Merchandise Stock"],
+        interaction_options=["Rest (8 hours)", "Practice guitar (at home)", "Write a new song"],
         parent_location_id=home_town.name,
         rest_quality=0.8, # Decent rest at home
         stress_modifier_hourly=-10 # Good stress relief
@@ -1010,6 +1012,63 @@ def main():
                                     except ValueError:
                                         print("Invalid quantity entered.")
                         # --- END ORDER MERCHANDISE STOCK LOGIC ---
+
+                        # --- WRITE SONG LOGIC ---
+                        elif player.current_poi.category == "HOME" and chosen_interaction_text == "Write a new song":
+                            print("\n--- Write a New Song ---")
+                            try:
+                                hours_str = input("How many hours to dedicate to songwriting (e.g., 2, 4, 8)? > ")
+                                hours_spent = int(hours_str)
+                                if hours_spent <= 0:
+                                    print("Songwriting time must be positive.")
+                                else:
+                                    song_title = input("Enter a title for your new song: > ").strip()
+                                    if not song_title:
+                                        song_title = f"Untitled Ballad #{len(player.songs_written) + 1}"
+                                        print(f"No title entered, defaulting to '{song_title}'.")
+
+                                    # Genre selection
+                                    genres = ["Rock", "Pop", "Blues", "Folk", "Indie", "Electronic"]
+                                    genre_choice_key = present_choices(genres, "Choose a genre for your song:")
+                                    if genre_choice_key:
+                                        chosen_genre = genres[int(genre_choice_key) -1]
+
+                                        # Song Quality Calculation (Basic)
+                                        songwriting_skill = player.skills.get("songwriting", 0)
+                                        base_quality = (songwriting_skill / 20.0) # Max skill 20 for base 1.0
+                                        time_factor = min(0.5, (hours_spent / 8.0) * 0.5) # Max 0.5 bonus for 8+ hours
+                                        random_inspiration = random.uniform(-0.15, 0.15) # Increased inspiration range slightly
+
+                                        final_song_quality = min(1.0, max(0.05, base_quality + time_factor + random_inspiration)) # Ensure min quality of 0.05
+
+                                        # For now, complexity is just random small values, can be tied to skill/genre later
+                                        lyrics_c = round(random.uniform(0.1, 0.3) + (songwriting_skill / 50.0), 2)
+                                        music_c = round(random.uniform(0.1, 0.3) + (player.skills.get("guitar",0)/40.0 + player.skills.get("piano",0)/40.0), 2) # Example using instrument skills
+
+                                        new_song = Song(
+                                            title=song_title,
+                                            author=player.name,
+                                            genre=chosen_genre,
+                                            song_quality=final_song_quality,
+                                            lyrics_complexity=lyrics_c,
+                                            music_complexity=music_c
+                                        )
+                                        player.songs_written.append(new_song)
+
+                                        advance_game_time(minutes=hours_spent * 60)
+                                        update_npc_locations(current_game_time)
+                                        # Songwriting also affects energy/stress
+                                        player.energy = max(0, player.energy - (hours_spent * 5)) # -5 energy per hour
+                                        player.stress = min(100, player.stress + (hours_spent * 2)) # +2 stress per hour
+
+                                        print(f"\nYou spent {hours_spent} hours writing '{new_song.title}' [{new_song.genre}].")
+                                        print(f"It feels like it has a compositional quality of {new_song.song_quality:.2f}/1.0.")
+                                        print(f"Energy: {player.energy}/100, Stress: {player.stress}/100")
+                                    else:
+                                        print("Songwriting cancelled (no genre selected).")
+                            except ValueError:
+                                print("Invalid number of hours entered.")
+                        # --- END WRITE SONG LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 

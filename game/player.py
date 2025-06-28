@@ -20,6 +20,8 @@ class Player:
         self.energy = 100 # Max 100
         self.stress = 0   # Max 100 (lower is better)
 
+        self.songs_written = [] # List of Song objects
+
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
 
@@ -154,6 +156,7 @@ class Player:
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
         status += f"Energy: {self.energy}/100, Stress: {self.stress}/100\n"
         status += f"Skills: {self.skills}\n"
+        status += f"Songs Written: {len(self.songs_written)}\n"
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"
         status += f"Has Bike: {'Yes' if self.has_bike else 'No'}\n"
 
@@ -173,9 +176,23 @@ if __name__ == '__main__':
     assert p.energy == 100
     assert p.stress == 0
     assert not p.has_manager
+    assert len(p.songs_written) == 0
 
     p.practice_skill("guitar", 2)
-    assert p.skills["guitar"] == 0.2 # Note: practice_skill doesn't currently affect energy/stress
+    assert p.skills["guitar"] == 0.2
+    p.practice_skill("songwriting", 5) # Practice new skill
+    assert "songwriting" in p.skills
+    assert p.skills["songwriting"] == 0.5
+
+    # Add a mock song to test the list (actual song creation is elsewhere)
+    class MockSong:
+        def __init__(self, title):
+            self.title = title
+    p.songs_written.append(MockSong("Test Ballad"))
+    assert len(p.songs_written) == 1
+    assert "Songs Written: 1" in str(p)
+
+
     p.practice_skill("guitar", 3)
     assert p.skills["guitar"] == 0.5
     p.practice_skill("vocals", 5)
