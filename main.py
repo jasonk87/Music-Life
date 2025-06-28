@@ -153,7 +153,7 @@ def setup_world():
         name="Hometown Bus Stop",
         description="A dusty bus stop for regional travel to City Center.",
         category="TRANSPORT_BUS",
-        interaction_options=["Check Bus Schedule", "Buy Bus Ticket to City Center"],
+        interaction_options=["View Departures & Buy Tickets"], # Standardized option
         parent_location_id=home_town.name
     )
     home_town.add_poi(bus_stop_hometown)
@@ -164,7 +164,7 @@ def setup_world():
         name="City Center International Airport",
         description="Flights to other major cities (when you can afford them).",
         category="TRANSPORT_AIRPORT",
-        interaction_options=["Check Flight Departures", "Buy Plane Ticket"],
+        interaction_options=["View Departures & Buy Tickets"], # Standardized option
         parent_location_id=city_center.name
     )
     city_center.add_poi(city_airport)
@@ -174,7 +174,7 @@ def setup_world():
         name="Main Bus Terminal (City Center)",
         description="Regional and long-haul bus services.",
         category="TRANSPORT_BUS",
-        interaction_options=["Check Bus Schedule", "Buy Bus Ticket"],
+        interaction_options=["View Departures & Buy Tickets"], # Standardized option
         parent_location_id=city_center.name
     )
     city_center.add_poi(city_bus_station)
@@ -624,41 +624,43 @@ def main():
             except ValueError:
                 print("Invalid number of hours.")
 
-        elif choice == "2": # Travel to another City
-            print("\n--- Travel to another City ---") # Title updated
-            connections = player.current_location.travel_connections # Use current_location
-            if not connections:
-                print("There are no travel connections from your current location.")
+        elif choice == "2": # Go to Transport Hub for Inter-City Travel
+            print("\n--- Inter-City Travel Information ---")
+            current_city = player.current_location
+            transport_hubs_in_city = []
+            for poi in current_city.points_of_interest + current_city.venues: # Venues can sometimes be hubs (e.g. a port, though not used yet)
+                if hasattr(poi, 'category') and poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
+                    transport_hubs_in_city.append(poi)
+
+            if not transport_hubs_in_city:
+                print(f"{current_city.name} doesn't seem to have any major bus stations or airports defined for inter-city travel.")
+            elif player.current_poi and player.current_poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
+                print(f"You are currently at {player.current_poi.name}.")
+                print(f"Please use option '4. Explore current POI/Area' to find departures and buy tickets.")
             else:
-                dest_options_list = []
-                dest_map = {} # To map simple 1,2,3 choice back to dest_name
-                for i, dest_name in enumerate(connections.keys()):
-                    details = connections[dest_name]
-                    option_text = f"{dest_name} (Cost: ${details['cost']}, Time: {details['time_hours']} hours)"
-                    dest_options_list.append(option_text)
-                    dest_map[str(i+1)] = dest_name
+                print(f"To travel to another city, you first need to go to a transport hub (bus station or airport).")
+                if player.current_poi:
+                    print(f"You are currently at: {player.current_poi.name}.")
+                else:
+                    print(f"You are currently in the general area of {current_city.name}.")
+                print(f"\nAvailable transport hubs in {current_city.name}:")
 
-                travel_choice_key = present_choices(dest_options_list, "Travel to which location?")
+                hub_display_list = [f"{hub.name} ({hub.category})" for hub in transport_hubs_in_city]
+                # Add an option to not travel to a hub now
+                hub_display_list.append("Nevermind / Stay in current area")
 
-                if travel_choice_key and travel_choice_key in dest_map:
-                    chosen_dest_name = dest_map[travel_choice_key]
-                    travel_details = connections[chosen_dest_name]
+                hub_choice_idx_str = present_choices(hub_display_list, "Go to which transport hub? (Or select 'Nevermind')")
 
-                    if player.money >= travel_details['cost']:
-                        player.money -= travel_details['cost']
-                        destination_location = WORLD_MAP.get(chosen_dest_name)
-                        if destination_location:
-                            player.travel(destination_location, travel_details['time_hours'])
-                            advance_game_time(minutes=travel_details['time_hours']*60)
-                                update_npc_locations(current_game_time) # Update NPC locations
-                            print(f"Paid ${travel_details['cost']} for travel. Remaining money: ${player.money}")
-                        else:
-                            print(f"Error: Destination '{chosen_dest_name}' not found in world map.")
-                    else:
-                        print(f"Not enough money to travel to {chosen_dest_name}. Need ${travel_details['cost']}, have ${player.money}.")
+                if hub_choice_idx_str:
+                    choice_idx = int(hub_choice_idx_str) -1
+                    if 0 <= choice_idx < len(transport_hubs_in_city): # Check if a hub was chosen
+                        chosen_hub_poi = transport_hubs_in_city[choice_idx]
+                        print(f"\nOkay, to get to {chosen_hub_poi.name}, please use option '3. Travel within this City'.")
+                        print(f"Once at {chosen_hub_poi.name}, use option '4. Explore current POI/Area' to arrange inter-city travel.")
+                    # Else (if "Nevermind" or invalid), just fall through to end of this action.
             print("--------------------")
 
-        elif choice == "3": # Travel within this City (New)
+        elif choice == "3": # Travel within this City
             print(f"\n--- Travel within {player.current_location.name} ---")
             if not player.current_poi:
                 print("You are at a general city location, not a specific Point of Interest. Explore first or select a POI.")
@@ -816,11 +818,65 @@ def main():
                         # --- END SHOPPING LOGIC ---
 
                         # TODO: Implement other POI interactions here based on chosen_interaction_text
-                        # e.g., "Talk to Old Timer Joe", "Rent Room ($50/night)"
+
+                        # --- INTER-CITY TRAVEL BOOKING LOGIC ---
+                        elif (player.current_poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"] and
+                              chosen_interaction_text == "View Departures & Buy Tickets"):
+
+                            connections = player.current_location.travel_connections
+                            if not connections:
+                                print(f"No inter-city travel routes currently available from {player.current_location.name}.")
+                            else:
+                                print(f"\n--- Inter-City Departures from {player.current_poi.name} ---")
+                                dest_options_list = []
+                                dest_map = {} # Maps display index to (dest_name, details_dict)
+
+                                for i, (dest_name, details) in enumerate(connections.items()):
+                                    # Implicitly, bus station connects to bus routes, airport to flights.
+                                    # For now, all connections from a city are available at any of its hubs.
+                                    # Future: Filter by hub type (bus station POI only shows bus routes etc.)
+                                    travel_mode_implicit = "Bus" if player.current_poi.category == "TRANSPORT_BUS" else "Plane"
+                                    option_text = f"To {dest_name} by {travel_mode_implicit} (Cost: ${details['cost']}, Time: {details['time_hours']} hours)"
+                                    dest_options_list.append(option_text)
+                                    dest_map[str(i+1)] = (dest_name, details)
+
+                                if not dest_options_list:
+                                     print(f"No departures listed from {player.current_poi.name} right now.")
+                                else:
+                                    dest_choice_key = present_choices(dest_options_list, title="Select destination: (0 to cancel)")
+                                    if dest_choice_key and dest_choice_key != "0" and dest_choice_key in dest_map:
+                                        chosen_dest_name, travel_details = dest_map[dest_choice_key]
+
+                                        confirm_prompt = f"Travel to {chosen_dest_name} for ${travel_details['cost']} and {travel_details['time_hours']} hours. Confirm? (y/n)"
+                                        confirm_choice = input(f"{confirm_prompt} > ").lower()
+
+                                        if confirm_choice == 'y':
+                                            if player.money >= travel_details['cost']:
+                                                player.money -= travel_details['cost']
+                                                destination_location_obj = WORLD_MAP.get(chosen_dest_name)
+
+                                                if destination_location_obj:
+                                                    # player.travel already handles setting new current_location and arrival POI
+                                                    player.travel(destination_location_obj, travel_details['time_hours'])
+                                                    advance_game_time(minutes=travel_details['time_hours']*60)
+                                                    update_npc_locations(current_game_time)
+                                                    print(f"Ticket purchased. Paid ${travel_details['cost']}. You are now heading to {chosen_dest_name}.")
+                                                    # Break from POI interaction loop as player has moved.
+                                                    # The main game loop will then pick up at the new location.
+                                                    # We need a way to signal the main loop to effectively 'refresh' or skip to next turn.
+                                                    # For now, the next iteration of the main loop will show the new city.
+                                                else:
+                                                    print(f"Error: Destination city '{chosen_dest_name}' not found in world map. Ticket not booked.")
+                                                    player.money += travel_details['cost'] # Refund
+                                            else:
+                                                print(f"Not enough money for this ticket. Need ${travel_details['cost']}.")
+                                        else:
+                                            print("Travel cancelled.")
+                        # --- END INTER-CITY TRAVEL BOOKING LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
-                else: # No interaction options defined for the POI
+                else: # No interaction options defined for the POI or player cancelled choosing an interaction
                     print("There's not much to do here specifically.")
             else: # Exploring general city location if no specific POI
                 print(f"Description: {player.current_location.description}")

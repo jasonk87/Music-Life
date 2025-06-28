@@ -91,8 +91,27 @@ class Player:
         # Simulate time passing
         print(f"Travel took {travel_time} hours.")
         self.current_location = destination_location
-        self.current_poi = None # Arriving in a new city, not at a specific POI yet (or maybe at an entry POI like airport/station later)
-        print(f"{self.name} has arrived at {destination_location.name}.")
+
+        # Attempt to set current_poi to a relevant transport hub in the new city
+        # This assumes inter-city travel implies arriving at such a hub.
+        # The mode of travel isn't passed here, so we make a best guess.
+        arrival_poi = None
+        if destination_location and (hasattr(destination_location, 'points_of_interest') or hasattr(destination_location, 'venues')):
+            all_pois_in_dest = destination_location.points_of_interest + destination_location.venues
+
+            # Prioritize Airport if it exists, then Bus Station
+            for poi_category_priority in ["TRANSPORT_AIRPORT", "TRANSPORT_BUS"]:
+                for poi in all_pois_in_dest:
+                    if hasattr(poi, 'category') and poi.category == poi_category_priority:
+                        arrival_poi = poi
+                        break
+                if arrival_poi:
+                    break
+
+        self.current_poi = arrival_poi # Could be None if no suitable hub found
+
+        arrival_poi_name = f"at {arrival_poi.name}" if arrival_poi else "at the city outskirts"
+        print(f"{self.name} has arrived in {destination_location.name} ({arrival_poi_name}).")
 
     def travel_within_city(self, destination_poi, time_taken): # New method for intra-city
         if not self.current_location:
