@@ -290,10 +290,10 @@ def setup_world():
     joe = NPC(npc_id="joe001", name="Old Timer Joe", personality_key="old_timer_joe", home_location=music_shop_home)
     joe.current_location = music_shop_home
     joe.schedule = {
-        "weekday_morning": music_shop_home,
-        "weekday_afternoon": music_shop_home,
-        "saturday_morning": music_shop_home,
-        "sunday_evening": community_hall
+        "Weekday_Morning": music_shop_home,
+        "Weekday_Afternoon": music_shop_home,
+        "Weekend_Morning": music_shop_home, # Covers Saturday and Sunday morning
+        "Weekend_Evening": community_hall  # Covers Sunday evening (and Saturday if no other rule overrides)
     }
     NPC_REGISTRY[joe.npc_id] = joe
     music_shop_home.owner_npc_id = joe.npc_id
@@ -310,9 +310,9 @@ def setup_world():
     vic = NPC(npc_id="vic001", name="Vic Vega", personality_key="gruff_club_owner", home_location=rusty_mug_club)
     vic.current_location = rusty_mug_club
     vic.schedule = {
-        "weekday_afternoon": rusty_mug_club,
-        "weekday_evening": rusty_mug_club,
-        "weekend_evening": rusty_mug_club,
+        "Weekday_Afternoon": rusty_mug_club,
+        "Weekday_Evening": rusty_mug_club,
+        "Weekend_Evening": rusty_mug_club, # Covers Sat/Sun evenings
     }
     NPC_REGISTRY[vic.npc_id] = vic
     rusty_mug_club.owner_npc_id = vic.npc_id
