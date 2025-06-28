@@ -6,10 +6,13 @@ class Event:
         "FESTIVAL_SLOT": {"base_fame": 500, "base_payout": 3000, "skill_multiplier": 2.5}
     }
 
-    def __init__(self, name, location, event_type="OPEN_MIC", required_skills=None, description="", specific_fame_reward=None, specific_payout=None):
+    def __init__(self, name, location, event_type="OPEN_MIC", required_skills=None,
+                 required_gear_types=None, # New attribute
+                 description="", specific_fame_reward=None, specific_payout=None):
         self.name = name
-        self.location = location # Location object
+        self.location = location # Venue or Location object
         self.event_type = event_type
+        self.required_gear_types = required_gear_types if required_gear_types else []
 
         type_details = Event.EVENT_TYPES.get(event_type, Event.EVENT_TYPES["OPEN_MIC"])
 
@@ -52,11 +55,65 @@ class Event:
 
         for skill, required_level in self.required_skills.items():
             if player.skills.get(skill, 0) < required_level:
-                return False, f"Player does not meet skill requirement for {skill} (needs {required_level}, has {player.skills.get(skill, 0)})."
-        return True, "Player meets all requirements."
+                return False, f"Player does not meet skill requirement for {skill} (needs {required_level}, has {player.skills.get(skill, 0)}).", False
+
+        # Gear check
+        gear_ok, gear_message, needs_rental = self._check_gear_requirements(player)
+        if not gear_ok:
+            return False, gear_message, needs_rental # needs_rental might be true if partial rental was possible but other gear missing
+
+        return True, "Player meets all requirements.", needs_rental
+
+    def _check_gear_requirements(self, player):
+        """
+        Checks if the player has the required gear types or can rent them from the venue.
+        Returns: (bool_can_perform, message_str, bool_needs_rental)
+        """
+        if not self.required_gear_types:
+            return True, "No specific gear required.", False # No gear needed
+
+        from game_data.gear_catalog import GEAR_CATALOG # Import locally to avoid circular dependency issues at module load time
+
+        player_gear_types_owned = set()
+        for item in player.gear_inventory:
+            player_gear_types_owned.add(item.gear_type)
+
+        missing_gear_messages = []
+        actually_needs_rental_for_event = False
+
+        for req_type in self.required_gear_types:
+            if req_type not in player_gear_types_owned:
+                # Player doesn't own this type of gear. Can it be rented?
+                venue = self.location # Assuming event.location is always a Venue object for events requiring gear
+                if hasattr(venue, 'can_rent_gear') and venue.can_rent_gear:
+                    # Check if venue has this type of gear available for rent
+                    can_rent_this_type = False
+                    for item_id in venue.available_rental_gear_ids:
+                        rental_item = GEAR_CATALOG.get(item_id)
+                        if rental_item and rental_item.gear_type == req_type:
+                            can_rent_this_type = True
+                            break
+
+                    if can_rent_this_type:
+                        actually_needs_rental_for_event = True
+                        # Player can rent this type, so requirement is met via rental.
+                        # print(f"DEBUG: Player can rent {req_type} at {venue.name}.") # Optional debug
+                        continue # Move to next required gear type
+                    else:
+                        missing_gear_messages.append(f"Missing {req_type} (venue does not rent this type).")
+                else: # Venue doesn't rent gear or is not a proper venue object
+                    missing_gear_messages.append(f"Missing {req_type} (rental not possible/available at venue).")
+            # Else: player owns this gear type, requirement met.
+
+        if missing_gear_messages:
+            return False, "Missing required gear: " + ", ".join(missing_gear_messages), actually_needs_rental_for_event
+
+        return True, "All gear requirements met (owned or rentable).", actually_needs_rental_for_event
+
 
     def perform_event(self, player):
-        can_perform, message = self.can_perform(player)
+        # The needs_rental flag is now passed from can_perform
+        can_perform, message, needs_rental = self.can_perform(player)
         if not can_perform:
             print(f"Cannot perform {self.name}: {message}")
             return False
@@ -64,10 +121,27 @@ class Event:
         print(f"{player.name} is performing at {self.name} at {self.location.name}!")
         # Add more event logic here (e.g., minigame, skill checks for quality)
         print(f"The event was a success!")
+
+        actual_payout = self.payout
+        if needs_rental:
+            venue = self.location # Assuming self.location is the Venue object
+            if hasattr(venue, 'can_rent_gear') and venue.can_rent_gear and venue.gear_rental_fee > 0:
+                actual_payout -= venue.gear_rental_fee
+                player.money -= venue.gear_rental_fee # Deduct fee directly, or from payout
+                print(f"A gear rental fee of ${venue.gear_rental_fee} was deducted.")
+                if actual_payout < 0: # Should not happen if fee > payout, but good to note
+                    print(f"Warning: Gear rental fee exceeded event payout!")
+
         player.fame += self.fame_reward
-        player.money += self.payout
+        # player.money += actual_payout # Money is already adjusted if fee was deducted directly.
+                                      # If fee is deducted from payout, then use this line.
+                                      # Let's stick to deducting fee directly from player.money for now.
+                                      # So, player gets full advertised payout, then pays fee.
+        player.money += self.payout # Player receives full payout
+                                    # Fee was already deducted from player.money if applicable.
+
         print(f"{player.name} gained {self.fame_reward} fame. Total fame: {player.fame}.")
-        print(f"{player.name} earned ${self.payout}. Total money: ${player.money}.")
+        print(f"{player.name} earned ${self.payout} (Advertised). Final money: ${player.money} (after any fees).")
         self.is_active = False # Assuming events are one-time, can be changed
         return True
 

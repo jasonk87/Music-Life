@@ -1,16 +1,22 @@
 class Venue:
-    def __init__(self, venue_id, name, description="A place to perform or hang out.", venue_type="CLUB", category="VENUE_GENERAL", capacity=100, prestige=1, parent_location_id=None):
-        self.venue_id = venue_id # Unique identifier, e.g., "city_center_rusty_mug"
+    def __init__(self, venue_id, name, description="A place to perform or hang out.",
+                 venue_type="CLUB", category="VENUE_GENERAL",
+                 capacity=100, prestige=1, parent_location_id=None,
+                 can_rent_gear=False, gear_rental_fee=0, available_rental_gear_ids=None):
+        self.venue_id = venue_id
         self.name = name
         self.description = description
-        self.venue_type = venue_type # Specific type like "CLUB", "CAFE", "ARENA", "FESTIVAL_GROUND"
-        self.category = category # Broader category, e.g., "VENUE_CLUB", "VENUE_THEATER"
-                                 # Often derived from venue_type, but explicit for consistency with POI
+        self.venue_type = venue_type
+        self.category = category
         self.capacity = capacity
         self.prestige = prestige
         self.events_hosted = []
         self.owner_npc_id = None
-        self.parent_location_id = parent_location_id # ID of the city this venue is in
+        self.parent_location_id = parent_location_id
+
+        self.can_rent_gear = can_rent_gear
+        self.gear_rental_fee = gear_rental_fee
+        self.available_rental_gear_ids = available_rental_gear_ids if available_rental_gear_ids else []
 
     def add_event(self, event):
         if event not in self.events_hosted:
@@ -24,7 +30,12 @@ class Venue:
             print(f"Event '{event.name}' removed from venue '{self.name}'.")
 
     def __str__(self):
-        return f"{self.name} (ID: {self.venue_id}, Type: {self.venue_type}, Category: {self.category}, Capacity: {self.capacity}, Prestige: {self.prestige})"
+        base_str = f"{self.name} (ID: {self.venue_id}, Type: {self.venue_type}, Category: {self.category}, Capacity: {self.capacity}, Prestige: {self.prestige})"
+        if self.can_rent_gear:
+            base_str += f" [Gear Rental: Yes, Fee: ${self.gear_rental_fee}, Items: {len(self.available_rental_gear_ids)} types]"
+        else:
+            base_str += " [Gear Rental: No]"
+        return base_str
 
 if __name__ == '__main__':
     # Basic tests for Venue class
@@ -34,23 +45,30 @@ if __name__ == '__main__':
             self.location = None # Will be set by venue.add_event
 
     venue1 = Venue(
-        venue_id="club_rusty_mug",
-        name="The Rusty Mug",
-        description="A well-known club.",
-        venue_type="CLUB",
-        category="VENUE_CLUB",
-        capacity=150,
-        prestige=4,
-        parent_location_id="city_center"
-        )
+        venue_id="club_rusty_mug", name="The Rusty Mug",
+        description="A well-known club.", venue_type="CLUB", category="VENUE_CLUB",
+        capacity=150, prestige=4, parent_location_id="city_center",
+        can_rent_gear=True, gear_rental_fee=25, available_rental_gear_ids=["amp_basic", "drum_kit_basic"]
+    )
     assert venue1.venue_id == "club_rusty_mug"
-    assert venue1.name == "The Rusty Mug"
-    assert venue1.category == "VENUE_CLUB"
-    assert venue1.parent_location_id == "city_center"
-    assert venue1.capacity == 150
+    assert venue1.can_rent_gear
+    assert venue1.gear_rental_fee == 25
+    assert "amp_basic" in venue1.available_rental_gear_ids
     print(venue1)
+    assert "[Gear Rental: Yes, Fee: $25, Items: 2 types]" in str(venue1)
 
-    event1_test = MockEvent("Band Night Test 1") # Renamed to avoid confusion
+
+    venue2 = Venue(
+        venue_id="hall_community", name="Community Hall",
+        description="Local events.", venue_type="HALL", category="VENUE_HALL",
+        capacity=50, prestige=1, parent_location_id="hometown",
+        can_rent_gear=False # This one cannot rent gear
+    )
+    assert not venue2.can_rent_gear
+    print(venue2)
+    assert "[Gear Rental: No]" in str(venue2)
+
+    event1_test = MockEvent("Band Night Test 1")
     event2_test = MockEvent("Band Night Test 2")
 
     venue1.add_event(event1_test)

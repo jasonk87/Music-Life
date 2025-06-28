@@ -40,7 +40,8 @@ def setup_world():
         category="VENUE_HALL",
         capacity=50,
         prestige=1,
-        parent_location_id=home_town.name
+        parent_location_id=home_town.name,
+        can_rent_gear=False # Community hall doesn't rent gear
     )
     home_town.add_venue(community_hall)
 
@@ -78,7 +79,10 @@ def setup_world():
         category="VENUE_CLUB",
         capacity=150,
         prestige=4,
-        parent_location_id=city_center.name
+        parent_location_id=city_center.name,
+        can_rent_gear=True,
+        gear_rental_fee=30, # Cost to rent at Rusty Mug
+        available_rental_gear_ids=["basic_electric_guitar", "practice_amp_small"] # What they offer
     )
     city_center.add_venue(rusty_mug_club)
     grande_theater = Venue(
@@ -89,7 +93,10 @@ def setup_world():
         category="VENUE_THEATER",
         capacity=1000,
         prestige=8,
-        parent_location_id=city_center.name
+        parent_location_id=city_center.name,
+        can_rent_gear=True, # High-end venues often have backline
+        gear_rental_fee=100,
+        available_rental_gear_ids=["pro_electric_guitar", "pro_bass_guitar", "pro_amp_large", "pro_drum_kit"] # Example pro gear
     )
     city_center.add_venue(grande_theater)
 
@@ -236,8 +243,9 @@ def setup_world():
     open_mic_event = Event(
         name="Open Mic Night",
         event_type="OPEN_MIC",
-        location=community_hall, # Assign to venue
+        location=community_hall,
         required_skills={"vocals": 1, "guitar": 1},
+        required_gear_types=["INSTRUMENT_ACOUSTIC"], # Open mic often acoustic
         description="A chance to show your skills at the local Community Hall."
     )
     community_hall.add_event(open_mic_event)
@@ -245,8 +253,9 @@ def setup_world():
     first_club_gig_event = Event(
         name="Debut at 'The Rusty Mug'",
         event_type="CLUB_GIG",
-        location=rusty_mug_club, # Assign to venue
+        location=rusty_mug_club,
         required_skills={"vocals": 5, "guitar": 5, "stage_presence": 3},
+        required_gear_types=["INSTRUMENT_ELECTRIC", "AMPLIFIER"], # Electric gig
         description="Your first real club gig! Make it count.",
     )
     first_club_gig_event.preparation_tasks_required = {
@@ -262,6 +271,7 @@ def setup_world():
         event_type="CONCERT",
         location=grande_theater,
         required_skills={"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10},
+        required_gear_types=["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], # Full band setup
         description="A huge opportunity to open for a touring band at the Grande Concert Hall!",
     )
     opening_act_concert.preparation_tasks_required = {

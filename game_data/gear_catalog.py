@@ -5,7 +5,7 @@ GEAR_CATALOG = {
         item_id="worn_acoustic_guitar",
         name="Worn Acoustic Guitar",
         description="An old, battered acoustic guitar. It has seen better days but still makes a sound. Good for practice or very humble beginnings.",
-        gear_type="INSTRUMENT",
+        gear_type="INSTRUMENT_ACOUSTIC", # More specific
         size=5, # Standard guitar size
         cost=50,
         properties={"acoustic": True, "quality": 0.3} # Quality 0-1 scale
@@ -14,7 +14,7 @@ GEAR_CATALOG = {
         item_id="basic_electric_guitar",
         name="Basic Electric Guitar",
         description="A simple but functional Stratocaster-style electric guitar. Needs an amp.",
-        gear_type="INSTRUMENT",
+        gear_type="INSTRUMENT_ELECTRIC", # More specific
         size=5,
         cost=150,
         properties={"electric": True, "quality": 0.5}
@@ -46,15 +46,51 @@ GEAR_CATALOG = {
         cost=5,
         properties={"quantity": 5}
     ),
+    "pro_electric_guitar": GearItem(
+        item_id="pro_electric_guitar",
+        name="Professional Electric Guitar",
+        description="A high-quality electric guitar, suitable for large stages.",
+        gear_type="INSTRUMENT_ELECTRIC", # More specific type
+        size=5,
+        cost=1200, # Not buyable yet, but for reference
+        properties={"electric": True, "quality": 0.9}
+    ),
+    "pro_bass_guitar": GearItem(
+        item_id="pro_bass_guitar",
+        name="Professional Bass Guitar",
+        description="A top-tier bass guitar for a solid low end.",
+        gear_type="INSTRUMENT_BASS", # New type
+        size=6, # Basses can be a bit bigger
+        cost=1000,
+        properties={"electric": True, "quality": 0.85}
+    ),
+    "pro_amp_large": GearItem(
+        item_id="pro_amp_large",
+        name="Large Stage Amp (100W)",
+        description="A powerful amplifier for large venues.",
+        gear_type="AMPLIFIER",
+        size=10,
+        cost=800,
+        properties={"wattage": 100, "quality": 0.9}
+    ),
+    "pro_drum_kit": GearItem(
+        item_id="pro_drum_kit",
+        name="Professional Drum Kit",
+        description="A full 5-piece drum kit with cymbals.",
+        gear_type="INSTRUMENT_DRUMS", # New type
+        size=20, # Very large, player likely won't carry this
+        cost=1500,
+        properties={"quality": 0.8}
+    )
     # Future items could include:
-    # "decent_acoustic_guitar", "pro_electric_guitar", "gig_amp_50w",
+    # "decent_acoustic_guitar",
     # "effect_pedal_distortion", "effect_pedal_delay", "microphone_basic",
     # "drum_sticks", "keyboard_portable"
 }
 
 if __name__ == '__main__':
     # Test that all items can be created and accessed
-    assert len(GEAR_CATALOG) == 5
+    assert len(GEAR_CATALOG) == 9 # Updated count
     assert GEAR_CATALOG["worn_acoustic_guitar"].name == "Worn Acoustic Guitar"
     assert GEAR_CATALOG["practice_amp_small"].cost == 100
     assert GEAR_CATALOG["guitar_picks_assorted"].size == 0
