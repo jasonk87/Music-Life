@@ -6,53 +6,63 @@ import ollama
 # and this model pulled (e.g., via `ollama pull llama3`).
 LLM_MODEL = 'llama3'
 
-# --- Pre-defined NPC Personalities/Roles ---
-# These are system prompts that define the NPC's character.
+# --- Pre-defined NPC Personality Templates ---
+# These store the base system prompt for an NPC's personality type.
+# Dialogue history is now managed per NPC instance.
 NPC_PERSONALITIES = {
     "friendly_fan": {
-        "system_prompt": "You are a friendly and enthusiastic fan of an up-and-coming musician. You are very supportive and a little star-struck. Keep your responses relatively short and positive.",
-        "dialogue_history": [] # Each NPC could maintain its own history if needed, or a global one per interaction
+        "system_prompt": "You are a friendly and enthusiastic fan of an up-and-coming musician. You are very supportive and a little star-struck. Keep your responses relatively short and positive."
     },
     "gruff_club_owner": {
-        "system_prompt": "You are a busy, no-nonsense owner of a small music club. You are a bit gruff but fair. You care about good music and reliability. Keep responses concise and to the point.",
-        "dialogue_history": []
+        "system_prompt": "You are a busy, no-nonsense owner of a small music club. You are a bit gruff but fair. You care about good music and reliability. Keep responses concise and to the point."
     },
     "adoring_fan": {
-        "system_prompt": "You are an adoring fan. You are extremely excited, positive, and a bit overwhelmed to meet the musician. You heap praise and ask for an autograph or photo. Keep responses enthusiastic and star-struck.",
-        "dialogue_history": []
+        "system_prompt": "You are an adoring fan. You are extremely excited, positive, and a bit overwhelmed to meet the musician. You heap praise and ask for an autograph or photo. Keep responses enthusiastic and star-struck."
+    },
+    "old_timer_joe": { # Example specific NPC personality
+        "system_prompt": "You are Old Timer Joe, owner of a dusty but cherished music shop. You've seen it all in the music world. You are a bit grumpy, nostalgic, but have a soft spot for genuine talent and hard workers. You often speak in folksy idioms."
     },
     "default": {
-        "system_prompt": "You are a helpful assistant.", # Default placeholder
-        "dialogue_history": []
+        "system_prompt": "You are a helpful assistant." # Default placeholder
     }
 }
 
-def generate_npc_response(player_message, npc_personality_key="default"):
+def generate_npc_response(player_message, npc_instance, player_name="The Musician"):
     """
-    Generates a response from an NPC using the Ollama LLM.
+    Generates a response from an NPC using the Ollama LLM, considering the NPC's personality,
+    memories, relationship with the player, and dialogue history.
 
     Args:
         player_message (str): The message from the player to the NPC.
-        npc_personality_key (str): The key for the NPC's personality profile.
+        npc_instance (NPC): The specific NPC object instance anwering.
+        player_name (str): The player's character name, for context.
 
     Returns:
         str: The NPC's response, or an error message if something goes wrong.
     """
-    if npc_personality_key not in NPC_PERSONALITIES:
-        return "Error: NPC personality not found."
+    if not npc_instance or not hasattr(npc_instance, 'personality_key'):
+        return "Error: Invalid NPC instance provided."
 
-    personality = NPC_PERSONALITIES[npc_personality_key]
-    system_prompt = personality["system_prompt"]
+    personality_key = npc_instance.personality_key
+    if personality_key not in NPC_PERSONALITIES:
+        return f"Error: NPC personality key '{personality_key}' not found in templates."
 
-    # For now, let's keep a short history for the conversation context.
-    # We'll just append to the personality's dialogue history.
-    # A more sophisticated approach might be needed for longer conversations.
+    base_system_prompt = NPC_PERSONALITIES[personality_key]["system_prompt"]
 
-    messages = [{"role": "system", "content": system_prompt}]
+    # Construct the full system prompt with context
+    contextual_system_prompt = f"{base_system_prompt}\n"
+    contextual_system_prompt += f"You are talking to {player_name}.\n"
+    contextual_system_prompt += f"Your current disposition towards {player_name} is: {npc_instance.relationship_with_player.name} (Score: {npc_instance.relationship_score}).\n"
 
-    # Add recent history - let's say last 4 exchanges (system + user + assistant + user...)
-    # This is a simple way to provide context.
-    history_to_include = personality["dialogue_history"][-4:]
+    if npc_instance.memories:
+        # Include a few recent/relevant memories
+        memory_summary = "; ".join(npc_instance.memories[-3:]) # Last 3 memories
+        contextual_system_prompt += f"Key things you remember concerning {player_name}: {memory_summary}\n"
+
+    messages = [{"role": "system", "content": contextual_system_prompt}]
+
+    # Add dialogue history (e.g., last 6 messages, 3 pairs of user/assistant)
+    history_to_include = npc_instance.dialogue_history[-6:]
     messages.extend(history_to_include)
     messages.append({"role": "user", "content": player_message})
 
@@ -63,12 +73,12 @@ def generate_npc_response(player_message, npc_personality_key="default"):
         )
         npc_response_content = response['message']['content']
 
-        # Store the interaction in history
-        personality["dialogue_history"].append({"role": "user", "content": player_message})
-        personality["dialogue_history"].append({"role": "assistant", "content": npc_response_content})
+        # Store the interaction in the NPC's instance history
+        npc_instance.dialogue_history.append({"role": "user", "content": player_message})
+        npc_instance.dialogue_history.append({"role": "assistant", "content": npc_response_content})
 
-        # Keep history from getting too long (e.g., last 10 messages)
-        personality["dialogue_history"] = personality["dialogue_history"][-10:]
+        # Keep history from getting too long (e.g., last 10-20 messages)
+        npc_instance.dialogue_history = npc_instance.dialogue_history[-20:]
 
         return npc_response_content
     except ollama.ResponseError as e:
@@ -79,52 +89,81 @@ def generate_npc_response(player_message, npc_personality_key="default"):
     except Exception as e:
         return f"An unexpected error occurred with the LLM: {str(e)}"
 
-def reset_dialogue_history(npc_personality_key="default"):
-    """Resets the dialogue history for a given NPC personality."""
-    if npc_personality_key in NPC_PERSONALITIES:
-        NPC_PERSONALITIES[npc_personality_key]["dialogue_history"] = []
-    elif npc_personality_key == "all":
-        for key in NPC_PERSONALITIES:
-            NPC_PERSONALITIES[key]["dialogue_history"] = []
-
+def reset_npc_dialogue_history(npc_instance):
+    """
+    Resets the dialogue history for a specific NPC instance.
+    This function might be less relevant now that history is per-instance,
+    but could be used to wipe an NPC's memory of a specific conversation.
+    The old functionality of resetting based on personality_key is removed as it's misleading.
+    """
+    if npc_instance and hasattr(npc_instance, 'dialogue_history'):
+        npc_instance.dialogue_history = []
+        print(f"Dialogue history reset for NPC: {npc_instance.name}")
+    # else:
+        # Consider if there's a use case for resetting all NPCs or by personality,
+        # but direct instance modification is cleaner.
 
 # Example usage (can be run directly for testing if needed)
 if __name__ == "__main__":
-    print("Testing NPC dialogue generation...")
-    print("Make sure Ollama is running and you have pulled the 'llama3' model.")
+    # Need to import NPC class for this test now
+    from game.npc import NPC, RelationshipStatus
 
-    # Test Friendly Fan
-    reset_dialogue_history("all")
-    print("\n--- Interacting with Friendly Fan ---")
-    player_input = "Hey! Loved your last song!"
-    print(f"Player: {player_input}")
-    response = generate_npc_response(player_input, "friendly_fan")
-    print(f"Fan: {response}")
+    print("Testing NPC dialogue generation with persistent NPC instances...")
+    print("Make sure Ollama is running and you have pulled the 'llama3' model (or the model specified in LLM_MODEL).")
 
-    player_input = "Just practicing hard for my next gig."
-    print(f"Player: {player_input}")
-    response = generate_npc_response(player_input, "friendly_fan")
-    print(f"Fan: {response}")
+    # Create a dummy player name for testing
+    test_player_name = "Rockstar Randy"
 
-    # Test Gruff Club Owner
-    reset_dialogue_history("all")
-    print("\n--- Interacting with Gruff Club Owner ---")
-    player_input = "I'm looking for a gig. I play guitar and sing."
-    print(f"Player: {player_input}")
-    response = generate_npc_response(player_input, "gruff_club_owner")
-    print(f"Club Owner: {response}")
+    # Test with an NPC instance: Old Timer Joe
+    joe = NPC(npc_id="joe001", name="Old Timer Joe", personality_key="old_timer_joe")
+    joe.update_relationship(5) # Slightly friendly start
+    joe.add_memory("Randy once asked for a discount.")
 
-    player_input = "I'm reliable and always on time."
-    print(f"Player: {player_input}")
-    response = generate_npc_response(player_input, "gruff_club_owner")
-    print(f"Club Owner: {response}")
+    print(f"\n--- Interacting with {joe.name} ({joe.personality_key}) ---")
+    print(f"Initial state: {joe}")
 
-    # Test model not found error (if you haven't pulled 'nonexistentmodel')
-    # print("\n--- Testing Model Not Found ---")
-    # LLM_MODEL = 'nonexistentmodel'
-    # player_input = "Hello?"
-    # print(f"Player: {player_input}")
-    # response = generate_npc_response(player_input, "default")
-    # print(f"NPC: {response}")
-    # LLM_MODEL = 'llama3' # Reset for other tests or game
-    print("\nTest complete. If you saw model errors, ensure Ollama is running and models are pulled.")
+    player_inputs_joe = [
+        "Hey Joe, got any rare guitars in stock today?",
+        "That's a bit pricey for me. How about a discount for a regular like me?",
+        "Alright, alright. I'll think about it. What's the music scene like these days?"
+    ]
+
+    for pi in player_inputs_joe:
+        print(f"\n{test_player_name}: {pi}")
+        response = generate_npc_response(pi, joe, player_name=test_player_name)
+        print(f"{joe.name}: {response}")
+        if "LLM Error" in response:
+            print("Stopping test due to LLM error.")
+            break
+
+    print(f"\nFinal state for {joe.name}: {joe}")
+    print(f"Dialogue History for {joe.name}: {joe.dialogue_history}")
+    print(f"Memories for {joe.name}: {joe.memories}")
+
+
+    # Test with another NPC instance: Friendly Fan
+    fan = NPC(npc_id="fan001", name="Excited Amy", personality_key="friendly_fan")
+    fan.update_relationship(20) # Already a fan
+
+    print(f"\n--- Interacting with {fan.name} ({fan.personality_key}) ---")
+    print(f"Initial state: {fan}")
+
+    player_inputs_fan = [
+        "Hey there! Thanks for coming to my shows.",
+        "I'm working on some new songs, actually!"
+    ]
+    for pi in player_inputs_fan:
+        print(f"\n{test_player_name}: {pi}")
+        response = generate_npc_response(pi, fan, player_name=test_player_name)
+        print(f"{fan.name}: {response}")
+        if "LLM Error" in response:
+            print("Stopping test due to LLM error.")
+            break
+
+    print(f"\nFinal state for {fan.name}: {fan}")
+
+    # Example of resetting dialogue history for a specific NPC
+    # reset_dialogue_history(npc_instance=joe)
+    # print(f"Joe's dialogue history after reset: {joe.dialogue_history}")
+
+    print("\nDialogue generation test complete. If you saw model errors, ensure Ollama is running and models are pulled.")

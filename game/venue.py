@@ -6,7 +6,7 @@ class Venue:
         self.capacity = capacity   # Max audience size, could influence fame/payout
         self.prestige = prestige   # 1-10, influences event quality, payout, fame
         self.events_hosted = []    # List of Event objects currently at this venue
-        self.owner_npc_type = None # Optional: link to an NPC personality for the owner/manager
+        self.owner_npc_id = None # Optional: store the ID of the NPC who owns/manages this venue
 
     def add_event(self, event):
         if event not in self.events_hosted:

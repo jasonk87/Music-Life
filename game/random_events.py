@@ -1,5 +1,6 @@
 import random
-from game.dialogue import generate_npc_response, reset_dialogue_history
+from game.dialogue import generate_npc_response, reset_npc_dialogue_history # Updated import
+from game.npc import NPC # Import the NPC class
 
 class RandomEvent:
     def __init__(self, name, description_template, fame_threshold_min=0, fame_threshold_max=float('inf'), actions=None, npc_interaction=None):
@@ -20,36 +21,39 @@ class RandomEvent:
             initial_message = self.npc_interaction["initial_message"].format(player_name=player.name)
 
             print(f"\n{npc_name} approaches you!")
-            print(f"{npc_name}: \"{initial_message}\"")
+            # Create a temporary NPC instance for this interaction
+            # npc_id can be generic for these temporary event NPCs
+            temp_npc_id = f"event_npc_{npc_type}"
+            temp_npc = NPC(npc_id=temp_npc_id, name=npc_name, personality_key=npc_type)
+            # No need to call reset_npc_dialogue_history as it's a fresh instance.
 
-            reset_dialogue_history(npc_type) # Fresh conversation for the event
+            # The NPC delivers their initial message (this is outside LLM for now)
+            print(f"{temp_npc.name}: \"{initial_message}\"")
 
-            # Get NPC's follow-up based on their initial line (simulates them starting)
-            # This is a bit of a hack; ideally, the LLM would take the whole context.
-            # For now, we prime it with the NPC's opening line as if it was said to the player.
-            # Then player responds to that.
-
-            # Let's assume the NPC's initial message is the first part of their dialogue.
-            # The NPC's initial message is delivered. The player's next input will be the first "user" message in the LLM interaction for this event.
+            # Now, player responds to this initial message.
+            # The dialogue history will build up in temp_npc.
             while True:
-                player_input = input(f"{player.name} (to {npc_name}, type 'end' to disengage): ")
+                player_input = input(f"{player.name} (to {temp_npc.name}, type 'end' to disengage): ")
                 if player_input.lower() == 'end':
-                    print(f"{player.name} ends the conversation with {npc_name}.")
+                    print(f"{player.name} ends the conversation with {temp_npc.name}.")
                     break
                 if not player_input.strip():
                     continue
 
-                npc_response = generate_npc_response(player_input, npc_type)
-                print(f"{npc_name}: {npc_response}")
+                # Pass the temporary NPC instance and player's actual name (from player object)
+                npc_response = generate_npc_response(player_input, temp_npc, player_name=player.name)
+                print(f"{temp_npc.name}: {npc_response}")
                 if "LLM Error" in npc_response or "An unexpected error occurred" in npc_response:
                     break
 
             # Simple outcome from fan interaction for now
-            if npc_type == "adoring_fan":
-                print(f"{npc_name} seems thrilled by the interaction!")
+            # This could be made more dynamic based on the conversation quality in the future
+            if temp_npc.personality_key == "adoring_fan" or temp_npc.personality_key == "friendly_fan":
+                print(f"{temp_npc.name} seems thrilled by the interaction!")
                 player.fame += 5
                 print(f"You gained 5 fame from the positive fan interaction. Current fame: {player.fame}")
-
+                # Optionally, could add a memory to the player about this interaction if player had memories
+                # temp_npc's memories and history are lost after this event as it's temporary.
 
         for action_desc in self.actions:
             # Later, actions could be functions: action(player)

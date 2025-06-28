@@ -10,6 +10,7 @@ class PointOfInterest:
         # or a dict mapping action names to functions/outcomes.
         # For now, let's keep it simple.
         self.interaction_options = interaction_options if interaction_options else []
+        self.owner_npc_id = None # Optional: store the ID of the NPC who owns/manages this POI
         # Example: ["Browse Guitars", "Buy Strings", "Talk to Owner"] for a music store.
 
     def __str__(self):
