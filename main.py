@@ -30,33 +30,143 @@ def setup_world():
 
     # Define Venues and POIs
     # Hometown Venues
-    community_hall = Venue("Community Hall", "Hosts local events.", venue_type="HALL", capacity=50, prestige=1)
+    community_hall = Venue(
+        venue_id="hometown_community_hall",
+        name="Community Hall",
+        description="Hosts local events.",
+        venue_type="HALL",
+        category="VENUE_HALL",
+        capacity=50,
+        prestige=1,
+        parent_location_id=home_town.name
+    )
     home_town.add_venue(community_hall)
 
     # Hometown POIs
-    music_shop_home = PointOfInterest("Old Timer's Music Shop", "Sells basic gear and instruments.", poi_type="MUSIC_STORE",
-                                   interaction_options=["Browse Gear", "Talk to Owner (Old Timer Joe)"])
+    music_shop_home = PointOfInterest(
+        poi_id="hometown_music_shop_oldtimers",
+        name="Old Timer's Music Shop",
+        description="Sells basic gear and instruments.",
+        category="SHOP_MUSIC",
+        interaction_options=["Browse Gear", "Talk to Owner (Old Timer Joe)"],
+        parent_location_id=home_town.name
+    )
     home_town.add_poi(music_shop_home)
-    rehearsal_space_home = PointOfInterest("Garage Rehearsal Space", "A bit rough but it's cheap.", poi_type="REHEARSAL_STUDIO",
-                                           interaction_options=["Book Rehearsal Time (1 hour, $10)"])
+    rehearsal_space_home = PointOfInterest(
+        poi_id="hometown_rehearsal_garage",
+        name="Garage Rehearsal Space",
+        description="A bit rough but it's cheap.",
+        category="REHEARSAL_STUDIO",
+        interaction_options=["Book Rehearsal Time (1 hour, $10)"],
+        parent_location_id=home_town.name
+    )
     home_town.add_poi(rehearsal_space_home)
 
     # City Center Venues
-    rusty_mug_club = Venue("The Rusty Mug", "A well-known club for upcoming bands.", venue_type="CLUB", capacity=150, prestige=4)
+    rusty_mug_club = Venue(
+        venue_id="citycenter_rustymug",
+        name="The Rusty Mug",
+        description="A well-known club for upcoming bands.",
+        venue_type="CLUB",
+        category="VENUE_CLUB",
+        capacity=150,
+        prestige=4,
+        parent_location_id=city_center.name
+    )
     city_center.add_venue(rusty_mug_club)
-    grande_theater = Venue("Grande Concert Hall", "A prestigious venue for established artists.", venue_type="CONCERT_HALL", capacity=1000, prestige=8)
+    grande_theater = Venue(
+        venue_id="citycenter_grandetheater",
+        name="Grande Concert Hall",
+        description="A prestigious venue for established artists.",
+        venue_type="CONCERT_HALL",
+        category="VENUE_THEATER",
+        capacity=1000,
+        prestige=8,
+        parent_location_id=city_center.name
+    )
     city_center.add_venue(grande_theater)
 
     # City Center POIs
-    pro_music_store = PointOfInterest("Pro Audio Central", "High-end instruments and recording gear.", poi_type="MUSIC_STORE",
-                                     interaction_options=["Browse Instruments", "Buy Pro Gear", "Talk to Sales Rep"])
+    pro_music_store = PointOfInterest(
+        poi_id="citycenter_proaudio",
+        name="Pro Audio Central",
+        description="High-end instruments and recording gear.",
+        category="SHOP_MUSIC",
+        interaction_options=["Browse Instruments", "Buy Pro Gear", "Talk to Sales Rep"],
+        parent_location_id=city_center.name
+    )
     city_center.add_poi(pro_music_store)
-    record_label_office = PointOfInterest("Indie Hits Records", "A small but ambitious record label.", poi_type="RECORD_LABEL",
-                                           interaction_options=["Submit Demo (requires 500 fame)", "Talk to A&R Rep (requires Manager)"])
+    record_label_office = PointOfInterest(
+        poi_id="citycenter_indiehits_records",
+        name="Indie Hits Records",
+        description="A small but ambitious record label.",
+        category="OFFICE_RECORD_LABEL", # More specific category
+        interaction_options=["Submit Demo (requires 500 fame)", "Talk to A&R Rep (requires Manager)"],
+        parent_location_id=city_center.name
+    )
     city_center.add_poi(record_label_office)
-    downtown_cafe = PointOfInterest("The Daily Grind Cafe", "Popular hangout, good coffee, free Wi-Fi.", poi_type="CAFE",
-                                     interaction_options=["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"])
+    downtown_cafe = PointOfInterest(
+        poi_id="citycenter_dailygrind_cafe",
+        name="The Daily Grind Cafe",
+        description="Popular hangout, good coffee, free Wi-Fi.",
+        category="POI_CAFE", # POI prefix for generic points of interest
+        interaction_options=["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"],
+        parent_location_id=city_center.name
+    )
     city_center.add_poi(downtown_cafe)
+
+    # --- Define New Key POIs for Intra-City Travel & Player Start ---
+    # Your Hometown
+    player_home = PointOfInterest(
+        poi_id="hometown_player_home",
+        name="Your Apartment",
+        description="Your starting digs. A bit small, but it's home.",
+        category="HOME",
+        interaction_options=["Rest (advance 8 hours)", "Practice (at home, less effective?)"], # Example interactions
+        parent_location_id=home_town.name
+    )
+    home_town.add_poi(player_home)
+
+    bus_stop_hometown = PointOfInterest(
+        poi_id="hometown_bus_stop",
+        name="Hometown Bus Stop",
+        description="A dusty bus stop for regional travel to City Center.",
+        category="TRANSPORT_BUS",
+        interaction_options=["Check Bus Schedule", "Buy Bus Ticket to City Center"],
+        parent_location_id=home_town.name
+    )
+    home_town.add_poi(bus_stop_hometown)
+
+    # City Center
+    city_airport = PointOfInterest(
+        poi_id="citycenter_airport",
+        name="City Center International Airport",
+        description="Flights to other major cities (when you can afford them).",
+        category="TRANSPORT_AIRPORT",
+        interaction_options=["Check Flight Departures", "Buy Plane Ticket"],
+        parent_location_id=city_center.name
+    )
+    city_center.add_poi(city_airport)
+
+    city_bus_station = PointOfInterest(
+        poi_id="citycenter_bus_station",
+        name="Main Bus Terminal (City Center)",
+        description="Regional and long-haul bus services.",
+        category="TRANSPORT_BUS",
+        interaction_options=["Check Bus Schedule", "Buy Bus Ticket"],
+        parent_location_id=city_center.name
+    )
+    city_center.add_poi(city_bus_station)
+
+    crash_pad_motel = PointOfInterest(
+        poi_id="citycenter_motel_cheap",
+        name="Sleep EZ Motel",
+        description="A cheap, somewhat clean room for the night. Better than the streets.",
+        category="ACCOMMODATION_CHEAP",
+        interaction_options=["Rent Room ($50/night)", "Sleep (if rented)"],
+        parent_location_id=city_center.name
+    )
+    city_center.add_poi(crash_pad_motel)
 
 
     # Define Travel Connections (Location Name -> {cost, time})
@@ -364,11 +474,33 @@ def main():
 
     player_name = input("Enter your character's name: ")
     player = Player(player_name)
-    player.location = WORLD_MAP["Your Hometown"] # Start player at hometown from WORLD_MAP
+
+    # Set player's starting location and POI
+    hometown_location = WORLD_MAP.get("Your Hometown")
+    player_home_poi = None
+    if hometown_location:
+        for poi in hometown_location.points_of_interest:
+            if poi.poi_id == "hometown_player_home":
+                player_home_poi = poi
+                break
+
+    if hometown_location and player_home_poi:
+        player.current_location = hometown_location
+        player.current_poi = player_home_poi
+    else:
+        # Fallback if something went wrong in setup, though it shouldn't
+        print("Error: Could not set player's starting home. Defaulting to Hometown general.")
+        player.current_location = hometown_location if hometown_location else list(WORLD_MAP.values())[0] # First available city
+        player.current_poi = None
+
+    # Initial NPC location update based on game start time
+    update_npc_locations(current_game_time)
+
 
     print(f"\n--- {get_current_time_str()} ---")
-    print(player)
-    print(f"Current Location: {player.location}")
+    print(player) # Player's __str__ should now show POI
+    # print(f"Current Location: {player.current_location.name if player.current_location else 'N/A'}") # Old way
+    # print(f"Current POI: {player.current_poi.name if player.current_poi else 'N/A'}") # For direct check
 
     # Game Loop
     while True:
