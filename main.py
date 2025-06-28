@@ -122,11 +122,18 @@ def setup_world():
     record_label_office = PointOfInterest(
         poi_id="citycenter_indiehits_records",
         name="Indie Hits Records",
-        description="A small but ambitious record label.",
-        category="OFFICE_RECORD_LABEL", # More specific category
-        interaction_options=["Submit Demo (requires 500 fame)", "Talk to A&R Rep (requires Manager)"],
-        parent_location_id=city_center.name
+        description="A small but ambitious record label. They seem to like fresh sounds.",
+        category="OFFICE_RECORD_LABEL",
+        interaction_options=[], # Will be dynamically generated or set based on fame
+        parent_location_id=city_center.name,
+        min_fame_to_submit=75, # Lowered for easier early testing
+        genres_preferred=["Indie", "Pop", "Rock", "Electronic"]
     )
+    # Dynamically create interaction option text based on min_fame_to_submit
+    record_label_office.interaction_options = [
+        f"Submit Demo (requires {record_label_office.min_fame_to_submit} fame)",
+        "Talk to A&R Rep (requires Manager)" # Placeholder for now
+    ]
     city_center.add_poi(record_label_office)
     downtown_cafe = PointOfInterest(
         poi_id="citycenter_dailygrind_cafe",
@@ -1147,6 +1154,48 @@ def main():
                                         except ValueError:
                                             print("Invalid number of hours.")
                         # --- END BOOK RECORDING SESSION LOGIC ---
+
+                        # --- SUBMIT DEMO TO RECORD LABEL LOGIC ---
+                        elif player.current_poi.category == "OFFICE_RECORD_LABEL" and chosen_interaction_text.startswith("Submit Demo"):
+                            label_poi = player.current_poi
+                            print(f"\n--- Submit Demo to {label_poi.name} ---")
+
+                            if player.fame < label_poi.min_fame_to_submit:
+                                print(f"Your fame ({player.fame}) is too low. {label_poi.name} requires at least {label_poi.min_fame_to_submit} fame to consider demos.")
+                            else:
+                                recorded_songs = [song for song in player.songs_written if song.is_recorded]
+                                if not recorded_songs:
+                                    print("You have no recorded demos to submit. Go record some tracks!")
+                                else:
+                                    print("Which recorded song would you like to submit as a demo?")
+                                    song_display_list = [f"'{song.title}' (Genre: {song.genre}, RecQ: {song.recording_quality:.2f})" for song in recorded_songs]
+                                    song_choice_key = present_choices(song_display_list, "Choose a demo: (0 to cancel)")
+
+                                    if song_choice_key and song_choice_key != "0":
+                                        chosen_song_to_submit = recorded_songs[int(song_choice_key) - 1]
+
+                                        # Basic submission outcome
+                                        print(f"\nYou hand over a copy of '{chosen_song_to_submit.title}' to the A&R rep at {label_poi.name}.")
+                                        print("They nod, saying, 'Thanks, we'll give it a listen. Don't call us, we'll call you... maybe.'")
+
+                                        # Conceptual: Mark song as submitted to this label to prevent re-submission?
+                                        # chosen_song_to_submit.submitted_to_labels.append(label_poi.poi_id) # Needs new Song attribute
+
+                                        # Add memory to a relevant NPC if one is defined for this label and present
+                                        # For now, this is just a conceptual step.
+                                        # Example: if label_poi.owner_npc_id and label_poi.owner_npc_id in NPC_REGISTRY:
+                                        #     label_npc = NPC_REGISTRY[label_poi.owner_npc_id]
+                                        #     if label_npc.current_location == label_poi: # Check if NPC is actually there
+                                        #         label_npc.add_memory(f"Player {player.name} submitted a demo: '{chosen_song_to_submit.title}'.")
+
+                                        advance_game_time(minutes=120) # 2 hours for the meeting/submission
+                                        player.energy = max(0, player.energy - 5)
+                                        player.stress = min(100, player.stress + 5) # A bit stressful
+                                        update_npc_locations(current_game_time)
+                                        print(f"The meeting took a couple of hours. (Energy: {player.energy}, Stress: {player.stress})")
+                                    else:
+                                        print("Demo submission cancelled.")
+                        # --- END SUBMIT DEMO LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 

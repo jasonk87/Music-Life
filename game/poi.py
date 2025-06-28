@@ -4,7 +4,8 @@ class PointOfInterest:
     def __init__(self, poi_id, name, description, category="GENERAL",
                  interaction_options=None, parent_location_id=None,
                  rest_quality=0.0, stress_modifier_hourly=0,
-                 studio_quality=0.0, hourly_rate=0): # New studio params
+                 studio_quality=0.0, hourly_rate=0,
+                 min_fame_to_submit=0, genres_preferred=None): # New label params
         self.poi_id = poi_id
         self.name = name
         self.description = description
@@ -22,6 +23,9 @@ class PointOfInterest:
         self.studio_quality = studio_quality
         self.hourly_rate = hourly_rate
 
+        self.min_fame_to_submit = min_fame_to_submit
+        self.genres_preferred = genres_preferred if genres_preferred else []
+
         # For intra-city travel, connections could be stored here or centrally in the City(Location)
         # self.intra_city_connections = {} # poi_id: {"walk_time": X, "bike_time": Y ...}
 
@@ -33,6 +37,8 @@ class PointOfInterest:
             details += f" [RestQ: {self.rest_quality}, StressMod/hr: {self.stress_modifier_hourly}]"
         if self.category == "STUDIO_RECORDING":
             details += f" [StudioQ: {self.studio_quality}, Rate: ${self.hourly_rate}/hr]"
+        if self.category == "OFFICE_RECORD_LABEL":
+            details += f" [MinFame: {self.min_fame_to_submit}, Prefers: {', '.join(self.genres_preferred) if self.genres_preferred else 'Any'}]"
         return details + f" - {self.description}"
 
     def get_interactions(self):
@@ -94,5 +100,32 @@ if __name__ == "__main__":
     assert poi3.hourly_rate == 50
     print(poi3)
     assert "[StudioQ: 0.6, Rate: $50/hr]" in str(poi3)
+    assert "[MinFame:" not in str(poi3)
+
+    poi4 = PointOfInterest(
+        poi_id="label_indiehits",
+        name="Indie Hits Records",
+        description="Looking for the next big thing.",
+        category="OFFICE_RECORD_LABEL",
+        min_fame_to_submit=100,
+        genres_preferred=["Indie", "Pop"]
+    )
+    assert poi4.category == "OFFICE_RECORD_LABEL"
+    assert poi4.min_fame_to_submit == 100
+    assert "Indie" in poi4.genres_preferred
+    print(poi4)
+    assert "[MinFame: 100, Prefers: Indie, Pop]" in str(poi4)
+
+    poi5 = PointOfInterest(
+        poi_id="label_allgenres",
+        name="Open Door Records",
+        description="We listen to everything!",
+        category="OFFICE_RECORD_LABEL",
+        min_fame_to_submit=50
+        # genres_preferred defaults to [] which __str__ handles as "Any"
+    )
+    print(poi5)
+    assert "[MinFame: 50, Prefers: Any]" in str(poi5)
+
 
     print("PointOfInterest class basic tests passed.")
