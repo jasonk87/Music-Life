@@ -5,7 +5,8 @@ class PointOfInterest:
                  interaction_options=None, parent_location_id=None,
                  rest_quality=0.0, stress_modifier_hourly=0,
                  studio_quality=0.0, hourly_rate=0,
-                 min_fame_to_submit=0, genres_preferred=None): # New label params
+                 min_fame_to_submit=0, genres_preferred=None,
+                 comfort_modifier_hourly=0): # New comfort param
         self.poi_id = poi_id
         self.name = name
         self.description = description
@@ -26,6 +27,8 @@ class PointOfInterest:
         self.min_fame_to_submit = min_fame_to_submit
         self.genres_preferred = genres_preferred if genres_preferred else []
 
+        self.comfort_modifier_hourly = comfort_modifier_hourly
+
         # For intra-city travel, connections could be stored here or centrally in the City(Location)
         # self.intra_city_connections = {} # poi_id: {"walk_time": X, "bike_time": Y ...}
 
@@ -34,7 +37,9 @@ class PointOfInterest:
         if self.shop_inventory_item_ids is not None:
             details += f" [Shop with {len(self.shop_inventory_item_ids)} item types]"
         if self.category == "HOME" or self.category.startswith("ACCOMMODATION"):
-            details += f" [RestQ: {self.rest_quality}, StressMod/hr: {self.stress_modifier_hourly}]"
+            details += f" [RestQ: {self.rest_quality}, StressMod/hr: {self.stress_modifier_hourly}, ComfortMod/hr: {self.comfort_modifier_hourly}]"
+        elif self.category == "POI_CAFE": # Example for other POI types that might affect comfort
+             details += f" [ComfortMod/hr: {self.comfort_modifier_hourly}]"
         if self.category == "STUDIO_RECORDING":
             details += f" [StudioQ: {self.studio_quality}, Rate: ${self.hourly_rate}/hr]"
         if self.category == "OFFICE_RECORD_LABEL":
@@ -115,17 +120,30 @@ if __name__ == "__main__":
     assert "Indie" in poi4.genres_preferred
     print(poi4)
     assert "[MinFame: 100, Prefers: Indie, Pop]" in str(poi4)
+    assert poi4.comfort_modifier_hourly == 0 # Default
 
     poi5 = PointOfInterest(
         poi_id="label_allgenres",
         name="Open Door Records",
         description="We listen to everything!",
         category="OFFICE_RECORD_LABEL",
-        min_fame_to_submit=50
-        # genres_preferred defaults to [] which __str__ handles as "Any"
+        min_fame_to_submit=50,
+        comfort_modifier_hourly = -1 # e.g. a stuffy office
     )
     print(poi5)
     assert "[MinFame: 50, Prefers: Any]" in str(poi5)
+    assert poi5.comfort_modifier_hourly == -1
+    # __str__ for OFFICE_RECORD_LABEL doesn't show comfort_modifier_hourly, which is fine.
+
+    poi_cafe = PointOfInterest(
+        poi_id="cafe_cosy",
+        name="Cosy Cafe",
+        description="Relaxing place.",
+        category="POI_CAFE",
+        comfort_modifier_hourly=2
+    )
+    print(poi_cafe)
+    assert "[ComfortMod/hr: 2]" in str(poi_cafe)
 
 
     print("PointOfInterest class basic tests passed.")

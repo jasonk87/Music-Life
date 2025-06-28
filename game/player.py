@@ -19,6 +19,8 @@ class Player:
 
         self.energy = 100 # Max 100
         self.stress = 0   # Max 100 (lower is better)
+        self.homesickness = 0 # 0-100, higher is worse
+        self.comfort = 70     # 0-100, higher is better (start reasonably comfy at home)
 
         self.songs_written = [] # List of Song objects
 
@@ -155,6 +157,7 @@ class Player:
         status += f"Location: {location_str}{poi_str}\n"
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
         status += f"Energy: {self.energy}/100, Stress: {self.stress}/100\n"
+        status += f"Comfort: {self.comfort}/100, Homesickness: {self.homesickness}/100\n"
         status += f"Skills: {self.skills}\n"
         status += f"Songs Written: {len(self.songs_written)}\n"
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"
@@ -175,6 +178,8 @@ if __name__ == '__main__':
     assert p.fame == 0
     assert p.energy == 100
     assert p.stress == 0
+    assert p.homesickness == 0
+    assert p.comfort == 70
     assert not p.has_manager
     assert len(p.songs_written) == 0
 

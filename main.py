@@ -20,6 +20,42 @@ WORLD_MAP = {}
 # Global dictionary to hold all NPC objects, keyed by npc_id
 NPC_REGISTRY = {}
 
+# Global Player Home POI ID (set after setup_world in main())
+PLAYER_HOME_POI_ID_GLOBAL = None
+
+# --- Player Needs Update Function ---
+def process_time_based_player_needs(player, minutes_just_passed):
+    if minutes_just_passed <= 0:
+        return
+
+    hours_passed_float = minutes_just_passed / 60.0
+
+    # 1. Comfort update based on current POI's hourly modifier
+    if player.current_poi and hasattr(player.current_poi, 'comfort_modifier_hourly'):
+        comfort_change = hours_passed_float * player.current_poi.comfort_modifier_hourly
+        player.comfort = min(100, max(0, player.comfort + comfort_change))
+        player.comfort = int(round(player.comfort))
+
+    # 2. Homesickness update
+    is_at_player_home = player.current_poi and PLAYER_HOME_POI_ID_GLOBAL and \
+                        hasattr(player.current_poi, 'poi_id') and \
+                        player.current_poi.poi_id == PLAYER_HOME_POI_ID_GLOBAL
+
+    if is_at_player_home:
+        homesickness_reduction_per_hour_at_home = 5
+        player.homesickness = max(0, player.homesickness - (hours_passed_float * homesickness_reduction_per_hour_at_home))
+        player.homesickness = int(round(player.homesickness))
+    else:
+        homesickness_increase_per_hour_away = 0.5
+        player.homesickness = min(100, player.homesickness + (hours_passed_float * homesickness_increase_per_hour_away))
+        player.homesickness = int(round(player.homesickness))
+
+    # 3. Stress impact from high homesickness
+    if player.homesickness > 75:
+        stress_increase_rate_from_homesickness = ((player.homesickness - 75) / 25.0) * 1.0
+        player.stress = min(100, player.stress + (hours_passed_float * stress_increase_rate_from_homesickness))
+        player.stress = int(round(player.stress))
+
 def setup_world():
     global WORLD_MAP, NPC_REGISTRY
     # Create Locations
@@ -139,9 +175,10 @@ def setup_world():
         poi_id="citycenter_dailygrind_cafe",
         name="The Daily Grind Cafe",
         description="Popular hangout, good coffee, free Wi-Fi.",
-        category="POI_CAFE", # POI prefix for generic points of interest
+        category="POI_CAFE",
         interaction_options=["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"],
-        parent_location_id=city_center.name
+        parent_location_id=city_center.name,
+        comfort_modifier_hourly=1 # Slightly comforting to be in a cafe
     )
     city_center.add_poi(downtown_cafe)
 
@@ -152,10 +189,11 @@ def setup_world():
         name="Your Apartment",
         description="Your starting digs. A bit small, but it's home.",
         category="HOME",
-        interaction_options=["Rest (8 hours)", "Practice guitar (at home)", "Write a new song"],
+        interaction_options=["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Relax at home (2 hours)"],
         parent_location_id=home_town.name,
-        rest_quality=0.8, # Decent rest at home
-        stress_modifier_hourly=-10 # Good stress relief
+        rest_quality=0.8,
+        stress_modifier_hourly=-10,
+        comfort_modifier_hourly=5 # Home is very comforting
     )
     home_town.add_poi(player_home)
 
@@ -197,8 +235,9 @@ def setup_world():
         category="ACCOMMODATION_CHEAP",
         interaction_options=["Rent Room ($50/night)", "Sleep (8 hours, if rented)"],
         parent_location_id=city_center.name,
-        rest_quality=0.4, # Not great rest
-        stress_modifier_hourly=-2 # Minimal stress relief, maybe even slightly stressful
+        rest_quality=0.4,
+        stress_modifier_hourly=-2,
+        comfort_modifier_hourly=-3 # Grim places can reduce comfort
     )
     city_center.add_poi(crash_pad_motel)
 
@@ -589,6 +628,12 @@ def main():
 
     # Initial NPC location update based on game start time
     update_npc_locations(current_game_time)
+    # Initial player needs update based on starting POI (Home) comfort, for 0 time passed.
+    # This ensures comfort from home is applied even before first action.
+    # Or, simply rely on the first action's time passage to trigger it.
+    # Let's do it explicitly here for 0 minutes to set initial comfort from home.
+    process_time_based_player_needs(player, 0)
+
 
     # Give player starting gear
     starting_guitar = GEAR_CATALOG.get("worn_acoustic_guitar")
@@ -644,8 +689,10 @@ def main():
                     print("Practice time must be positive.")
                     continue
                 player.practice_skill(skill_to_practice, hours_to_practice)
-                advance_game_time(minutes=hours_to_practice*60)
-                update_npc_locations(current_game_time) # Update NPC locations after time passes
+                minutes_passed = hours_to_practice*60
+                advance_game_time(minutes=minutes_passed)
+                update_npc_locations(current_game_time)
+                process_time_based_player_needs(player, minutes_passed)
             except ValueError:
                 print("Invalid number of hours.")
 
@@ -902,8 +949,19 @@ def main():
                         # --- REST/SLEEP LOGIC ---
                         elif player.current_poi.category == "HOME" and chosen_interaction_text == "Rest (8 hours)":
                             hours_to_rest = 8
-                            energy_gained = int(hours_to_rest * 10 * player.current_poi.rest_quality)
+
+                            # Comfort effect on rest quality
+                            comfort_effect_on_rest = 0.0
+                            if player.comfort < 25: comfort_effect_on_rest = -0.2
+                            elif player.comfort < 50: comfort_effect_on_rest = -0.1
+                            effective_rest_quality = max(0.1, player.current_poi.rest_quality + comfort_effect_on_rest)
+
+                            energy_gained = int(hours_to_rest * 10 * effective_rest_quality)
                             stress_change = int(hours_to_rest * player.current_poi.stress_modifier_hourly)
+
+                            # Resting at home also greatly reduces homesickness and boosts comfort directly
+                            player.homesickness = max(0, player.homesickness - (hours_to_rest * 10)) # Strong reduction
+                            player.comfort = min(100, player.comfort + (hours_to_rest * 2)) # Boost comfort too
 
                             player.energy = min(100, player.energy + energy_gained)
                             player.stress = max(0, player.stress + stress_change)
@@ -948,8 +1006,15 @@ def main():
                                 can_sleep = True
 
                             if can_sleep:
-                                hours_to_sleep = 8 # Typically from interaction text "Sleep (8 hours, if rented)"
-                                energy_gained = int(hours_to_sleep * 10 * player.current_poi.rest_quality)
+                                hours_to_sleep = 8
+
+                                # Comfort effect on rest quality
+                                comfort_effect_on_rest = 0.0
+                                if player.comfort < 25: comfort_effect_on_rest = -0.2
+                                elif player.comfort < 50: comfort_effect_on_rest = -0.1
+                                effective_rest_quality = max(0.1, player.current_poi.rest_quality + comfort_effect_on_rest)
+
+                                energy_gained = int(hours_to_sleep * 10 * effective_rest_quality)
                                 stress_change = int(hours_to_sleep * player.current_poi.stress_modifier_hourly)
 
                                 player.energy = min(100, player.energy + energy_gained)
@@ -1196,6 +1261,32 @@ def main():
                                     else:
                                         print("Demo submission cancelled.")
                         # --- END SUBMIT DEMO LOGIC ---
+
+                        # --- RELAX AT HOME LOGIC ---
+                        elif player.current_poi.category == "HOME" and chosen_interaction_text == "Relax at home (2 hours)":
+                            hours_relaxed = 2
+                            # Relaxing primarily affects homesickness, comfort, and stress. Minor energy impact.
+                            homesickness_reduction = 30
+                            comfort_increase = 15
+                            stress_reduction = 10
+                            energy_cost = 5 # Small energy cost or slight gain if very relaxed
+
+                            player.homesickness = max(0, player.homesickness - homesickness_reduction)
+                            player.comfort = min(100, player.comfort + comfort_increase)
+                            player.stress = max(0, player.stress - stress_reduction)
+                            player.energy = max(0, player.energy - energy_cost) # Small cost
+
+                            advance_game_time(minutes=hours_relaxed * 60)
+                            # process_time_based_player_needs is called after time advance by main loop,
+                            # which will apply home's hourly comfort/homesickness benefits on top.
+                            # No need to call it explicitly here if the main loop handles it post-action.
+                            # However, the specific action effects are immediate.
+                            update_npc_locations(current_game_time)
+                            # We will call process_time_based_player_needs after this block if time advanced.
+
+                            print(f"You spend {hours_relaxed} hours relaxing at home.")
+                            print(f"Comfort: {player.comfort}/100, Homesickness: {player.homesickness}/100, Stress: {player.stress}/100, Energy: {player.energy}/100.")
+                        # --- END RELAX AT HOME LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
@@ -1461,11 +1552,22 @@ def main():
 
         # Check for random events after most actions or time advances
         # practice (1), travel city(2), travel POI(3), explore(4), prepare(6), perform(7), advance time (00)
-        if choice in ["1", "2", "3", "4", "6", "7", "00"]:
+        # Note: some actions (like POI interactions for rest/sleep, songwriting) already call advance_game_time
+        # and will have process_time_based_player_needs called after them if they pass time.
+        # This global check is for general random events.
+
+        # We need to capture the minutes passed by the *last action* to feed into process_time_based_player_needs
+        # This is tricky as minutes_passed is not consistently stored across all branches.
+        # For now, process_time_based_player_needs is called *within* each block that calls advance_game_time.
+        # This means the general random event check does not need to call it again.
+
+        if choice in ["1", "2", "3", "4", "6", "7", "00"]: # Check which choices can trigger random world events
             if not ("LLM Error" in locals().get('npc_response', '') or "An unexpected error occurred" in locals().get('npc_response', '')):
+                # Random events themselves don't usually pass large chunks of time that would trigger needs updates by default.
+                # If a random event *does* pass significant time, it should handle its own needs update.
                 event_triggered = check_for_random_event(player, chance=0.3)
                 if event_triggered:
-                    player.check_for_manager_unlock()
+                    player.check_for_manager_unlock() # Fame might change from event
 
 
 if __name__ == "__main__":
