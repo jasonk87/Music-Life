@@ -169,14 +169,25 @@ def setup_world():
     ]
     city_center.add_poi(pro_music_store)
 
+    pr_agency_poi = PointOfInterest(
+        poi_id="citycenter_sharp_pr",
+        name="Sharp PR Solutions",
+        description="A modern office for a boutique PR agency. They look like they mean business.",
+        category="OFFICE_PR_AGENCY", # New category for PR agencies
+        interaction_options=["Inquire about PR representation"],
+        parent_location_id=city_center.name,
+        comfort_modifier_hourly=0 # Neutral office environment
+    )
+    city_center.add_poi(pr_agency_poi)
+
     news_agency_poi = PointOfInterest(
         poi_id="citycenter_chronicle_news",
         name="City Center Chronicle",
         description="The bustling office of the city's main newspaper and online news hub.",
-        category="OFFICE_NEWS_AGENCY", # New category
-        interaction_options=["Look for today's paper", "Ask for a journalist"], # Basic interactions
+        category="OFFICE_NEWS_AGENCY",
+        interaction_options=["Look for today's paper", "Ask for a journalist"],
         parent_location_id=city_center.name,
-        comfort_modifier_hourly=-1 # Can be a bit stressful/busy
+        comfort_modifier_hourly=-1
     )
     city_center.add_poi(news_agency_poi)
 
@@ -504,8 +515,25 @@ def setup_world():
         # Evenings and weekends she's off or somewhere else (e.g., home_location if different)
     }
     NPC_REGISTRY[brenda_reporter.npc_id] = brenda_reporter
-    if news_agency_poi: # Assign owner if POI exists
-        news_agency_poi.owner_npc_id = brenda_reporter.npc_id # Or a more generic 'contact_npc_id'
+    if news_agency_poi:
+        news_agency_poi.owner_npc_id = brenda_reporter.npc_id
+
+    # PR Agent NPC at Sharp PR Solutions
+    # pr_agency_poi was defined earlier as: city_center.add_poi(pr_agency_poi)
+    ms_sharp = NPC(
+        npc_id="ms_sharp_pr001",
+        name="Ms. Patricia Sharp",
+        personality_key="pr_agent_evaluator",
+        home_location=pr_agency_poi,
+        current_location=pr_agency_poi
+    )
+    ms_sharp.schedule = {
+        "Weekday_Morning": pr_agency_poi,
+        "Weekday_Afternoon": pr_agency_poi,
+    }
+    NPC_REGISTRY[ms_sharp.npc_id] = ms_sharp
+    if pr_agency_poi:
+        pr_agency_poi.owner_npc_id = ms_sharp.npc_id # Ms. Sharp is the main contact/owner
 
 
 # --- Time and Scheduling Helpers ---
@@ -1851,6 +1879,50 @@ def main():
                                 update_npc_locations(current_game_time)
                                 process_time_based_player_needs(player, total_interview_minutes)
                         # --- END NEWS AGENCY INTERVIEW LOGIC ---
+
+                        # --- HIRE PR MANAGER LOGIC ---
+                        elif player.current_poi.category == "OFFICE_PR_AGENCY" and \
+                             chosen_interaction_text == "Inquire about PR representation":
+
+                            print(f"\n--- Inquiring about PR representation at {player.current_poi.name} ---")
+                            pr_agent_npc_id = player.current_poi.owner_npc_id # Assuming Ms. Sharp is the owner
+                            pr_agent_npc = NPC_REGISTRY.get(pr_agent_npc_id)
+
+                            if not pr_agent_npc or pr_agent_npc.current_location != player.current_poi:
+                                print("It seems the PR agent isn't available right now. Try again during office hours.")
+                                advance_game_time(minutes=10) # Time taken to realize no one's there
+                            elif player.has_pr_manager:
+                                print(f"{pr_agent_npc.name} smiles, 'We're already working together, {player.name}! Let's discuss ongoing strategy instead. (Use 'Staff Actions' from the main menu)'")
+                                advance_game_time(minutes=10)
+                            else:
+                                print(f"You meet with {pr_agent_npc.name} to discuss potential PR representation.")
+                                # Simulate a brief LLM interaction for the initial query if desired, or direct logic.
+                                # For now, direct logic based on fame.
+
+                                required_fame = player.pr_manager_fame_requirement_to_hire
+                                if player.fame >= required_fame:
+                                    print(f"\n{pr_agent_npc.name}: '{player.name}, your current trajectory shows promise. Your fame level of {player.fame} is certainly gaining attention. We'd be interested in representing you.'")
+                                    # Future: Add cost/contract terms
+                                    confirm_hire = input("Do you want to hire Sharp PR Solutions? (y/n): ").lower()
+                                    if confirm_hire == 'y':
+                                        player.has_pr_manager = True
+                                        print(f"\nCongratulations! You've hired {pr_agent_npc.name} and Sharp PR Solutions!")
+                                        print("You can now use 'Check PR Opportunities' under 'Staff Actions' in the main menu.")
+                                        # Add memory to Ms. Sharp
+                                        pr_agent_npc.add_memory(f"Successfully signed {player.name} as a client.")
+                                        pr_agent_npc.update_relationship(20) # Start with a positive relationship
+                                    else:
+                                        print(f"{pr_agent_npc.name} nods. 'Alright, perhaps another time then.'")
+                                        pr_agent_npc.add_memory(f"Discussed representation with {player.name}, they declined for now.")
+                                else:
+                                    print(f"\n{pr_agent_npc.name}: 'Thank you for your interest, {player.name}. While you have some presence (Fame: {player.fame}), you're not quite at the level where our services would be most effective. We typically look for artists with a fame level around {required_fame}.'")
+                                    print(f"{pr_agent_npc.name}: 'Keep building your buzz, play more shows, and get your name out there. We'd be happy to reconsider when you've grown your following.'")
+                                    pr_agent_npc.add_memory(f"Met with {player.name} (Fame: {player.fame}). Not yet ready for our PR services.")
+
+                                advance_game_time(minutes=60) # Meeting takes an hour
+                                update_npc_locations(current_game_time)
+                                process_time_based_player_needs(player, 60)
+                        # --- END HIRE PR MANAGER LOGIC ---
 
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")

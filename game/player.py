@@ -211,15 +211,15 @@ class Player:
             print("*** You've attracted the attention of a professional Artist Manager! ***")
             print("*** They can help guide your career and open new doors. (Manager interactions to be implemented further) ***\n")
 
-        # PR Manager
-        if not self.has_pr_manager and self.fame >= self.pr_manager_unlock_fame_threshold:
-            self.has_pr_manager = True
-            print("\n*** Your Buzz is Growing! ***")
-            print("A specialist PR Manager has taken notice and offered their services!")
-            print("They can help you find media opportunities like interviews. Check in with them via 'Staff Actions'.\n")
-            # Note: The actual opportunities (like interviews) are found via PR manager interaction, not directly here.
+        # PR Manager - This automatic unlock is removed. Hiring is now an active player choice.
+        # if not self.has_pr_manager and self.fame >= self.pr_manager_unlock_fame_threshold:
+        #     self.has_pr_manager = True
+        #     print("\n*** Your Buzz is Growing! ***")
+        #     print("A specialist PR Manager has taken notice and offered their services!")
+        #     print("They can help you find media opportunities like interviews. Check in with them via 'Staff Actions'.\n")
+        pass # Placeholder if other staff types are added here later for auto-unlock
 
-    # Removed old check_for_interview_opportunities as it's now PR manager driven
+    # Removed old check_for_interview_opportunities as it's now PR manager driven / active hiring.
 
     def __str__(self):
         location_str = self.current_location.name if self.current_location else "Nowhere"
