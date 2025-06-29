@@ -27,17 +27,22 @@ class Player:
 
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
+        self.has_pr_manager = False
+        self.pr_manager_unlock_fame_threshold = 60 # PR manager unlocks earlier
 
         self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
 
-        # Opportunities
-        self.interview_opportunities = {
-            "city_chronicle_available": False,
-            "city_chronicle_completed": False,
-            # Add other specific interviews here later e.g. "radio_station_xyz_available": False
+        # Opportunities - this will store various types of opportunities
+        # For interviews, the key could be like "interview_city_chronicle"
+        # Value could be "available", "pending_player_action", "completed"
+        self.active_opportunities = {
+            # Example: "interview_city_chronicle": "available"
         }
-        self.INTERVIEW_OP_THRESHOLDS = {
-            "city_chronicle": 75
+
+        # Thresholds for when a PR manager might *find* an opportunity. Player still needs PR manager.
+        self.OPPORTUNITY_FAME_THRESHOLDS = {
+            "interview_city_chronicle": 75
+            # Add other opportunities like "local_radio_spot": 100 etc.
         }
 
 
@@ -197,23 +202,24 @@ class Player:
             print("*** This will unlock new opportunities. (Manager interactions to be implemented further) ***\n")
             # Future: Trigger an event, introduce the manager NPC, etc.
 
-    def check_for_interview_opportunities(self):
-        """Checks if player's fame qualifies them for new interview opportunities."""
-        # City Chronicle Interview
-        chronicle_key = "city_chronicle"
-        if self.fame >= self.INTERVIEW_OP_THRESHOLDS.get(chronicle_key, float('inf')) and \
-           not self.interview_opportunities.get(f"{chronicle_key}_available", False) and \
-           not self.interview_opportunities.get(f"{chronicle_key}_completed", False):
+    def check_and_unlock_staff(self):
+        """Checks and unlocks staff members like general manager or PR manager based on fame."""
+        # Artist Manager
+        if not self.has_manager and self.fame >= self.manager_unlocked_fame_threshold:
+            self.has_manager = True
+            print("\n*** Congratulations! Your fame has grown significantly! ***")
+            print("*** You've attracted the attention of a professional Artist Manager! ***")
+            print("*** They can help guide your career and open new doors. (Manager interactions to be implemented further) ***\n")
 
-            self.interview_opportunities[f"{chronicle_key}_available"] = True
-            print("\n*** Opportunity Knocks! ***")
-            print("The City Center Chronicle has heard about your rising profile and wants to interview you!")
-            print("Visit their office in City Center to arrange it.")
-            # In a more complex system, this might add an item to an "Opportunities" list in the UI.
-            # For now, a print message and a flag is sufficient.
+        # PR Manager
+        if not self.has_pr_manager and self.fame >= self.pr_manager_unlock_fame_threshold:
+            self.has_pr_manager = True
+            print("\n*** Your Buzz is Growing! ***")
+            print("A specialist PR Manager has taken notice and offered their services!")
+            print("They can help you find media opportunities like interviews. Check in with them via 'Staff Actions'.\n")
+            # Note: The actual opportunities (like interviews) are found via PR manager interaction, not directly here.
 
-        # Add checks for other interviews here as they are defined
-        # e.g., radio_station_xyz, national_magazine, etc.
+    # Removed old check_for_interview_opportunities as it's now PR manager driven
 
     def __str__(self):
         location_str = self.current_location.name if self.current_location else "Nowhere"

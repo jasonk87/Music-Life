@@ -764,19 +764,23 @@ def main():
 
         main_menu_options = {
             "1": "Practice a skill",
-            "2": "Travel to another City", # Renamed for clarity
-            "3": "Travel within this City (to another POI)", # New option
-            "4": "Explore current POI/Area", # Renamed/Refocused
-            "5": "Check available gigs (at current City)", # Clarified scope
+            "2": "Travel to another City",
+            "3": "Travel within this City (to another POI)",
+            "4": "Explore current POI/Area",
+            "5": "Check available gigs (at current City)",
             "6": "Prepare for a gig",
             "7": "Attempt a gig",
             "8": "View detailed player stats",
             "9": "Talk to someone (at current POI/Area)",
             "10": "Eat food from inventory",
-            "00": "Advance time by 1 hour (debug)",
-            "0": "Quit game"
         }
-        # Adjust numbering for subsequent elif blocks for 00 and 0 if needed
+        # Dynamically add Staff Actions if applicable
+        if player.has_manager or player.has_pr_manager:
+            main_menu_options["11"] = "Staff Actions"
+
+        main_menu_options["00"] = "Advance time by 1 hour (debug)"
+        main_menu_options["0"] = "Quit game"
+
         choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
 
         if choice is None: # Invalid input after multiple tries
@@ -970,7 +974,7 @@ def main():
                 interview_interaction_text = "Attend Scheduled Interview"
                 if player.current_poi and \
                    player.current_poi.category == "OFFICE_NEWS_AGENCY" and \
-                   player.interview_opportunities.get("city_chronicle_available", False):
+                   player.active_opportunities.get("interview_city_chronicle") == "pending_player_action":
                     if interview_interaction_text not in current_poi_interactions:
                         current_poi_interactions.append(interview_interaction_text)
 
@@ -1840,8 +1844,7 @@ def main():
                                     player.stress = min(100, player.stress + 5)
                                     print("That interview didn't go very smoothly. Hopefully, it doesn't reflect too poorly. (Stress +5)")
 
-                                player.interview_opportunities["city_chronicle_available"] = False
-                                player.interview_opportunities["city_chronicle_completed"] = True
+                                player.active_opportunities["interview_city_chronicle"] = "completed" # Update status
 
                                 if total_interview_minutes == 0 and interview_turns > 0 : total_interview_minutes = 30 # Min time if started
                                 advance_game_time(minutes=total_interview_minutes)
@@ -1853,14 +1856,18 @@ def main():
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
                 else: # No interaction options defined for the POI or player cancelled choosing an interaction
-                    # Check for dynamic news agency interview option if no other options were chosen or available
+                    # This fallback check for interview opportunity might be less relevant now
+                    # as the option is dynamically added to current_poi_interactions if available.
+                    # However, keeping it doesn't hurt if current_poi_interactions was initially empty.
                     if player.current_poi and player.current_poi.category == "OFFICE_NEWS_AGENCY" and \
-                       player.interview_opportunities.get("city_chronicle_available", False) and \
-                       "Attend Scheduled Interview" not in current_poi_interactions : # Ensure it wasn't already added
-                        print("\n(You remember you have an interview opportunity here...)")
-                        # This case implies the option wasn't added above, which it should have been.
-                        # For safety, or if interaction_options was empty initially.
-                        # This might be redundant if the dynamic addition above works correctly.
+                       player.active_opportunities.get("interview_city_chronicle") == "pending_player_action" and \
+                       "Attend Scheduled Interview" not in current_poi_interactions :
+                        print("\n(You remember your PR Manager mentioned an interview opportunity here at the City Center Chronicle.)")
+                        # This situation implies the POI had NO other interaction options to begin with.
+                        # We can prompt them to choose it directly.
+                        # However, the current OFFICE_NEWS_AGENCY POI has default interactions,
+                        # so this specific 'else' branch for empty interactions leading to this check is unlikely.
+                        # The primary way to see "Attend Scheduled Interview" is via it being added to current_poi_interactions.
                     else:
                         print("There's not much to do here specifically.")
             else: # Exploring general city location if no specific POI
@@ -1989,8 +1996,7 @@ def main():
                                     advance_game_time(minutes=minutes_passed_by_event)
                                     update_npc_locations(current_game_time)
                                     process_time_based_player_needs(player, minutes_passed_by_event)
-                                player.check_for_manager_unlock() # Fame might change
-                                player.check_for_interview_opportunities() # Check for interviews
+                                player.check_and_unlock_staff() # Unified check
 
                             # Relationship/Memory update with Venue Owner
                             venue_owner_npc_id = getattr(chosen_event.location, 'owner_npc_id', None)
@@ -2159,9 +2165,59 @@ def main():
                 # Else: present_choices handles invalid input from item list
             print("--------------------")
 
-        elif choice == "00": # Debug: Advance time by 1 hour (was 9, then 8)
+        elif choice == "11": # Staff Actions
+            if not (player.has_manager or player.has_pr_manager):
+                print("You don't have any staff yet.") # Should not happen if menu option is conditional
+            else:
+                print("\n--- Staff Actions ---")
+                staff_action_options = {}
+                if player.has_manager:
+                    staff_action_options["1"] = "Talk to Artist Manager" # Placeholder
+                if player.has_pr_manager:
+                    staff_action_options["2"] = "Check PR Opportunities"
+                staff_action_options["0"] = "Back to Main Menu"
+
+                sub_choice = present_choices(staff_action_options, "Choose staff action:")
+
+                if sub_choice == "1" and player.has_manager:
+                    print("You meet with your Artist Manager. (Further interactions to be implemented).")
+                    # Placeholder for manager dialogue/actions
+                    advance_game_time(minutes=30)
+                    update_npc_locations(current_game_time)
+                    process_time_based_player_needs(player, 30)
+                elif sub_choice == "2" and player.has_pr_manager:
+                    print("You check in with your PR Manager...")
+                    # Check for City Chronicle Interview
+                    chronicle_key = "interview_city_chronicle"
+                    chronicle_fame_threshold = player.OPPORTUNITY_FAME_THRESHOLDS.get("interview_city_chronicle", float('inf'))
+
+                    already_available = player.active_opportunities.get(chronicle_key) == "pending_player_action"
+                    already_completed = player.active_opportunities.get(chronicle_key) == "completed"
+
+                    if already_completed:
+                        print("PR Manager: 'We already did the City Chronicle interview, it was a success!'")
+                    elif already_available:
+                        print("PR Manager: 'The City Chronicle interview is still on the table. You should visit their office when you're ready.'")
+                    elif player.fame >= chronicle_fame_threshold:
+                        player.active_opportunities[chronicle_key] = "pending_player_action"
+                        print("PR Manager: 'Good news! I've leveraged your current buzz and the City Center Chronicle is interested in an interview!'")
+                        print("PR Manager: 'Head over to their office when you have some time to speak with Brenda Reporter.'")
+                    else:
+                        print(f"PR Manager: 'Things are a bit quiet on the press front. Keep building your fame (need around {chronicle_fame_threshold} for the Chronicle) and I'll see what I can drum up.'")
+
+                    advance_game_time(minutes=30) # Meeting with PR manager
+                    update_npc_locations(current_game_time)
+                    process_time_based_player_needs(player, 30)
+                elif sub_choice == "0":
+                    pass # Back to main menu
+                else:
+                    print("Invalid staff action choice.")
+            print("--------------------")
+
+        elif choice == "00": # Debug: Advance time by 1 hour
             advance_game_time(minutes=60) # 1 hour
-            update_npc_locations(current_game_time) # Explicitly call after debug time advance
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 60) # Also process needs for debug time advance
 
         elif choice == "0":
             print("Thanks for playing!")
@@ -2196,8 +2252,7 @@ def main():
                         advance_game_time(minutes=minutes_passed_by_event)
                         update_npc_locations(current_game_time)
                         process_time_based_player_needs(player, minutes_passed_by_event)
-                    player.check_for_manager_unlock() # Fame might change from event
-                    player.check_for_interview_opportunities() # Check for interviews too
+                    player.check_and_unlock_staff() # Unified check
 
 
 if __name__ == "__main__":
