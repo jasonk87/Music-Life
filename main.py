@@ -103,7 +103,7 @@ def setup_world():
         name="Garage Rehearsal Space",
         description="A bit rough but it's cheap.",
         category="REHEARSAL_STUDIO",
-        interaction_options=["Book Rehearsal Time (1 hour, $10)"],
+        interaction_options=["Book Rehearsal Slot (1 hour, $10)"], # Refined text
         parent_location_id=home_town.name
     )
     home_town.add_poi(rehearsal_space_home)
@@ -1287,6 +1287,102 @@ def main():
                             print(f"You spend {hours_relaxed} hours relaxing at home.")
                             print(f"Comfort: {player.comfort}/100, Homesickness: {player.homesickness}/100, Stress: {player.stress}/100, Energy: {player.energy}/100.")
                         # --- END RELAX AT HOME LOGIC ---
+
+                        # --- CAFE INTERACTIONS ---
+                        elif player.current_poi.poi_id == "citycenter_dailygrind_cafe":
+                            if chosen_interaction_text == "Grab Coffee ($5)":
+                                coffee_cost = 5
+                                if player.money >= coffee_cost:
+                                    player.money -= coffee_cost
+                                    player.energy = min(100, player.energy + 10)
+                                    player.comfort = min(100, player.comfort + 3)
+                                    minutes_passed = 20
+                                    advance_game_time(minutes=minutes_passed)
+                                    update_npc_locations(current_game_time)
+                                    process_time_based_player_needs(player, minutes_passed)
+                                    print(f"You grab a coffee for ${coffee_cost}. It's surprisingly decent!")
+                                    print(f"Energy: {player.energy}, Comfort: {player.comfort}, Money: ${player.money}")
+                                else:
+                                    print(f"Not enough money for coffee. Need ${coffee_cost}.")
+                            elif chosen_interaction_text == "People Watch":
+                                player.stress = max(0, player.stress - 5)
+                                player.comfort = min(100, player.comfort + 2)
+                                minutes_passed = 45
+                                advance_game_time(minutes=minutes_passed)
+                                update_npc_locations(current_game_time)
+                                process_time_based_player_needs(player, minutes_passed)
+                                print("You spend some time people watching. The city is a vibrant tapestry of stories.")
+                                print(f"Stress: {player.stress}, Comfort: {player.comfort}")
+                            elif chosen_interaction_text == "Look for Local Flyers":
+                                minutes_passed = 15
+                                advance_game_time(minutes=minutes_passed)
+                                update_npc_locations(current_game_time)
+                                process_time_based_player_needs(player, minutes_passed)
+                                # Future: Chance to discover new event/venue or inspiration
+                                print("You scan the cluttered bulletin board. Lots of ads for yoga and lost cats. A few band flyers too, mostly for genres you're not into... yet.")
+                            else:
+                                print(f"(Action '{chosen_interaction_text}' at the cafe not fully implemented yet.)")
+                        # --- END CAFE INTERACTIONS ---
+
+                        # --- REHEARSAL STUDIO INTERACTIONS ---
+                        elif player.current_poi.poi_id == "hometown_rehearsal_garage" and chosen_interaction_text == "Book Rehearsal Slot (1 hour, $10)":
+                            rehearsal_cost = 10
+                            rehearsal_duration_hours = 1
+                            booking_setup_time_mins = 10 # Time to book and setup
+
+                            print(f"\n--- Rehearse at {player.current_poi.name} ---")
+                            if player.money >= rehearsal_cost:
+                                skill_to_rehearse = input(f"Rehearse which skill for {rehearsal_duration_hours} hour(s) (e.g., guitar, vocals, songwriting)? > ").lower()
+                                if skill_to_rehearse and skill_to_rehearse in player.skills or skill_to_rehearse in ["guitar", "vocals", "drums", "bass", "piano", "songwriting"]: # Allow practicing new skills too
+                                    player.money -= rehearsal_cost
+                                    print(f"Paid ${rehearsal_cost} for {rehearsal_duration_hours} hour(s) of rehearsal time.")
+
+                                    player.practice_skill(skill_to_rehearse, rehearsal_duration_hours) # This prints skill gain
+
+                                    # Specific energy/stress for focused rehearsal
+                                    energy_cost_rehearsal = rehearsal_duration_hours * 8 # More tiring than home
+                                    stress_gain_rehearsal = rehearsal_duration_hours * 1 # But less stressful than some activities
+                                    player.energy = max(0, player.energy - energy_cost_rehearsal)
+                                    player.stress = min(100, player.stress + stress_gain_rehearsal)
+
+                                    minutes_passed = (rehearsal_duration_hours * 60) + booking_setup_time_mins
+                                    advance_game_time(minutes=minutes_passed)
+                                    update_npc_locations(current_game_time)
+                                    process_time_based_player_needs(player, minutes_passed)
+
+                                    print(f"Finished rehearsing. Energy: {player.energy}, Stress: {player.stress}, Money: ${player.money}")
+                                else:
+                                    print("Invalid skill or no skill entered for rehearsal.")
+                            else:
+                                print(f"Not enough money to book rehearsal time. Need ${rehearsal_cost}.")
+                        # --- END REHEARSAL STUDIO INTERACTIONS ---
+
+                        # --- PRACTICE GUITAR AT HOME INTERACTION ---
+                        elif player.current_poi.poi_id == "hometown_player_home" and chosen_interaction_text == "Practice guitar (at home)":
+                            print("\n--- Practice Guitar at Home ---")
+                            try:
+                                hours_str = input("How many hours to practice guitar? (1-4) > ")
+                                hours_to_practice = int(hours_str)
+                                if 1 <= hours_to_practice <= 4:
+                                    player.practice_skill("guitar", hours_to_practice) # Assumes "guitar" is the skill
+
+                                    # Specific energy/stress for home guitar practice
+                                    energy_cost_home_guitar = hours_to_practice * 6
+                                    stress_gain_home_guitar = hours_to_practice * 1
+                                    player.energy = max(0, player.energy - energy_cost_home_guitar)
+                                    player.stress = min(100, player.stress + stress_gain_home_guitar)
+
+                                    minutes_passed = hours_to_practice * 60
+                                    advance_game_time(minutes=minutes_passed)
+                                    update_npc_locations(current_game_time)
+                                    process_time_based_player_needs(player, minutes_passed)
+
+                                    print(f"Finished practicing guitar for {hours_to_practice} hours. Energy: {player.energy}, Stress: {player.stress}")
+                                else:
+                                    print("Please enter a number of hours between 1 and 4.")
+                            except ValueError:
+                                print("Invalid number of hours entered.")
+                        # --- END PRACTICE GUITAR AT HOME INTERACTION ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
