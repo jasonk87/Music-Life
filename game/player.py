@@ -17,12 +17,13 @@ class Player:
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
-        self.energy = 100 # Max 100
-        self.stress = 0   # Max 100 (lower is better)
-        self.homesickness = 0 # 0-100, higher is worse
-        self.comfort = 70     # 0-100, higher is better (start reasonably comfy at home)
+        self.energy = 100
+        self.stress = 0
+        self.homesickness = 0
+        self.comfort = 70
+        self.hunger = 0 # 0-100, 0 is full, 100 is starving
 
-        self.songs_written = [] # List of Song objects
+        self.songs_written = []
 
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
@@ -191,7 +192,7 @@ class Player:
         status = f"Player: {self.name}\n"
         status += f"Location: {location_str}{poi_str}\n"
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
-        status += f"Energy: {self.energy}/100, Stress: {self.stress}/100\n"
+        status += f"Energy: {self.energy}/100, Stress: {self.stress}/100, Hunger: {self.hunger}/100\n"
         status += f"Comfort: {self.comfort}/100, Homesickness: {self.homesickness}/100\n"
         status += f"Skills: {self.skills}\n"
         status += f"Songs Written: {len(self.songs_written)}\n"
@@ -215,6 +216,7 @@ if __name__ == '__main__':
     assert p.stress == 0
     assert p.homesickness == 0
     assert p.comfort == 70
+    assert p.hunger == 0
     assert not p.has_manager
     assert len(p.songs_written) == 0
 
@@ -287,23 +289,26 @@ if __name__ == '__main__':
     assert strings in p.gear_inventory
 
     assert p.add_gear(guitar)
-    assert p.get_current_gear_load() == 6
+    assert p.get_current_gear_load() == 6 # Load: strings (1) + guitar (5) = 6
 
-    assert not p.add_gear(amp) # Should fail, 6 + 7 > 10
-    assert p.get_current_gear_load() == 6 # Amp not added
-    assert amp not in p.gear_inventory
-
-    # Test adding when capacity is based on default (travel_mode=None, capacity = 20)
-    p.base_gear_capacity = 10 # Reset for clarity, default capacity is 20
-    p.gear_inventory = [strings, guitar] # Load is 1+5=6
-    assert p.get_current_gear_load() == 6
-
-    # Amp size is 7. 6 + 7 = 13. Default capacity is 20. So this should pass.
+    # Current default capacity is base_gear_capacity * 2 = 10 * 2 = 20
+    # Adding amp (size 7): 6 + 7 = 13. 13 <= 20, so this should succeed.
     assert p.add_gear(amp)
-    assert p.get_current_gear_load() == 13
+    assert p.get_current_gear_load() == 13 # Load: 6 + amp (7) = 13
     assert amp in p.gear_inventory
 
-    # Another amp would be 13 + 7 = 20. Should pass.
+    # The following lines from the original test are now redundant or incorporated above.
+    # # Test adding when capacity is based on default (travel_mode=None, capacity = 20)
+    # p.base_gear_capacity = 10 # Reset for clarity, default capacity is 20
+    # p.gear_inventory = [strings, guitar] # Load is 1+5=6
+    # assert p.get_current_gear_load() == 6
+    #
+    # # Amp size is 7. 6 + 7 = 13. Default capacity is 20. So this should pass.
+    # assert p.add_gear(amp)
+    # assert p.get_current_gear_load() == 13
+    # assert amp in p.gear_inventory
+
+    # Another amp (size 7) would make load 13 + 7 = 20. Should pass.
     amp2 = GearItem("a002", "Second Amp", "Another practice amp", "AMPLIFIER", 7, 150)
     assert p.add_gear(amp2)
     assert p.get_current_gear_load() == 20
@@ -314,8 +319,8 @@ if __name__ == '__main__':
     assert p.get_current_gear_load() == 20
 
 
-    assert p.remove_gear("g001")
-    assert p.get_current_gear_load() == 8
+    assert p.remove_gear("g001") # Removes guitar (size 5). Load was 20. New load = 20 - 5 = 15.
+    assert p.get_current_gear_load() == 15
     assert guitar not in p.gear_inventory
 
     assert not p.remove_gear("non_existent_id")

@@ -56,6 +56,19 @@ def process_time_based_player_needs(player, minutes_just_passed):
         player.stress = min(100, player.stress + (hours_passed_float * stress_increase_rate_from_homesickness))
         player.stress = int(round(player.stress))
 
+    # 4. Hunger Accumulation
+    hunger_increase_per_hour = 2.5
+    player.hunger = min(100, player.hunger + (hours_passed_float * hunger_increase_per_hour))
+    player.hunger = int(round(player.hunger))
+
+    # 5. Stress impact from Starvation (very high hunger)
+    if player.hunger > 90: # Starving
+        stress_from_starvation_hourly_rate = 2.0 # Example: +2 stress per hour while starving
+        player.stress = min(100, player.stress + (hours_passed_float * stress_from_starvation_hourly_rate))
+        player.stress = int(round(player.stress))
+        # print(f"DEBUG: Stress increased due to starvation. New stress: {player.stress}")
+
+
 def setup_world():
     global WORLD_MAP, NPC_REGISTRY
     # Create Locations
@@ -207,6 +220,33 @@ def setup_world():
     )
     home_town.add_poi(bus_stop_hometown)
 
+    hometown_grocery = PointOfInterest(
+        poi_id="hometown_bodega",
+        name="Corner Bodega",
+        description="A small grocery store with basic necessities.",
+        category="SHOP_FOOD", # New category
+        interaction_options=["Buy Food Items", "Chat with Clerk"],
+        parent_location_id=home_town.name
+    )
+    hometown_grocery.shop_inventory_item_ids = ["food_energy_bar", "food_grocery_bag"]
+    home_town.add_poi(hometown_grocery)
+
+    hometown_fastfood = PointOfInterest(
+        poi_id="hometown_diner",
+        name="Greasy Spoon Diner",
+        description="Cheap, fast, and... food-like substances.",
+        category="FOOD_FASTFOOD",
+        interaction_options=[], # Will be populated from menu_items
+        parent_location_id=home_town.name
+    )
+    hometown_fastfood.menu_items = [
+        {"display_text": "Order Greasy Breakfast ($8)", "item_id": "food_greasy_breakfast", "cost": 8, "effects": {"hunger": -50, "energy": 15, "comfort": 1}},
+        {"display_text": "Order Cheap Burger ($5)", "item_id": "food_cheap_burger", "cost": 5, "effects": {"hunger": -35, "energy": 10, "comfort": -2}},
+        {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
+    ]
+    hometown_fastfood.interaction_options = [item["display_text"] for item in hometown_fastfood.menu_items]
+    home_town.add_poi(hometown_fastfood)
+
     # City Center
     city_airport = PointOfInterest(
         poi_id="citycenter_airport",
@@ -252,6 +292,37 @@ def setup_world():
         hourly_rate=50      # $50 per hour
     )
     city_center.add_poi(starlight_studio)
+
+    city_grocery_super = PointOfInterest(
+        poi_id="citycenter_supervalu",
+        name="SuperValue Mart",
+        description="A large supermarket with a wide variety of groceries.",
+        category="SHOP_FOOD",
+        interaction_options=["Buy Food Items"],
+        parent_location_id=city_center.name,
+    )
+    city_grocery_super.shop_inventory_item_ids = ["food_energy_bar", "food_grocery_bag"] # Could have more/different items
+    city_center.add_poi(city_grocery_super)
+
+    city_fastfood_chain = PointOfInterest(
+        poi_id="citycenter_burgerblast",
+        name="Burger Blast",
+        description="A generic but reliable fast food burger chain.",
+        category="FOOD_FASTFOOD",
+        interaction_options=[], # Will be populated from menu_items
+        parent_location_id=city_center.name
+    )
+    city_fastfood_chain.menu_items = [
+        {"display_text": "Order Blast Burger ($7)", "item_id": "food_blast_burger", "cost": 7, "effects": {"hunger": -40, "energy": 10, "comfort": 0}},
+        {"display_text": "Order Value Meal ($10)", "item_id": "food_value_meal", "cost": 10, "effects": {"hunger": -60, "energy": 15, "comfort": -1}},
+        {"display_text": "Order Soda ($2)", "item_id": "food_soda", "cost": 2, "effects": {"hunger": -5, "energy": 5}},
+        {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
+    ]
+    city_fastfood_chain.interaction_options = [item["display_text"] for item in city_fastfood_chain.menu_items]
+    city_center.add_poi(city_fastfood_chain)
+
+    # city_restaurant_mid (The Cozy Nook Eatery) - for later, more complex food/social
+    # For now, just grocery and fast food.
 
 
     # Define Travel Connections (Location Name -> {cost, time}) # INTER-CITY
@@ -668,11 +739,12 @@ def main():
             "6": "Prepare for a gig",
             "7": "Attempt a gig",
             "8": "View detailed player stats",
-            "9": "Talk to someone (at current POI/Area)", # Clarified scope
-            "00": "Advance time by 1 hour (debug)", # Changed to 00 to avoid conflict if we have 10+ options
+            "9": "Talk to someone (at current POI/Area)",
+            "10": "Eat food from inventory",
+            "00": "Advance time by 1 hour (debug)",
             "0": "Quit game"
         }
-        # Adjust numbering for subsequent elif blocks
+        # Adjust numbering for subsequent elif blocks for 00 and 0 if needed
         choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
 
         if choice is None: # Invalid input after multiple tries
@@ -954,7 +1026,13 @@ def main():
                             comfort_effect_on_rest = 0.0
                             if player.comfort < 25: comfort_effect_on_rest = -0.2
                             elif player.comfort < 50: comfort_effect_on_rest = -0.1
-                            effective_rest_quality = max(0.1, player.current_poi.rest_quality + comfort_effect_on_rest)
+
+                            # Hunger effect on rest quality
+                            hunger_effect_on_rest = 0.0
+                            if player.hunger > 75: hunger_effect_on_rest = -0.2 # Very hungry
+                            elif player.hunger > 50: hunger_effect_on_rest = -0.1 # Hungry
+
+                            effective_rest_quality = max(0.05, player.current_poi.rest_quality + comfort_effect_on_rest + hunger_effect_on_rest) # Min 5% quality
 
                             energy_gained = int(hours_to_rest * 10 * effective_rest_quality)
                             stress_change = int(hours_to_rest * player.current_poi.stress_modifier_hourly)
@@ -1012,7 +1090,13 @@ def main():
                                 comfort_effect_on_rest = 0.0
                                 if player.comfort < 25: comfort_effect_on_rest = -0.2
                                 elif player.comfort < 50: comfort_effect_on_rest = -0.1
-                                effective_rest_quality = max(0.1, player.current_poi.rest_quality + comfort_effect_on_rest)
+
+                                # Hunger effect on rest quality
+                                hunger_effect_on_rest = 0.0
+                                if player.hunger > 75: hunger_effect_on_rest = -0.2 # Very hungry
+                                elif player.hunger > 50: hunger_effect_on_rest = -0.1 # Hungry
+
+                                effective_rest_quality = max(0.05, player.current_poi.rest_quality + comfort_effect_on_rest + hunger_effect_on_rest) # Min 5% quality
 
                                 energy_gained = int(hours_to_sleep * 10 * effective_rest_quality)
                                 stress_change = int(hours_to_sleep * player.current_poi.stress_modifier_hourly)
@@ -1494,6 +1578,88 @@ def main():
                                     else:
                                         print(f"Not enough money to repair. Need ${repair_cost}.")
                         # --- END REPAIR GEAR LOGIC ---
+
+                        # --- BUY FOOD ITEMS (GROCERY) LOGIC ---
+                        elif player.current_poi.category == "SHOP_FOOD" and chosen_interaction_text == "Buy Food Items":
+                            if player.current_poi.shop_inventory_item_ids:
+                                shop_stock_display = []
+                                item_map = {}
+                                current_item_idx = 1
+                                for item_id in player.current_poi.shop_inventory_item_ids:
+                                    item = GEAR_CATALOG.get(item_id)
+                                    if item and item.gear_type == "FOOD": # Ensure it's actually food
+                                        shop_stock_display.append(f"{item.name} - ${item.cost} (Size: {item.size}, Hunger: -{item.hunger_reduction}, Energy: +{item.energy_boost})")
+                                        item_map[str(current_item_idx)] = item
+                                        current_item_idx +=1
+
+                                if not shop_stock_display:
+                                    print(f"{player.current_poi.name} seems to be out of food items right now.")
+                                else:
+                                    item_to_buy_key = present_choices(shop_stock_display, title=f"Food items for sale at {player.current_poi.name}: (0 to cancel)")
+
+                                    if item_to_buy_key and item_to_buy_key != "0" and item_to_buy_key in item_map:
+                                        selected_item = item_map[item_to_buy_key]
+                                        # For food, usually buy one at a time from grocery unless it's a "pack"
+                                        # Quantity logic could be added if needed, similar to merch. For now, buy 1.
+                                        if player.money >= selected_item.cost:
+                                            if player.can_carry_gear(selected_item):
+                                                player.money -= selected_item.cost
+                                                player.add_gear(selected_item)
+                                                print(f"Remaining money: ${player.money}")
+                                                # Buying food takes a little time
+                                                minutes_passed = 10
+                                                advance_game_time(minutes=minutes_passed)
+                                                update_npc_locations(current_game_time)
+                                                process_time_based_player_needs(player, minutes_passed)
+                                            else:
+                                                print(f"You can't carry {selected_item.name} right now.")
+                                        else:
+                                            print(f"Not enough money to buy {selected_item.name}. Need ${selected_item.cost}, have ${player.money}.")
+                                    elif item_to_buy_key == "0":
+                                        print("Cancelled buying food.")
+                            else:
+                                print(f"{player.current_poi.name} has no food items for sale right now.")
+                        # --- END BUY FOOD ITEMS (GROCERY) LOGIC ---
+
+                        # --- FAST FOOD ORDERING LOGIC (Revised) ---
+                        elif player.current_poi.category == "FOOD_FASTFOOD":
+                            # chosen_interaction_text is the display_text of the menu item
+                            selected_menu_item_data = None
+                            for menu_item in player.current_poi.menu_items:
+                                if menu_item["display_text"] == chosen_interaction_text:
+                                    selected_menu_item_data = menu_item
+                                    break
+
+                            if selected_menu_item_data:
+                                item_cost = selected_menu_item_data["cost"]
+                                item_effects = selected_menu_item_data["effects"]
+                                item_name_for_print = selected_menu_item_data["item_id"] # Or parse from display_text if more user-friendly
+                                # Try to get a more friendly name from catalog if possible, else use item_id
+                                catalog_entry = GEAR_CATALOG.get(selected_menu_item_data["item_id"])
+                                if catalog_entry:
+                                    item_name_for_print = catalog_entry.name
+
+                                print(f"You chose to order: {item_name_for_print} for ${item_cost}")
+                                if player.money >= item_cost:
+                                    player.money -= item_cost
+
+                                    player.hunger = max(0, player.hunger + item_effects.get("hunger", 0)) # Typically negative
+                                    player.energy = min(100, player.energy + item_effects.get("energy", 0))
+                                    player.comfort = min(100, max(0, player.comfort + item_effects.get("comfort", 0)))
+                                    # Add other effects if defined in menu_item["effects"]
+
+                                    minutes_passed = 20 # Eating at fast food takes less time than a full restaurant
+                                    advance_game_time(minutes=minutes_passed)
+                                    update_npc_locations(current_game_time)
+                                    process_time_based_player_needs(player, minutes_passed)
+                                    print(f"You consumed {item_name_for_print}.")
+                                    print(f"Hunger: {player.hunger}, Energy: {player.energy}, Comfort: {player.comfort}, Money: ${player.money}")
+                                else:
+                                    print(f"Not enough money. Need ${item_cost}.")
+                            else:
+                                # This case should ideally not be reached if interaction_options are derived from menu_items
+                                print(f"Sorry, '{chosen_interaction_text}' is not a valid menu option here.")
+                        # --- END FAST FOOD ORDERING LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
@@ -1744,6 +1910,48 @@ def main():
                 chosen_npc_key = present_choices(npc_options_list, f"Who would you like to talk to at {target_area_name}?")
                 if chosen_npc_key and chosen_npc_key in npc_map:
                     talk_to_npc_instance(player, npc_map[chosen_npc_key])
+
+        elif choice == "10": # Eat food from inventory
+            print("\n--- Eat Food From Inventory ---")
+            food_in_inventory = [item for item in player.gear_inventory if item.gear_type == "FOOD"]
+
+            if not food_in_inventory:
+                print("You have no food in your inventory to eat.")
+            else:
+                food_display_list = []
+                food_item_map = {} # Maps display index string to actual GearItem instance
+                for i, item in enumerate(food_in_inventory):
+                    # Display hunger reduction and energy boost
+                    display_text = f"{item.name} (Hunger: -{item.hunger_reduction}, Energy: +{item.energy_boost})"
+                    if item.get_property("comfort_effect"):
+                        display_text += f", Comfort: {item.get_property('comfort_effect'):+}"
+                    food_display_list.append(display_text)
+                    food_item_map[str(i+1)] = item
+
+                food_choice_key = present_choices(food_display_list, "Which food item to eat? (0 to cancel)")
+
+                if food_choice_key and food_choice_key != "0" and food_choice_key in food_item_map:
+                    item_to_eat = food_item_map[food_choice_key]
+
+                    player.hunger = max(0, player.hunger - item_to_eat.hunger_reduction)
+                    player.energy = min(100, player.energy + item_to_eat.energy_boost)
+                    comfort_effect = item_to_eat.get_property("comfort_effect") or 0
+                    player.comfort = min(100, max(0, player.comfort + comfort_effect))
+
+                    # Remove the specific instance of the item from inventory
+                    player.remove_gear(item_to_eat) # Pass the instance directly
+
+                    minutes_passed = 15 # Eating takes a bit of time
+                    advance_game_time(minutes=minutes_passed)
+                    update_npc_locations(current_game_time)
+                    process_time_based_player_needs(player, minutes_passed)
+
+                    print(f"You ate {item_to_eat.name}.")
+                    print(f"Hunger: {player.hunger}/100, Energy: {player.energy}/100, Comfort: {player.comfort}/100")
+                elif food_choice_key == "0":
+                    print("Decided not to eat anything from inventory.")
+                # Else: present_choices handles invalid input from item list
+            print("--------------------")
 
         elif choice == "00": # Debug: Advance time by 1 hour (was 9, then 8)
             advance_game_time(minutes=60) # 1 hour

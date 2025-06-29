@@ -108,18 +108,86 @@ GEAR_CATALOG = {
         gear_type="MERCHANDISE",
         size=0, # Negligible
         cost=1, # Cost of blank CD and case
-        base_sell_price=5 # Sell for a bit more
+        base_sell_price=5
+    ),
+    # Food Items
+    "food_energy_bar": GearItem(
+        item_id="food_energy_bar",
+        name="Energy Bar",
+        description="A dense, chewy bar packed with calories. Good for a quick energy spike.",
+        gear_type="FOOD",
+        size=0, # Consumable, negligible inventory space for one or two
+        cost=3,
+        hunger_reduction=15,
+        energy_boost=20 # More energy than general comfort food
+    ),
+    "food_cheap_burger": GearItem( # This might be for fast food "menus" rather than inventory
+        item_id="food_cheap_burger",
+        name="Cheap Greasy Burger",
+        description="Questionable meat, soggy bun, but it fills a hole.",
+        gear_type="FOOD", # Consumed on site, so size 0 for inventory if we ever let player take away
+        size=0,
+        cost=5, # Price at a fast food joint
+        hunger_reduction=35,
+        energy_boost=10,
+        # Could add a property: {"comfort_effect": -2}
+    ),
+    "food_grocery_bag": GearItem(
+        item_id="food_grocery_bag",
+        name="Bag of Groceries",
+        description="A bag of basic groceries - enough for a decent meal or two at home.",
+        gear_type="FOOD", # Represents multiple meal components
+        size=3, # Takes some inventory space
+        cost=20,
+        hunger_reduction=70,
+        energy_boost=25
+    ),
+    # --- New Food Items for Fast Food POIs ---
+    "food_greasy_breakfast": GearItem(
+        item_id="food_greasy_breakfast", name="Greasy Breakfast Special", gear_type="FOOD", size=0, cost=8, # Cost here is default, can be overridden by POI menu
+        description="Eggs, bacon (or sausage substitute), hash browns, and toast. Fills you up.",
+        hunger_reduction=50, energy_boost=15, properties={"comfort_effect": 1}
+    ),
+    "food_cheap_burger": GearItem( # Added from main.py's previous hardcoding
+        item_id="food_cheap_burger", name="Cheap Greasy Burger", gear_type="FOOD", size=0, cost=5,
+        description="Questionable meat, soggy bun, but it fills a hole.",
+        hunger_reduction=35, energy_boost=10, properties={"comfort_effect": -2}
+    ),
+    "food_blast_burger": GearItem(
+        item_id="food_blast_burger", name="Blast Burger", gear_type="FOOD", size=0, cost=7,
+        description="The signature burger from Burger Blast. Comes with fries.",
+        hunger_reduction=40, energy_boost=10, properties={"comfort_effect": 0}
+    ),
+    "food_value_meal": GearItem(
+        item_id="food_value_meal", name="Value Meal", gear_type="FOOD", size=0, cost=10,
+        description="A burger, fries, and a large soda. A lot of food for the price.",
+        hunger_reduction=60, energy_boost=15, properties={"comfort_effect": -1} # Slightly uncomfortable from overeating
+    ),
+    "food_soda": GearItem(
+        item_id="food_soda", name="Fizzy Soda", gear_type="FOOD", size=0, cost=2,
+        description="A cup of sugary, fizzy soda.",
+        hunger_reduction=5, energy_boost=5, properties={"comfort_effect": 0} # Not really food, mostly sugar
+    ),
+    "food_water": GearItem(
+        item_id="food_water", name="Cup of Water", gear_type="FOOD", size=0, cost=0,
+        description="A simple cup of tap water.",
+        hunger_reduction=0, energy_boost=1 # Slight refreshment
     ),
 }
 
 if __name__ == '__main__':
     # Test that all items can be created and accessed
-    assert len(GEAR_CATALOG) == 12 # Updated count (9 + 3 new merch)
+    # Original 15 items + 5 new distinct food items (food_cheap_burger was already one of the 15)
+    expected_items = 15 + 5
+    assert len(GEAR_CATALOG) == expected_items, f"Expected {expected_items} items, found {len(GEAR_CATALOG)}"
     assert GEAR_CATALOG["worn_acoustic_guitar"].name == "Worn Acoustic Guitar"
-    assert GEAR_CATALOG["merch_tshirt_basic"].cost == 7
+    assert GEAR_CATALOG["food_energy_bar"].cost == 3
     assert GEAR_CATALOG["merch_tshirt_basic"].base_sell_price == 15
     assert GEAR_CATALOG["merch_poster_small"].size == 0
     assert GEAR_CATALOG["guitar_picks_assorted"].size == 0
+    assert GEAR_CATALOG["food_greasy_breakfast"].hunger_reduction == 50
+    assert GEAR_CATALOG["food_water"].cost == 0
+    assert GEAR_CATALOG["food_cheap_burger"].name == "Cheap Greasy Burger"
     print(f"{len(GEAR_CATALOG)} gear items loaded from catalog.")
     for item_id, item in GEAR_CATALOG.items():
         print(f"- {item_id}: {item.name} (Cost: ${item.cost}, Size: {item.size})")

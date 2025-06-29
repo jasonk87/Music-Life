@@ -29,6 +29,14 @@ class PointOfInterest:
 
         self.comfort_modifier_hourly = comfort_modifier_hourly
 
+        # Specific to FOOD_FASTFOOD POIs
+        self.menu_items = [] # List of dicts: {"display_text": "Order X ($Y)", "item_id": "food_item_id_from_catalog", "cost": Y, "effects": {"hunger": -Z, "energy": +W}}
+        if self.category == "FOOD_FASTFOOD":
+            # Interaction options should ideally be generated from menu_items or vice-versa
+            # For now, interaction_options are defined separately in setup_world
+            pass
+
+
         # For intra-city travel, connections could be stored here or centrally in the City(Location)
         # self.intra_city_connections = {} # poi_id: {"walk_time": X, "bike_time": Y ...}
 
@@ -89,7 +97,7 @@ if __name__ == "__main__":
     assert poi2.hourly_rate == 0 # Default for non-studio
     print(poi2)
     assert "[Shop with" not in str(poi2)
-    assert "[RestQ: 0.8, StressMod/hr: -10]" in str(poi2)
+    assert "[RestQ: 0.8, StressMod/hr: -10, ComfortMod/hr: 0]" in str(poi2) # Updated assertion
     assert "[StudioQ:" not in str(poi2)
 
     poi3 = PointOfInterest(

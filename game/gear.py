@@ -1,5 +1,8 @@
 class GearItem:
-    def __init__(self, item_id, name, description, gear_type, size=1, cost=0, base_sell_price=0, properties=None):
+    def __init__(self, item_id, name, description, gear_type,
+                 size=1, cost=0, base_sell_price=0,
+                 hunger_reduction=0, energy_boost=0, # Direct params for food
+                 properties=None):
         self.item_id = item_id
         self.name = name
         self.description = description
@@ -8,12 +11,23 @@ class GearItem:
         self.cost = cost
         self.base_sell_price = base_sell_price
 
-        self.durability = 100 # Max 100, starts full
+        self.durability = 100
         self.is_broken = False
 
+        # Food-specific properties
+        self.hunger_reduction = hunger_reduction if gear_type == "FOOD" else 0
+        self.energy_boost = energy_boost if gear_type == "FOOD" else 0
+        # Comfort effect from food could also be a property if desired
+
         self.properties = properties if properties else {}
-        if 'genre_suitability' not in self.properties: # Ensure key exists if not provided
+        if 'genre_suitability' not in self.properties:
             self.properties['genre_suitability'] = []
+
+        # Store these also in properties dict for consistency if needed by other systems,
+        # or if we want to allow defining them via properties dict as a fallback.
+        if self.gear_type == "FOOD":
+            self.properties['hunger_reduction'] = self.hunger_reduction
+            self.properties['energy_boost'] = self.energy_boost
 
 
     def take_damage(self, amount: int):
@@ -54,6 +68,8 @@ class GearItem:
         display_string = f"{self.name} {status_part} (Type: {self.gear_type}, Size: {self.size}, Cost: ${self.cost}"
         if self.gear_type == "MERCHANDISE":
             display_string += f", Sells for: ${self.base_sell_price}"
+        elif self.gear_type == "FOOD":
+            display_string += f", Hunger Red: {self.hunger_reduction}, Energy: +{self.energy_boost}"
         display_string += ")"
         return display_string
 
@@ -117,6 +133,19 @@ if __name__ == '__main__':
     assert merch_shirt.gear_type == "MERCHANDISE"
     assert merch_shirt.cost == 7
     assert merch_shirt.base_sell_price == 20
-    assert str(merch_shirt) == "Band Logo T-Shirt (Type: MERCHANDISE, Size: 1, Cost: $7, Sells for: $20)"
+    assert str(merch_shirt) == "Band Logo T-Shirt (Dur: 100/100) (Type: MERCHANDISE, Size: 1, Cost: $7, Sells for: $20)"
+
+    energy_bar = GearItem(
+        item_id="food_energy_bar",
+        name="Energy Bar",
+        description="A compact bar for a quick boost.",
+        gear_type="FOOD",
+        size=0, cost=3,
+        hunger_reduction=15, energy_boost=10
+    )
+    assert energy_bar.gear_type == "FOOD"
+    assert energy_bar.hunger_reduction == 15
+    assert energy_bar.energy_boost == 10
+    assert str(energy_bar) == "Energy Bar (Dur: 100/100) (Type: FOOD, Size: 0, Cost: $3, Hunger Red: 15, Energy: +10)"
 
     print("GearItem class basic tests passed.")
