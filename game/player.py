@@ -30,6 +30,17 @@ class Player:
 
         self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
 
+        # Opportunities
+        self.interview_opportunities = {
+            "city_chronicle_available": False,
+            "city_chronicle_completed": False,
+            # Add other specific interviews here later e.g. "radio_station_xyz_available": False
+        }
+        self.INTERVIEW_OP_THRESHOLDS = {
+            "city_chronicle": 75
+        }
+
+
     def get_current_gear_capacity(self, travel_mode=None):
         """Calculates current gear capacity based on situation or travel mode."""
         if travel_mode == "walk":
@@ -185,6 +196,24 @@ class Player:
             print("*** You've attracted the attention of a professional artist manager! ***")
             print("*** This will unlock new opportunities. (Manager interactions to be implemented further) ***\n")
             # Future: Trigger an event, introduce the manager NPC, etc.
+
+    def check_for_interview_opportunities(self):
+        """Checks if player's fame qualifies them for new interview opportunities."""
+        # City Chronicle Interview
+        chronicle_key = "city_chronicle"
+        if self.fame >= self.INTERVIEW_OP_THRESHOLDS.get(chronicle_key, float('inf')) and \
+           not self.interview_opportunities.get(f"{chronicle_key}_available", False) and \
+           not self.interview_opportunities.get(f"{chronicle_key}_completed", False):
+
+            self.interview_opportunities[f"{chronicle_key}_available"] = True
+            print("\n*** Opportunity Knocks! ***")
+            print("The City Center Chronicle has heard about your rising profile and wants to interview you!")
+            print("Visit their office in City Center to arrange it.")
+            # In a more complex system, this might add an item to an "Opportunities" list in the UI.
+            # For now, a print message and a flag is sufficient.
+
+        # Add checks for other interviews here as they are defined
+        # e.g., radio_station_xyz, national_magazine, etc.
 
     def __str__(self):
         location_str = self.current_location.name if self.current_location else "Nowhere"

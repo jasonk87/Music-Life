@@ -168,6 +168,18 @@ def setup_world():
         # Can add more expensive/pro items from catalog here later
     ]
     city_center.add_poi(pro_music_store)
+
+    news_agency_poi = PointOfInterest(
+        poi_id="citycenter_chronicle_news",
+        name="City Center Chronicle",
+        description="The bustling office of the city's main newspaper and online news hub.",
+        category="OFFICE_NEWS_AGENCY", # New category
+        interaction_options=["Look for today's paper", "Ask for a journalist"], # Basic interactions
+        parent_location_id=city_center.name,
+        comfort_modifier_hourly=-1 # Can be a bit stressful/busy
+    )
+    city_center.add_poi(news_agency_poi)
+
     record_label_office = PointOfInterest(
         poi_id="citycenter_indiehits_records",
         name="Indie Hits Records",
@@ -474,6 +486,26 @@ def setup_world():
         "Weekend_Evening": grande_theater, # Might check out bigger shows at Grande Theater too
     }
     NPC_REGISTRY[casey.npc_id] = casey
+
+    # Interviewer NPC at the News Agency
+    # news_agency_poi was defined earlier as: city_center.add_poi(news_agency_poi)
+    # We need to ensure news_agency_poi is accessible here or passed correctly.
+    # Assuming news_agency_poi is the variable holding the City Center Chronicle POI object.
+    brenda_reporter = NPC(
+        npc_id="brenda_reporter001",
+        name="Brenda Reporter",
+        personality_key="interviewer_professional",
+        home_location=news_agency_poi, # Needs news_agency_poi to be defined in this scope
+        current_location=news_agency_poi
+    )
+    brenda_reporter.schedule = {
+        "Weekday_Morning": news_agency_poi,
+        "Weekday_Afternoon": news_agency_poi,
+        # Evenings and weekends she's off or somewhere else (e.g., home_location if different)
+    }
+    NPC_REGISTRY[brenda_reporter.npc_id] = brenda_reporter
+    if news_agency_poi: # Assign owner if POI exists
+        news_agency_poi.owner_npc_id = brenda_reporter.npc_id # Or a more generic 'contact_npc_id'
 
 
 # --- Time and Scheduling Helpers ---
@@ -933,6 +965,14 @@ def main():
                     if can_do_pre_gig_signing:
                         if pre_gig_autograph_interaction_text not in current_poi_interactions:
                             current_poi_interactions.append(pre_gig_autograph_interaction_text)
+
+                # Dynamically add "Attend Scheduled Interview" if applicable
+                interview_interaction_text = "Attend Scheduled Interview"
+                if player.current_poi and \
+                   player.current_poi.category == "OFFICE_NEWS_AGENCY" and \
+                   player.interview_opportunities.get("city_chronicle_available", False):
+                    if interview_interaction_text not in current_poi_interactions:
+                        current_poi_interactions.append(interview_interaction_text)
 
                 if current_poi_interactions: # Use the potentially modified list
                     interaction_choice_key = present_choices(
@@ -1741,11 +1781,88 @@ def main():
                                 # This case should ideally not be reached if interaction_options are derived from menu_items
                                 print(f"Sorry, '{chosen_interaction_text}' is not a valid menu option here.")
                         # --- END FAST FOOD ORDERING LOGIC ---
+
+                        # --- NEWS AGENCY INTERVIEW LOGIC ---
+                        elif player.current_poi.category == "OFFICE_NEWS_AGENCY" and \
+                             chosen_interaction_text == "Attend Scheduled Interview":
+
+                            print("\n--- Attending Interview at City Center Chronicle ---")
+                            interviewer_npc_id = player.current_poi.owner_npc_id # Assuming Brenda is the owner/main contact
+                            interviewer_npc = NPC_REGISTRY.get(interviewer_npc_id)
+
+                            if not interviewer_npc or interviewer_npc.current_location != player.current_poi:
+                                print("It seems the interviewer isn't available right now. Try again during office hours.")
+                            else:
+                                print(f"You meet with {interviewer_npc.name} for the interview.")
+                                # TODO: Implement multi-turn dialogue for the interview
+                                # For now, a simplified interaction:
+
+                                interview_success_score = 0
+                                interview_turns = 3 # Ask 3 questions
+                                minutes_per_turn = 20 # Each Q&A segment
+                                total_interview_minutes = 0
+
+                                for i in range(interview_turns):
+                                    # Interviewer asks a question (could be more dynamic later)
+                                    # For now, let the LLM generate the question based on personality
+                                    interviewer_prompt = f"Ask your next interview question to {player.name}."
+                                    if i == 0:
+                                        interviewer_prompt = f"Welcome {player.name} to the City Center Chronicle. Let's start with your journey so far. {interviewer_prompt}"
+
+                                    interviewer_question = generate_npc_response(interviewer_prompt, interviewer_npc, player_name=player.name)
+                                    print(f"\n{interviewer_npc.name}: {interviewer_question}")
+
+                                    if "LLM Error" in interviewer_question or "unexpected error" in interviewer_question:
+                                        print("The interviewer seems flustered by a technical difficulty. The interview might be cut short.")
+                                        break
+
+                                    player_answer = input(f"{player.name}'s response: ")
+                                    if player_answer.strip():
+                                        interview_success_score += 1
+                                        # Feed player's answer back to interviewer NPC for context, though response isn't used for next Q directly here
+                                        _ = generate_npc_response(player_answer, interviewer_npc, player_name=player.name)
+                                    else:
+                                        print("You stumble for words, and the interviewer makes a note.")
+                                    total_interview_minutes += minutes_per_turn
+
+                                print("\n--- Interview Concluded ---")
+                                fame_gained = 0
+                                if interview_success_score >= 2: # Good interview
+                                    fame_gained = random.randint(25, 40)
+                                    player.fame += fame_gained
+                                    player.stress = max(0, player.stress - 10)
+                                    print(f"The interview went well! It should generate some good press. (Fame +{fame_gained}, Stress -10)")
+                                elif interview_success_score == 1: # Okay interview
+                                    fame_gained = random.randint(10, 20)
+                                    player.fame += fame_gained
+                                    print(f"The interview was okay. It might get a small mention. (Fame +{fame_gained})")
+                                else: # Poor interview
+                                    player.stress = min(100, player.stress + 5)
+                                    print("That interview didn't go very smoothly. Hopefully, it doesn't reflect too poorly. (Stress +5)")
+
+                                player.interview_opportunities["city_chronicle_available"] = False
+                                player.interview_opportunities["city_chronicle_completed"] = True
+
+                                if total_interview_minutes == 0 and interview_turns > 0 : total_interview_minutes = 30 # Min time if started
+                                advance_game_time(minutes=total_interview_minutes)
+                                update_npc_locations(current_game_time)
+                                process_time_based_player_needs(player, total_interview_minutes)
+                        # --- END NEWS AGENCY INTERVIEW LOGIC ---
+
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 
                 else: # No interaction options defined for the POI or player cancelled choosing an interaction
-                    print("There's not much to do here specifically.")
+                    # Check for dynamic news agency interview option if no other options were chosen or available
+                    if player.current_poi and player.current_poi.category == "OFFICE_NEWS_AGENCY" and \
+                       player.interview_opportunities.get("city_chronicle_available", False) and \
+                       "Attend Scheduled Interview" not in current_poi_interactions : # Ensure it wasn't already added
+                        print("\n(You remember you have an interview opportunity here...)")
+                        # This case implies the option wasn't added above, which it should have been.
+                        # For safety, or if interaction_options was empty initially.
+                        # This might be redundant if the dynamic addition above works correctly.
+                    else:
+                        print("There's not much to do here specifically.")
             else: # Exploring general city location if no specific POI
                 print(f"Description: {player.current_location.description}")
                 if player.current_location.venues:
@@ -1873,6 +1990,7 @@ def main():
                                     update_npc_locations(current_game_time)
                                     process_time_based_player_needs(player, minutes_passed_by_event)
                                 player.check_for_manager_unlock() # Fame might change
+                                player.check_for_interview_opportunities() # Check for interviews
 
                             # Relationship/Memory update with Venue Owner
                             venue_owner_npc_id = getattr(chosen_event.location, 'owner_npc_id', None)
@@ -2079,6 +2197,7 @@ def main():
                         update_npc_locations(current_game_time)
                         process_time_based_player_needs(player, minutes_passed_by_event)
                     player.check_for_manager_unlock() # Fame might change from event
+                    player.check_for_interview_opportunities() # Check for interviews too
 
 
 if __name__ == "__main__":
