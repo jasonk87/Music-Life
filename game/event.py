@@ -74,17 +74,18 @@ class Event:
 
         from game_data.gear_catalog import GEAR_CATALOG # Import locally to avoid circular dependency issues at module load time
 
-        player_gear_types_owned = set()
+        player_gear_types_owned_and_working = set()
         for item in player.gear_inventory:
-            player_gear_types_owned.add(item.gear_type)
+            if not item.is_broken:
+                player_gear_types_owned_and_working.add(item.gear_type)
 
         missing_gear_messages = []
         actually_needs_rental_for_event = False
 
         for req_type in self.required_gear_types:
-            if req_type not in player_gear_types_owned:
-                # Player doesn't own this type of gear. Can it be rented?
-                venue = self.location # Assuming event.location is always a Venue object for events requiring gear
+            if req_type not in player_gear_types_owned_and_working:
+                # Player doesn't own a working item of this type. Can it be rented?
+                venue = self.location
                 if hasattr(venue, 'can_rent_gear') and venue.can_rent_gear:
                     # Check if venue has this type of gear available for rent
                     can_rent_this_type = False
@@ -134,37 +135,97 @@ import random # Needed for incident chance
         # Add more event logic here (e.g., minigame, skill checks for quality)
         print(f"The event was a success!")
 
-        # --- Gear Incident Chance ---
-        incident_chance = 0.10 # 10% chance of a gear incident
+        # --- Gear Wear from Performance ---
+        # Identify gear player likely used (owned items matching required types)
+        # This assumes player used their own gear if they met requirements with it, even if rental was an option.
+        # A more complex system might let player choose which owned item to use.
+        used_owned_gear_for_event = []
+        player_owned_gear_types = {item.gear_type for item in player.gear_inventory if not item.is_broken}
+
+        for req_type in self.required_gear_types:
+            if req_type in player_owned_gear_types:
+                # Find the first owned, non-broken item of this type
+                for item in player.gear_inventory:
+                    if item.gear_type == req_type and not item.is_broken:
+                        used_owned_gear_for_event.append(item)
+                        break
+
+        if used_owned_gear_for_event:
+            print("\n--- Gear Wear & Tear from Performance ---")
+            for item in used_owned_gear_for_event:
+                damage = random.randint(3, 8) # More wear than practice
+                item.take_damage(damage)
+                print(f"Your {item.name} saw some action! Durability: {item.durability}/100.")
+                if item.is_broken:
+                     print(f"Disaster! Your {item.name} broke mid-show (or just after)!")
+
+        # --- Gear Incident Chance (e.g., string break, separate from general wear) ---
+        incident_chance = 0.10
         if random.random() < incident_chance:
-            # Identify player's owned gear that could be relevant (instruments, amps)
-            relevant_owned_gear = [
-                item for item in player.gear_inventory
-                if item.gear_type.startswith("INSTRUMENT") or item.gear_type == "AMPLIFIER"
-            ]
-            if relevant_owned_gear:
-                affected_gear = random.choice(relevant_owned_gear)
-                repair_cost = random.randint(5, 25) # Random repair cost
+            # For incidents, we check all relevant owned gear, not just those matching required_gear_types,
+            # as an amp might blow even if only an acoustic guitar was "required".
+            # However, to make it more specific to what was "used":
+            incident_candidate_gear = used_owned_gear_for_event # Focus incident on gear identified as used
+            if not incident_candidate_gear: # Fallback if no specific used gear identified (e.g. acoustic event, player has amp)
+                incident_candidate_gear = [
+                    item for item in player.gear_inventory
+                    if (item.gear_type.startswith("INSTRUMENT") or item.gear_type == "AMPLIFIER") and not item.is_broken
+                ]
 
-                incident_description = "had a minor issue" # Default fallback
+            if incident_candidate_gear: # Check if list is not empty
+                affected_gear = random.choice(incident_candidate_gear)
+                base_repair_cost = random.randint(5, 25)
+                incident_resolved_by_spare = False
+                final_incident_cost = base_repair_cost
+
+                incident_description = "had a minor issue"
                 gt = affected_gear.gear_type
-                if gt == "AMPLIFIER":
-                    incident_description = "a tube blew"
-                elif gt == "INSTRUMENT_ACOUSTIC":
+
+                is_stringed_instrument = gt in ["INSTRUMENT_ACOUSTIC", "INSTRUMENT_ELECTRIC", "INSTRUMENT_BASS"]
+
+                if is_stringed_instrument:
                     incident_description = "a string snapped"
-                elif gt == "INSTRUMENT_ELECTRIC" or gt == "INSTRUMENT_BASS":
-                    incident_description = "a cable shorted out or a knob came loose"
-                elif gt == "INSTRUMENT_DRUMS":
-                    incident_description = "a drum skin split or a cymbal cracked"
+                    # Check for spare strings
+                    spare_strings_item = None
+                    for item_in_inventory in player.gear_inventory:
+                        if item_in_inventory.item_id == "guitar_strings_basic" and not item_in_inventory.is_broken:
+                            spare_strings_item = item_in_inventory
+                            break
 
-                print(f"\nOh no! During the performance, your {affected_gear.name} had an issue ({incident_description})!")
-                print(f"Immediate repair/replacement cost: ${repair_cost}.")
+                    if spare_strings_item:
+                        # Consume one set of spare strings (conceptual durability reduction or actual removal if stackable)
+                        # For now, assume strings are single use and remove. If they had durability, call take_damage.
+                        player.remove_gear(spare_strings_item) # Assumes remove_gear can take an instance
+                        print(f"\nOh no! During the performance, your {affected_gear.name} {incident_description}!")
+                        print("Luckily, you had spare strings and quickly replaced it. The show goes on!")
+                        # No monetary cost for the string itself if replaced by spare.
+                        # Could add a small time penalty or minor temporary performance hit in future.
+                        incident_resolved_by_spare = True
+                        final_incident_cost = 0 # No cost if spare used
+                    else:
+                        # No spare strings, incident has full effect + cost
+                        print(f"\nOh no! During the performance, your {affected_gear.name} {incident_description}!")
+                        print("You don't have any spare strings! You try to play around it, costing you some focus and potentially money for a rush replacement.")
+                        # Monetary cost still applies as "emergency replacement/penalty"
 
-                if player.money >= repair_cost:
-                    player.money -= repair_cost
-                    print(f"${repair_cost} deducted for repairs.")
-                else:
-                    print(f"You couldn't afford the immediate ${repair_cost} repair. This might cause issues later!")
+                # Apply cost only if not resolved by spare, or for non-string incidents
+                if not incident_resolved_by_spare:
+                    if gt == "AMPLIFIER":
+                        incident_description = "a tube blew"
+                    elif gt == "INSTRUMENT_DRUMS":
+                        incident_description = "a drum skin split or a cymbal cracked"
+                    elif not is_stringed_instrument: # For other instruments not yet detailed
+                        incident_description = "had a component fail"
+                    # If it was a stringed instrument and no spare, description is already "a string snapped"
+
+                    print(f"\nOh no! During the performance, your {affected_gear.name} had an issue ({incident_description})!")
+                    print(f"Immediate repair/replacement cost: ${final_incident_cost}.")
+
+                    if player.money >= final_incident_cost:
+                        player.money -= final_incident_cost
+                        print(f"${final_incident_cost} deducted for repairs/replacement.")
+                    else:
+                        print(f"You couldn't afford the immediate ${final_incident_cost} cost. This might cause issues later!")
                     # Player money doesn't go negative for this simple incident for now.
                     # Or: player.money -= repair_cost (allowing negative)
                     # Or: Store as debt (more complex)

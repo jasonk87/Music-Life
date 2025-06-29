@@ -5,28 +5,28 @@ GEAR_CATALOG = {
         item_id="worn_acoustic_guitar",
         name="Worn Acoustic Guitar",
         description="An old, battered acoustic guitar. It has seen better days but still makes a sound. Good for practice or very humble beginnings.",
-        gear_type="INSTRUMENT_ACOUSTIC", # More specific
-        size=5, # Standard guitar size
+        gear_type="INSTRUMENT_ACOUSTIC",
+        size=5,
         cost=50,
-        properties={"acoustic": True, "quality": 0.3} # Quality 0-1 scale
+        properties={"acoustic": True, "quality": 0.3, "genre_suitability": ["Folk", "Pop", "Blues", "Indie"]}
     ),
     "basic_electric_guitar": GearItem(
         item_id="basic_electric_guitar",
         name="Basic Electric Guitar",
         description="A simple but functional Stratocaster-style electric guitar. Needs an amp.",
-        gear_type="INSTRUMENT_ELECTRIC", # More specific
+        gear_type="INSTRUMENT_ELECTRIC",
         size=5,
         cost=150,
-        properties={"electric": True, "quality": 0.5}
+        properties={"electric": True, "quality": 0.5, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic"]}
     ),
-    "practice_amp_small": GearItem(
+    "practice_amp_small": GearItem( # Amps don't have genre suitability directly, but instruments playing through them do.
         item_id="practice_amp_small",
         name="Small Practice Amp (5W)",
         description="A small, low-wattage amplifier. Good for bedroom practice, not loud enough for gigs with a drummer.",
         gear_type="AMPLIFIER",
-        size=4, # Smaller than a gig amp
+        size=4,
         cost=100,
-        properties={"wattage": 5, "quality": 0.4}
+        properties={"wattage": 5, "quality": 0.4} # genre_suitability will be empty list by default from GearItem
     ),
     "guitar_strings_basic": GearItem(
         item_id="guitar_strings_basic",
@@ -50,19 +50,19 @@ GEAR_CATALOG = {
         item_id="pro_electric_guitar",
         name="Professional Electric Guitar",
         description="A high-quality electric guitar, suitable for large stages.",
-        gear_type="INSTRUMENT_ELECTRIC", # More specific type
+        gear_type="INSTRUMENT_ELECTRIC",
         size=5,
-        cost=1200, # Not buyable yet, but for reference
-        properties={"electric": True, "quality": 0.9}
+        cost=1200,
+        properties={"electric": True, "quality": 0.9, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic", "Metal"]}
     ),
     "pro_bass_guitar": GearItem(
         item_id="pro_bass_guitar",
         name="Professional Bass Guitar",
         description="A top-tier bass guitar for a solid low end.",
-        gear_type="INSTRUMENT_BASS", # New type
-        size=6, # Basses can be a bit bigger
+        gear_type="INSTRUMENT_BASS",
+        size=6,
         cost=1000,
-        properties={"electric": True, "quality": 0.85}
+        properties={"electric": True, "quality": 0.85, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic", "Metal", "Funk"]}
     ),
     "pro_amp_large": GearItem(
         item_id="pro_amp_large",
@@ -71,16 +71,16 @@ GEAR_CATALOG = {
         gear_type="AMPLIFIER",
         size=10,
         cost=800,
-        properties={"wattage": 100, "quality": 0.9}
+        properties={"wattage": 100, "quality": 0.9} # No direct genre_suitability for amps
     ),
     "pro_drum_kit": GearItem(
         item_id="pro_drum_kit",
         name="Professional Drum Kit",
         description="A full 5-piece drum kit with cymbals.",
-        gear_type="INSTRUMENT_DRUMS", # New type
-        size=20, # Very large, player likely won't carry this
+        gear_type="INSTRUMENT_DRUMS",
+        size=20,
         cost=1500,
-        properties={"quality": 0.8}
+        properties={"quality": 0.8, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Metal", "Funk", "Electronic"]} # Drums are versatile
     ),
     # Merchandise Items
     "merch_tshirt_basic": GearItem(

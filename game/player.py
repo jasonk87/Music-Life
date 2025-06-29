@@ -95,6 +95,41 @@ class Player:
         self.skills[skill_name] += hours * 0.1
         print(f"{self.name} practiced {skill_name} for {hours} hours. Skill level is now {self.skills[skill_name]:.1f}.")
 
+        # Gear wear from practice
+        # Determine relevant gear type for the skill
+        instrument_type_for_skill = None
+        if skill_name == "guitar": # This could map to multiple types if player has options
+            # Prefer electric if owned and not broken, else acoustic for "guitar" skill.
+            # This simplistic check means any owned non-broken guitar might wear.
+            # A more complex system would have player "equip" an item for practice.
+            if any(g.gear_type == "INSTRUMENT_ELECTRIC" and not g.is_broken for g in self.gear_inventory):
+                instrument_type_for_skill = "INSTRUMENT_ELECTRIC"
+            elif any(g.gear_type == "INSTRUMENT_ACOUSTIC" and not g.is_broken for g in self.gear_inventory):
+                instrument_type_for_skill = "INSTRUMENT_ACOUSTIC"
+        elif skill_name == "bass":
+            instrument_type_for_skill = "INSTRUMENT_BASS"
+        elif skill_name == "drums":
+            instrument_type_for_skill = "INSTRUMENT_DRUMS"
+        # Add other instrument skills here (piano, etc.)
+
+        if instrument_type_for_skill:
+            practiced_instrument = None
+            for item in self.gear_inventory:
+                if item.gear_type == instrument_type_for_skill and not item.is_broken:
+                    practiced_instrument = item
+                    break # Use the first available, non-broken instrument of the type
+
+            if practiced_instrument:
+                damage = hours * 1 # 1 durability damage per hour of practice
+                practiced_instrument.take_damage(damage)
+                print(f"Your {practiced_instrument.name} took some wear from practice. Durability: {practiced_instrument.durability}/100.")
+                if practiced_instrument.is_broken:
+                    print(f"Your {practiced_instrument.name} broke from intense practice!")
+            else:
+                print(f"You need a working {instrument_type_for_skill.lower().replace('_', ' ')} to practice {skill_name} effectively.")
+                # Consider reducing skill gain effectiveness here in the future
+
+
     def travel(self, destination_location, travel_time): # This is for inter-city travel
         print(f"{self.name} is travelling from {self.current_location.name if self.current_location else 'Unknown'} to {destination_location.name}...")
         # Simulate time passing

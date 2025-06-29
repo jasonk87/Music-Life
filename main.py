@@ -89,7 +89,7 @@ def setup_world():
         name="Old Timer's Music Shop",
         description="Sells basic gear and instruments.",
         category="SHOP_MUSIC",
-        interaction_options=["Browse items for sale", "Talk to Old Timer Joe"], # Updated interaction
+        interaction_options=["Browse items for sale", "Repair Gear", "Talk to Old Timer Joe"],
         parent_location_id=home_town.name
     )
     music_shop_home.shop_inventory_item_ids = [
@@ -144,7 +144,7 @@ def setup_world():
         name="Pro Audio Central",
         description="High-end instruments and recording gear.",
         category="SHOP_MUSIC",
-        interaction_options=["Browse items for sale", "Talk to Sales Rep"], # Updated interaction
+        interaction_options=["Browse items for sale", "Repair Gear", "Talk to Sales Rep"],
         parent_location_id=city_center.name
     )
     pro_music_store.shop_inventory_item_ids = [
@@ -1160,7 +1160,14 @@ def main():
                             studio = player.current_poi
                             print(f"Studio Quality: {studio.studio_quality:.2f}/1.0, Hourly Rate: ${studio.hourly_rate}")
 
-                            if not player.songs_written:
+                            # Check if player has any non-broken instrument to record with
+                            has_working_instrument = any(
+                                item.gear_type.startswith("INSTRUMENT") and not item.is_broken
+                                for item in player.gear_inventory
+                            )
+                            if not has_working_instrument and not (studio.can_rent_gear and any(GEAR_CATALOG.get(gid).gear_type.startswith("INSTRUMENT") for gid in studio.available_rental_gear_ids)):
+                                print("You don't have a working instrument, and this studio doesn't seem to rent any. You can't record right now.")
+                            elif not player.songs_written:
                                 print("You have no original songs written to record!")
                             else:
                                 unrecorded_songs = [song for song in player.songs_written if not song.is_recorded]
@@ -1191,22 +1198,81 @@ def main():
                                                         base_rq = song_to_record.song_quality * 0.5
                                                         # Assuming primary skill for recording is the highest instrument skill or vocals if higher
                                                         # This is a simplification. A better system would know song instrumentation.
-                                                        primary_perf_skill = max(player.skills.get("guitar",0), player.skills.get("vocals",0), player.skills.get("drums",0), player.skills.get("bass",0), player.skills.get("piano",0), 0)
-                                                        skill_factor = (primary_perf_skill / 20.0) * 0.25 # Max 0.25 from performance skill
-                                                        studio_factor = studio.studio_quality * 0.3 # Max 0.3 from studio
-                                                        time_factor = min(0.20, (hours_booked / 8.0) * 0.20) # Max 0.2 for 8+ hours
+                                                        primary_perf_skill = max(player.skills.get("guitar",0), player.skills.get("vocals",0), player.skills.get("drums",0), player.skills.get("bass",0), player.skills.get("piano",0), 0) # TODO: Determine primary skill based on song/instrument more accurately
+
+                                                        # Determine primary instrument used for genre matching
+                                                        # This is still simplified; assumes first owned non-broken instrument is "primary"
+                                                        primary_instrument_obj = None
+                                                        for item in player.gear_inventory:
+                                                            if item.gear_type.startswith("INSTRUMENT") and not item.is_broken:
+                                                                primary_instrument_obj = item
+                                                                break
+
+                                                        genre_match_bonus = 0.0
+                                                        if primary_instrument_obj and song_to_record.genre:
+                                                            instrument_genres = primary_instrument_obj.get_property("genre_suitability") # Default is []
+                                                            if song_to_record.genre in instrument_genres:
+                                                                genre_match_bonus = 0.05 # Small bonus for good match
+                                                                print(f"Note: Your {primary_instrument_obj.name} is well-suited for {song_to_record.genre} music!")
+                                                            else:
+                                                                # Check for clear mismatch (e.g. acoustic for rock, if not explicitly suitable)
+                                                                # This is a rough check. A more defined mismatch list per instrument could be used.
+                                                                if song_to_record.genre in ["Rock", "Metal"] and primary_instrument_obj.gear_type == "INSTRUMENT_ACOUSTIC":
+                                                                    genre_match_bonus = -0.10 # Penalty for clear mismatch
+                                                                    print(f"Warning: Your {primary_instrument_obj.name} might not be the best fit for {song_to_record.genre} music.")
+                                                                elif song_to_record.genre in ["Folk", "Blues"] and primary_instrument_obj.gear_type == "INSTRUMENT_ELECTRIC" and "Blues" not in instrument_genres and "Folk" not in instrument_genres : # Electric for folk/blues can be fine, but if not listed as suitable, slight penalty
+                                                                    genre_match_bonus = -0.03
+                                                                    print(f"Note: Your {primary_instrument_obj.name} choice for {song_to_record.genre} is a bit unconventional.")
+
+
+                                                        skill_factor = (primary_perf_skill / 20.0) * 0.25
+                                                        studio_factor = studio.studio_quality * 0.3
+                                                        time_factor = min(0.20, (hours_booked / 8.0) * 0.20)
                                                         energy_factor = -0.15 if player.energy < 30 else (0.05 if player.energy > 80 else 0)
                                                         stress_factor = -0.15 if player.stress > 70 else (0.05 if player.stress < 20 else 0)
                                                         random_element = random.uniform(-0.05, 0.05)
 
-                                                        final_recording_quality = min(1.0, max(0.05, base_rq + skill_factor + studio_factor + time_factor + energy_factor + stress_factor + random_element))
+                                                        final_recording_quality = min(1.0, max(0.05, base_rq + skill_factor + studio_factor + time_factor + energy_factor + stress_factor + random_element + genre_match_bonus))
 
                                                         song_to_record.mark_as_recorded(final_recording_quality)
+
+                                                        # Apply gear wear to primary instrument used (simplification)
+                                                        # A more complex system would identify all instruments/amps used.
+                                                        primary_instrument_for_song = None
+                                                        # Try to find an instrument that matches the song's genre suitability if possible,
+                                                        # or just the first available instrument.
+                                                        # This logic for "what was used" can be very complex.
+                                                        # Simple approach: wear the best quality, non-broken instrument player owns.
+                                                        # Or, if song has a genre, find best suited.
+                                                        # For now, let's just pick first non-broken instrument.
+                                                        # This is a placeholder for better "equipped/used gear" tracking.
+                                                        for item in player.gear_inventory:
+                                                            if item.gear_type.startswith("INSTRUMENT") and not item.is_broken:
+                                                                primary_instrument_for_song = item
+                                                                break
+                                                        if primary_instrument_for_song:
+                                                            damage = hours_booked * 2 # e.g., 2 durability per hour recording
+                                                            primary_instrument_for_song.take_damage(damage)
+                                                            print(f"Your {primary_instrument_for_song.name} got some use during recording. Durability: {primary_instrument_for_song.durability}/100.")
+                                                            if primary_instrument_for_song.is_broken:
+                                                                print(f"Oh dear, your {primary_instrument_for_song.name} broke during the session!")
+
+                                                        # Wear for an amplifier if owned and electric instruments were likely used
+                                                        if "INSTRUMENT_ELECTRIC" in [g.gear_type for g in player.gear_inventory if not g.is_broken] or \
+                                                           "INSTRUMENT_BASS" in [g.gear_type for g in player.gear_inventory if not g.is_broken]:
+                                                            owned_amps = [g for g in player.gear_inventory if g.gear_type == "AMPLIFIER" and not g.is_broken]
+                                                            if owned_amps:
+                                                                amp_to_wear = random.choice(owned_amps) # Or first one
+                                                                amp_damage = hours_booked * 1 # Amps wear slower
+                                                                amp_to_wear.take_damage(amp_damage)
+                                                                print(f"Your {amp_to_wear.name} was used for the recording. Durability: {amp_to_wear.durability}/100.")
+                                                                if amp_to_wear.is_broken:
+                                                                    print(f"Your {amp_to_wear.name} gave out during the session!")
 
                                                         advance_game_time(minutes=hours_booked * 60)
                                                         update_npc_locations(current_game_time)
 
-                                                        player.energy = max(0, player.energy - (hours_booked * 7)) # Recording is tiring
+                                                        player.energy = max(0, player.energy - (hours_booked * 7))
                                                         player.stress = min(100, player.stress + (hours_booked * 4)) # And stressful
 
                                                         print(f"\nPaid ${total_booking_cost}. You spent {hours_booked} hours recording '{song_to_record.title}'.")
@@ -1383,6 +1449,51 @@ def main():
                             except ValueError:
                                 print("Invalid number of hours entered.")
                         # --- END PRACTICE GUITAR AT HOME INTERACTION ---
+
+                        # --- REPAIR GEAR LOGIC ---
+                        elif player.current_poi.category == "SHOP_MUSIC" and chosen_interaction_text == "Repair Gear":
+                            print("\n--- Repair Gear ---")
+                            repairable_items = [
+                                item for item in player.gear_inventory
+                                if item.is_broken or (hasattr(item, 'durability') and item.durability < 80)
+                            ] # Threshold of 80, or broken
+
+                            if not repairable_items:
+                                print("None of your gear seems to need repair right now.")
+                            else:
+                                print("Which item would you like to repair?")
+                                item_display_list = [
+                                    f"{item.name} (Dur: {item.durability}/100){' [BROKEN]' if item.is_broken else ''}"
+                                    for item in repairable_items
+                                ]
+                                item_choice_key = present_choices(item_display_list, "Choose item to repair: (0 to cancel)")
+
+                                if item_choice_key and item_choice_key != "0":
+                                    selected_item_to_repair = repairable_items[int(item_choice_key) - 1]
+
+                                    # Calculate repair cost: 30% of item's original cost to fully repair from 0, scaled by damage, plus $5 base. Min $5.
+                                    damage_percentage = (100 - selected_item_to_repair.durability) / 100.0
+                                    repair_cost = int(damage_percentage * selected_item_to_repair.cost * 0.30) + 5
+                                    repair_cost = max(5, repair_cost) # Minimum repair cost
+
+                                    print(f"Repairing {selected_item_to_repair.name} (from Dur: {selected_item_to_repair.durability}) will cost ${repair_cost}.")
+                                    if player.money >= repair_cost:
+                                        confirm_repair = input("Confirm repair? (y/n) > ").lower()
+                                        if confirm_repair == 'y':
+                                            player.money -= repair_cost
+                                            selected_item_to_repair.repair() # This sets durability to 100 and is_broken to False
+
+                                            repair_time_minutes = 30 + int(damage_percentage * 60) # 30 mins base + up to 1hr for full repair
+                                            advance_game_time(minutes=repair_time_minutes)
+                                            update_npc_locations(current_game_time)
+                                            process_time_based_player_needs(player, repair_time_minutes)
+
+                                            print(f"{selected_item_to_repair.name} has been repaired. Money: ${player.money}")
+                                        else:
+                                            print("Repair cancelled.")
+                                    else:
+                                        print(f"Not enough money to repair. Need ${repair_cost}.")
+                        # --- END REPAIR GEAR LOGIC ---
                         else:
                              print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
 

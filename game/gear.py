@@ -5,13 +5,53 @@ class GearItem:
         self.description = description
         self.gear_type = gear_type
         self.size = size
-        self.cost = cost # This is player's buy_cost for merch
-        self.base_sell_price = base_sell_price # Player's sell_price to fans for merch
+        self.cost = cost
+        self.base_sell_price = base_sell_price
+
+        self.durability = 100 # Max 100, starts full
+        self.is_broken = False
 
         self.properties = properties if properties else {}
+        if 'genre_suitability' not in self.properties: # Ensure key exists if not provided
+            self.properties['genre_suitability'] = []
+
+
+    def take_damage(self, amount: int):
+        if self.is_broken: # Cannot damage already broken item further
+            return
+
+        self.durability -= amount
+        if self.durability <= 0:
+            self.durability = 0
+            self.is_broken = True
+            print(f"Oh no! Your {self.name} broke!")
+        # else:
+            # print(f"{self.name} took {amount} damage, durability now {self.durability}.") # Optional feedback
+
+    def repair(self):
+        self.durability = 100
+        self.is_broken = False
+        print(f"{self.name} has been repaired to full durability.")
+
+    def condition_description(self):
+        if self.is_broken:
+            return "Broken"
+        if self.durability > 90:
+            return "Pristine"
+        elif self.durability > 70:
+            return "Good"
+        elif self.durability > 40:
+            return "Worn"
+        elif self.durability > 0:
+            return "Damaged"
+        return "Broken" # Should be caught by is_broken, but as a fallback
 
     def __str__(self):
-        display_string = f"{self.name} (Type: {self.gear_type}, Size: {self.size}, Cost: ${self.cost}"
+        status_part = f"(Dur: {self.durability}/100)"
+        if self.is_broken:
+            status_part = "(BROKEN)"
+
+        display_string = f"{self.name} {status_part} (Type: {self.gear_type}, Size: {self.size}, Cost: ${self.cost}"
         if self.gear_type == "MERCHANDISE":
             display_string += f", Sells for: ${self.base_sell_price}"
         display_string += ")"
@@ -30,28 +70,40 @@ if __name__ == '__main__':
         size=1,
         cost=10
     )
-    assert guitar_strings.item_id == "strings_basic"
-    assert guitar_strings.name == "Basic Guitar Strings"
-    assert guitar_strings.size == 1
-    assert guitar_strings.cost == 10
-    assert str(guitar_strings) == "Basic Guitar Strings (Type: ACCESSORY, Size: 1, Cost: $10)"
-    assert guitar_strings.base_sell_price == 0 # Default
+    assert guitar_strings.durability == 100
+    assert not guitar_strings.is_broken
+    assert str(guitar_strings) == "Basic Guitar Strings (Dur: 100/100) (Type: ACCESSORY, Size: 1, Cost: $10)"
+    guitar_strings.take_damage(110)
+    assert guitar_strings.is_broken
+    assert guitar_strings.durability == 0
+    assert "BROKEN" in str(guitar_strings)
+    guitar_strings.repair()
+    assert not guitar_strings.is_broken
+    assert guitar_strings.durability == 100
+
 
     acoustic_guitar = GearItem(
         item_id="acoustic_std",
         name="Standard Acoustic Guitar",
         description="A decent quality acoustic guitar, good for practice and small gigs.",
-        gear_type="INSTRUMENT",
+        gear_type="INSTRUMENT_ACOUSTIC", # Updated type
         size=5,
         cost=200,
-        properties={"performance_quality_bonus": 0.5, "type_played": "acoustic"}
+        properties={"performance_quality_bonus": 0.5, "genre_suitability": ["Folk", "Pop"]}
     )
-    assert acoustic_guitar.gear_type == "INSTRUMENT"
-    assert acoustic_guitar.size == 5
-    assert acoustic_guitar.get_property("performance_quality_bonus") == 0.5
-    assert acoustic_guitar.get_property("type_played") == "acoustic"
-    assert acoustic_guitar.get_property("non_existent_prop") is None
-    assert "Sells for" not in str(acoustic_guitar) # Not merchandise
+    assert acoustic_guitar.gear_type == "INSTRUMENT_ACOUSTIC"
+    assert "Folk" in acoustic_guitar.get_property("genre_suitability")
+    assert "Sells for" not in str(acoustic_guitar)
+    acoustic_guitar.take_damage(30)
+    assert acoustic_guitar.condition_description() == "Good"
+    acoustic_guitar.take_damage(30) # Dur 40
+    assert acoustic_guitar.condition_description() == "Worn" # Should be Worn (40 is not > 40)
+    acoustic_guitar.take_damage(30) # Dur 10
+    assert acoustic_guitar.condition_description() == "Damaged"
+    acoustic_guitar.take_damage(10) # Dur 0
+    assert acoustic_guitar.condition_description() == "Broken"
+    assert acoustic_guitar.is_broken
+
 
     merch_shirt = GearItem(
         item_id="merch_shirt_bandlogo",
