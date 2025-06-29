@@ -1782,9 +1782,16 @@ def main():
                             update_npc_locations(current_game_time)
                             player.check_for_manager_unlock()
 
-                            post_gig_event_triggered = check_for_post_gig_random_event(player, chosen_event.event_type)
-                            if post_gig_event_triggered:
-                                player.check_for_manager_unlock() # Manager check again if fame changed
+                            # Updated post-gig event check
+                            venue_name_for_event = chosen_event.location.name if hasattr(chosen_event.location, 'name') else "the venue"
+                            post_gig_event_outcome = check_for_post_gig_random_event(player, chosen_event.event_type, venue_name=venue_name_for_event)
+                            if post_gig_event_outcome.get("event_triggered"):
+                                minutes_passed_by_event = post_gig_event_outcome.get("minutes_passed", 15) # Default time for post-gig event
+                                if minutes_passed_by_event > 0:
+                                    advance_game_time(minutes=minutes_passed_by_event)
+                                    update_npc_locations(current_game_time)
+                                    process_time_based_player_needs(player, minutes_passed_by_event)
+                                player.check_for_manager_unlock() # Fame might change
 
                             # Relationship/Memory update with Venue Owner
                             venue_owner_npc_id = getattr(chosen_event.location, 'owner_npc_id', None)
@@ -1977,11 +1984,19 @@ def main():
         # This means the general random event check does not need to call it again.
 
         if choice in ["1", "2", "3", "4", "6", "7", "00"]: # Check which choices can trigger random world events
-            if not ("LLM Error" in locals().get('npc_response', '') or "An unexpected error occurred" in locals().get('npc_response', '')):
-                # Random events themselves don't usually pass large chunks of time that would trigger needs updates by default.
-                # If a random event *does* pass significant time, it should handle its own needs update.
-                event_triggered = check_for_random_event(player, chance=0.3)
-                if event_triggered:
+            # Ensure npc_response exists or provide a default to prevent error if '9' (talk) was not the last choice
+            npc_response_check = locals().get('npc_response', '') # Default to empty string
+            if not ("LLM Error" in npc_response_check or "An unexpected error occurred" in npc_response_check):
+
+                current_context_name = player.current_poi.name if player.current_poi else player.current_location.name
+                event_outcome = check_for_random_event(player, current_poi_name=current_context_name, chance=0.2) # Reduced chance slightly
+
+                if event_outcome.get("event_triggered"):
+                    minutes_passed_by_event = event_outcome.get("minutes_passed", 15) # Default time for a general random event
+                    if minutes_passed_by_event > 0:
+                        advance_game_time(minutes=minutes_passed_by_event)
+                        update_npc_locations(current_game_time)
+                        process_time_based_player_needs(player, minutes_passed_by_event)
                     player.check_for_manager_unlock() # Fame might change from event
 
 
