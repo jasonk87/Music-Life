@@ -911,16 +911,97 @@ def main():
             print(f"\n--- Exploring {player.current_poi.name if player.current_poi else player.current_location.name} ---")
             if player.current_poi:
                 print(f"Description: {player.current_poi.description}")
-                if player.current_poi.interaction_options:
-                    # Let player choose an interaction from the POI's list
+
+                current_poi_interactions = list(player.current_poi.interaction_options) # Make a mutable copy
+
+                # Dynamically add "Pre-Gig Autograph Signing" if applicable
+                # This needs to be before present_choices
+                pre_gig_autograph_interaction_text = "Hold Pre-Show Autograph Signing (1 hour)"
+                can_do_pre_gig_signing = False
+
+                if isinstance(player.current_poi, Venue):
+                    venue = player.current_poi
+                    # Check for prepared gigs at this venue
+                    for event in venue.events_hosted:
+                        if event.is_active and (event.are_preparations_complete() or not event.preparation_tasks_required):
+                            # Check if player can perform this gig (basic skill/gear check might be too much here, focus on prep)
+                            # For now, just being prepared is enough.
+                            # Check time window (e.g., 4 PM to 7 PM)
+                            if 16 <= current_game_time.hour <= 19: # 4 PM to 7:59 PM
+                                can_do_pre_gig_signing = True
+                                break
+                    if can_do_pre_gig_signing:
+                        if pre_gig_autograph_interaction_text not in current_poi_interactions:
+                            current_poi_interactions.append(pre_gig_autograph_interaction_text)
+
+                if current_poi_interactions: # Use the potentially modified list
                     interaction_choice_key = present_choices(
-                        player.current_poi.interaction_options,
+                        current_poi_interactions,
                         title=f"Actions at {player.current_poi.name}:"
                     )
 
                     if interaction_choice_key:
-                        chosen_interaction_text = player.current_poi.interaction_options[int(interaction_choice_key) -1]
+                        # chosen_interaction_text needs to be from current_poi_interactions list
+                        chosen_interaction_text = current_poi_interactions[int(interaction_choice_key) -1]
                         print(f"You chose to: {chosen_interaction_text}")
+
+                        # --- PRE-GIG AUTOGRAPH SESSION LOGIC ---
+                        if chosen_interaction_text == pre_gig_autograph_interaction_text:
+                            from game.interactions import handle_autograph_interaction # Import here
+                            print("\nYou decide to hold a pre-show autograph signing session for about an hour.")
+
+                            num_fans_to_meet = random.randint(2, 4)
+                            total_minutes_passed_session = 0
+                            total_fame_gained_session = 0
+                            # Minor temporary boosts for the upcoming gig could be tracked here
+                            # temp_stage_presence_boost = 0
+
+                            for i in range(num_fans_to_meet):
+                                if total_minutes_passed_session >= 55: # Stop if approaching an hour
+                                    print("Your scheduled hour for autographs is nearly up.")
+                                    break
+
+                                print(f"\nFan #{i+1} approaches...")
+                                fan_name = f"Fan #{i+1}" # Could have a list of random fan names
+                                fan_personality = "adoring_fan" # Or a specific "signing_attendee_fan"
+                                temp_fan = NPC(npc_id=f"pre_gig_fan_{i+1}", name=fan_name, personality_key=fan_personality)
+
+                                # Simple fan intro line
+                                fan_intro_lines = [
+                                    f"Oh wow, {player.name}! Can you sign my CD?",
+                                    "I'm so excited for your show tonight!",
+                                    "I've been a fan since I heard your demo!"
+                                ]
+                                print(f"{temp_fan.name}: \"{random.choice(fan_intro_lines)}\"")
+
+                                outcome = handle_autograph_interaction(player, temp_fan, interaction_context="pre_gig_signing")
+                                total_minutes_passed_session += outcome.get("minutes_passed", 0)
+                                total_fame_gained_session += outcome.get("fame_gained",0)
+                                # Accumulate other effects if needed (stress, comfort changes are directly on player)
+
+                                if total_minutes_passed_session >= 60: # Hard cap at 60-ish minutes
+                                     print("That's all the time you had for autographs before the show!")
+                                     break
+
+                            print("\n--- Autograph Session Summary ---")
+                            print(f"You met {i+1 if num_fans_to_meet > 0 else 0} fan(s).")
+                            if total_fame_gained_session > 0:
+                                print(f"Fame increased by an additional {total_fame_gained_session} from the session.")
+                            # player.fame += total_fame_gained_session # Already handled by handle_autograph_interaction
+
+                            # Apply session-wide effects (e.g. small stress reduction, small comfort boost)
+                            player.stress = max(0, player.stress - (num_fans_to_meet * 1)) # Small stress relief per fan met
+                            player.comfort = min(100, player.comfort + (num_fans_to_meet * 1))
+                            print("You're feeling good after connecting with your fans!")
+
+                            # Ensure total time doesn't exceed a reasonable amount, e.g. 75 mins max for the whole interaction
+                            total_minutes_passed_session = min(total_minutes_passed_session, 75)
+                            if total_minutes_passed_session == 0 and num_fans_to_meet > 0 : total_minutes_passed_session = 15 # min time if interacted
+
+                            if total_minutes_passed_session > 0:
+                                advance_game_time(minutes=total_minutes_passed_session)
+                                update_npc_locations(current_game_time)
+                                process_time_based_player_needs(player, total_minutes_passed_session)
 
                         # --- SHOPPING LOGIC ---
                         if player.current_poi.category == "SHOP_MUSIC" and chosen_interaction_text == "Browse items for sale":
