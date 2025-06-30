@@ -1,7 +1,8 @@
 class Player:
     def __init__(self, name):
         self.name = name
-from game.gear import GearItem # Assuming GearItem is in game/gear.py
+from game.gear import GearItem
+from game.player_schedule import PlayerSchedule # Import PlayerSchedule
 
 class Player:
     def __init__(self, name):
@@ -28,7 +29,7 @@ class Player:
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
         self.has_pr_manager = False
-        self.pr_manager_unlock_fame_threshold = 60 # PR manager unlocks earlier
+        self.pr_manager_fame_requirement_to_hire = 60 # Renamed for clarity with active hiring
 
         self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
 
@@ -44,6 +45,8 @@ class Player:
             "interview_city_chronicle": 75
             # Add other opportunities like "local_radio_spot": 100 etc.
         }
+
+        self.schedule = PlayerSchedule() # Initialize schedule
 
 
     def get_current_gear_capacity(self, travel_mode=None):
@@ -235,13 +238,22 @@ class Player:
         status += f"Has Bike: {'Yes' if self.has_bike else 'No'}\n"
 
         if self.has_manager:
-            status += "Manager: Yes"
+            status += "\nArtist Manager: Yes"
         else:
-            status += f"Manager: No (Unlock at {self.manager_unlocked_fame_threshold} fame)"
+            status += f"\nArtist Manager: No (Unlock at {self.manager_unlocked_fame_threshold} fame)"
+
+        if self.has_pr_manager:
+            status += "\nPR Manager: Yes"
+        else:
+            status += f"\nPR Manager: No (Requires ~{self.pr_manager_fame_requirement_to_hire} Fame to hire)" # Corrected attribute
+
+        # Could add a count of upcoming scheduled items if desired
+        # status += f"\nUpcoming Scheduled Items: {len(self.schedule.get_upcoming_events(current_game_time_needs_to_be_passed_or_imported))}"
         return status
 
 if __name__ == '__main__':
     from game.gear import GearItem # Ensure GearItem is available for tests
+    from game.game_time import GameTime # For schedule testing
     # Basic tests for Player class
     p = Player("Test Dummy")
     assert p.name == "Test Dummy"
@@ -360,5 +372,20 @@ if __name__ == '__main__':
 
     assert not p.remove_gear("non_existent_id")
 
+    # Test PlayerSchedule initialization
+    assert isinstance(p.schedule, PlayerSchedule)
+    assert len(p.schedule.scheduled_items) == 0
+    # Add a test event to schedule
+    test_start_time = GameTime(2024, 1, 1, 10, 0)
+    test_end_time = GameTime(2024, 1, 1, 12, 0)
+    p.schedule.add_event(test_start_time, test_end_time, "Test Event", "Test")
+    assert len(p.schedule.scheduled_items) == 1
+    assert p.schedule.scheduled_items[0].description == "Test Event"
+    print("\nPlayer Schedule Test:")
+    for item in p.schedule.scheduled_items:
+        print(item)
+
+
     print(p) # Check __str__ output
+    assert "PR Manager: No" in str(p) # Verify new __str__ components
     print("Player class basic tests passed.")

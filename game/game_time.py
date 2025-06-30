@@ -36,6 +36,42 @@ class GameTime:
     def __str__(self):
         return f"Time: {self.hour:02d}:{self.minute:02d}, Day: {self.day}, Month: {self.month}, Year: {self.year}"
 
+    def get_time_string_for_schedule(self): # For more compact schedule display
+        return f"{self.year}-{self.month:02d}-{self.day:02d} {self.hour:02d}:{self.minute:02d}"
+
+    def copy(self):
+        return GameTime(self.year, self.month, self.day, self.hour, self.minute)
+
+    def _to_tuple(self):
+        """Helper for comparisons."""
+        return (self.year, self.month, self.day, self.hour, self.minute)
+
+    def __eq__(self, other):
+        if not isinstance(other, GameTime):
+            return NotImplemented
+        return self._to_tuple() == other._to_tuple()
+
+    def __lt__(self, other):
+        if not isinstance(other, GameTime):
+            return NotImplemented
+        return self._to_tuple() < other._to_tuple()
+
+    def __le__(self, other):
+        if not isinstance(other, GameTime):
+            return NotImplemented
+        return self._to_tuple() <= other._to_tuple()
+
+    def __gt__(self, other):
+        if not isinstance(other, GameTime):
+            return NotImplemented
+        return self._to_tuple() > other._to_tuple()
+
+    def __ge__(self, other):
+        if not isinstance(other, GameTime):
+            return NotImplemented
+        return self._to_tuple() >= other._to_tuple()
+
+
 # Global game time instance
 current_game_time = GameTime()
 
