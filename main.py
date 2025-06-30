@@ -946,6 +946,111 @@ def talk_to_npc_instance(player, npc_instance):
                 npc_instance.add_memory(memory_detail)
                 print(f"(Relationship with {npc_instance.name} updated by {relationship_points})")
 
+# --- Phone Menu Handler ---
+def handle_phone_menu(player):
+    """Handles the player's phone interactions."""
+    while True:
+        clear_screen_ish()
+        print(f"\n--- Phone --- ({player.name}) ---")
+        print(f"--- {get_current_time_str()} ---")
+
+        phone_options = {
+            "1": "Check Schedule",
+            "2": "Check Local News", # Placeholder for now
+            "3": "Contacts",         # Placeholder for now
+            "0": "Put Phone Away (Back to Main Menu)"
+        }
+        choice = present_choices(phone_options, title="Phone Options:")
+
+        if choice == "1": # Check Schedule
+            # --- Start of Moved View Schedule Logic ---
+            print("\n--- View Schedule ---")
+            schedule_view_options = {
+                "1": "Today's Schedule",
+                "2": "Tomorrow's Schedule",
+                "3": "This Week's Schedule",
+                "0": "Back to Phone Menu" # Changed from "Back"
+            }
+            view_choice = present_choices(schedule_view_options, "Select schedule view:")
+
+            if view_choice == "0":
+                # print("Returning to phone menu.") # No message needed, just loop
+                pass # Loop will continue in phone menu
+            elif view_choice in ["1", "2", "3"]:
+                from game.game_time import GameTime # Ensure GameTime is available
+
+                target_time = current_game_time.copy()
+                if view_choice == "2": # Tomorrow
+                    target_time.advance_time(minutes=24*60) # Advance by one day
+
+                scheduled_items = []
+                if view_choice == "1" or view_choice == "2": # Today or Tomorrow
+                    scheduled_items = player.schedule.get_events_for_day(target_time.year, target_time.month, target_time.day)
+                    day_str = "Today" if view_choice == "1" else "Tomorrow"
+                    print(f"\n--- {day_str}'s Schedule ({target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
+                elif view_choice == "3": # This Week
+                    scheduled_items = player.schedule.get_events_for_week(target_time.year, target_time.month, target_time.day)
+                    print(f"\n--- This Week's Schedule (Starting {target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
+
+                if not scheduled_items:
+                    print("Nothing scheduled.")
+                else:
+                    for item in scheduled_items:
+                        start_display = f"{item.start_time.hour:02d}:{item.start_time.minute:02d}" if hasattr(item.start_time, 'hour') else str(item.start_time)
+                        end_display = f"{item.end_time.hour:02d}:{item.end_time.minute:02d}" if hasattr(item.end_time, 'hour') else str(item.end_time)
+                        date_prefix = ""
+                        if view_choice == "3":
+                             date_prefix = f"{item.start_time.year}-{item.start_time.month:02d}-{item.start_time.day:02d} "
+                        print(f"{date_prefix}{start_display} - {end_display}: {item.description} ({item.category})")
+
+                advance_game_time(minutes=10)
+                update_npc_locations(current_game_time)
+                process_time_based_player_needs(player, 10)
+            else:
+                print("Invalid schedule view choice.")
+            # --- End of Moved View Schedule Logic ---
+        elif choice == "2":
+            # Placeholder for "Check Local News"
+            print("\n--- Local News ---")
+            print("(Feature coming soon! For now, just a quick glance at headlines...)")
+            advance_game_time(minutes=5)
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 5)
+        elif choice == "3":
+            # Placeholder for "Contacts"
+            print("\n--- Contacts ---")
+            print("(Feature coming soon! Your contact list is currently empty.)")
+            advance_game_time(minutes=2)
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 2)
+        elif choice == "0":
+            print("Putting phone away.")
+            # Minimal time for just opening and closing phone if no action taken before this loop iteration
+            # This time might have already been spent if an option was chosen above.
+            # Consider if time should only be added if no sub-action was taken.
+            # For simplicity now, each action adds its own time. Closing adds minimal.
+            advance_game_time(minutes=1)
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 1)
+            break # Exit phone menu loop
+        else:
+            print("Invalid option on phone.")
+            advance_game_time(minutes=1) # Time for fumbling
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 1)
+
+        # Allow player to perform multiple actions on phone before putting away
+        # or automatically exit after one action. For now, let's loop.
+        # If an action was taken, prompt to continue or put away.
+        if choice in ["1","2","3"]:
+            if present_choices({"1": "Continue using phone", "0": "Put phone away"}, "Finished with that app.") == "0":
+                print("Putting phone away.")
+                advance_game_time(minutes=1)
+                update_npc_locations(current_game_time)
+                process_time_based_player_needs(player, 1)
+                break
+    print("--------------------") # Separator after phone menu closes
+
 
 def main():
     if not setup_world(): # Call new setup_world and check for success
@@ -1012,9 +1117,9 @@ def main():
             "4": "Explore current POI/Area", "5": "Check available gigs (at current City)",
             "6": "Prepare for a gig", "7": "Attempt a gig", "8": "View detailed player stats",
             "9": "Talk to someone (at current POI/Area)", "10": "Eat food from inventory",
-            "11": "View Schedule", # New option
+            "11": "Use Phone", # Replaces View Schedule
         }
-        if player.has_manager or player.has_pr_manager: main_menu_options["12"] = "Staff Actions" # Shifted
+        if player.has_manager or player.has_pr_manager: main_menu_options["12"] = "Staff Actions" # Remains shifted
         main_menu_options["00"] = "Advance time by 1 hour (debug)"; main_menu_options["0"] = "Quit game"
 
         choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
@@ -1512,57 +1617,10 @@ def main():
                 elif food_key=="0": print("Cancelled eating.")
             print("--------------------")
 
-        # Choice 11: View Schedule
+        # Choice 11: Use Phone
         elif choice == "11":
-            print("\n--- View Schedule ---")
-            schedule_view_options = {
-                "1": "Today's Schedule",
-                "2": "Tomorrow's Schedule",
-                "3": "This Week's Schedule",
-                "0": "Back"
-            }
-            view_choice = present_choices(schedule_view_options, "Select schedule view:")
-
-            if view_choice == "0":
-                print("Returning to main menu.")
-            elif view_choice in ["1", "2", "3"]:
-                from game.game_time import GameTime # For creating target dates
-
-                target_time = current_game_time.copy()
-                if view_choice == "2": # Tomorrow
-                    target_time.advance_time(minutes=24*60) # Advance by one day
-
-                scheduled_items = []
-                if view_choice == "1" or view_choice == "2": # Today or Tomorrow
-                    scheduled_items = player.schedule.get_events_for_day(target_time.year, target_time.month, target_time.day)
-                    day_str = "Today" if view_choice == "1" else "Tomorrow"
-                    print(f"\n--- {day_str}'s Schedule ({target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
-                elif view_choice == "3": # This Week
-                    scheduled_items = player.schedule.get_events_for_week(target_time.year, target_time.month, target_time.day)
-                    print(f"\n--- This Week's Schedule (Starting {target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
-
-                if not scheduled_items:
-                    print("Nothing scheduled.")
-                else:
-                    for item in scheduled_items:
-                        # Ensure start_time and end_time are GameTime objects
-                        start_display = f"{item.start_time.hour:02d}:{item.start_time.minute:02d}" if hasattr(item.start_time, 'hour') else str(item.start_time)
-                        end_display = f"{item.end_time.hour:02d}:{item.end_time.minute:02d}" if hasattr(item.end_time, 'hour') else str(item.end_time)
-
-                        # Include date for weekly view or if event spans multiple days (not handled yet but good for future)
-                        date_prefix = ""
-                        if view_choice == "3": # For weekly view, show the date of the event
-                             date_prefix = f"{item.start_time.year}-{item.start_time.month:02d}-{item.start_time.day:02d} "
-
-                        print(f"{date_prefix}{start_display} - {end_display}: {item.description} ({item.category})")
-
-                advance_game_time(minutes=10) # Time spent checking schedule
-                update_npc_locations(current_game_time)
-                process_time_based_player_needs(player, 10)
-            else:
-                print("Invalid schedule view choice.")
-            print("--------------------")
-
+            handle_phone_menu(player)
+            # Time advancement is handled within handle_phone_menu choices or when backing out.
 
         # Choice 12: Staff Actions (Shifted from 11)
         elif choice == "12":
