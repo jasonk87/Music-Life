@@ -1012,8 +1012,9 @@ def main():
             "4": "Explore current POI/Area", "5": "Check available gigs (at current City)",
             "6": "Prepare for a gig", "7": "Attempt a gig", "8": "View detailed player stats",
             "9": "Talk to someone (at current POI/Area)", "10": "Eat food from inventory",
+            "11": "View Schedule", # New option
         }
-        if player.has_manager or player.has_pr_manager: main_menu_options["11"] = "Staff Actions"
+        if player.has_manager or player.has_pr_manager: main_menu_options["12"] = "Staff Actions" # Shifted
         main_menu_options["00"] = "Advance time by 1 hour (debug)"; main_menu_options["0"] = "Quit game"
 
         choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
@@ -1194,14 +1195,41 @@ def main():
                                         chosen_dest_name,travel_details = dest_map[dest_key]
                                         if input(f"Travel to {chosen_dest_name} for ${travel_details['cost']} ({travel_details['time_hours']}h)? (y/n) > ").lower()=='y':
                                             if player.money >= travel_details['cost']:
-                                                player.money-=travel_details['cost']; dest_loc_obj=WORLD_MAP.get(chosen_dest_name)
+                                                player.money -= travel_details['cost']
+                                                dest_loc_obj = WORLD_MAP.get(chosen_dest_name)
                                                 if dest_loc_obj:
-                                                    player.travel(dest_loc_obj,travel_details['time_hours']); mp=travel_details['time_hours']*60
-                                                    advance_game_time(mp);update_npc_locations(current_game_time);process_time_based_player_needs(player,mp)
-                                                    print(f"Ticket bought. Heading to {chosen_dest_name}.")
-                                                else: print(f"Error: Dest city '{chosen_dest_name}' not found."); player.money+=travel_details['cost'] #Refund
-                                            else: print(f"Not enough money. Need ${travel_details['cost']}.")
-                                        else: print("Travel cancelled.")
+                                                    travel_duration_hours = travel_details['time_hours']
+                                                    travel_duration_minutes = travel_duration_hours * 60
+
+                                                    # Log travel to schedule BEFORE advancing global time
+                                                    travel_start_time = current_game_time.copy()
+                                                    travel_end_time = current_game_time.copy()
+                                                    travel_end_time.advance_time(minutes=travel_duration_minutes)
+
+                                                    player.schedule.add_event(
+                                                        start_time=travel_start_time,
+                                                        end_time=travel_end_time,
+                                                        description=f"Travel: {current_location_for_explore.name} to {chosen_dest_name}",
+                                                        category="Travel",
+                                                        details={
+                                                            "from_city_id": current_location_for_explore.id if hasattr(current_location_for_explore, 'id') else current_location_for_explore.name,
+                                                            "to_city_id": dest_loc_obj.id if hasattr(dest_loc_obj, 'id') else dest_loc_obj.name,
+                                                            "transport_poi_id": current_poi_for_explore.poi_id
+                                                        }
+                                                    )
+
+                                                    player.travel(dest_loc_obj, travel_duration_hours) # This updates player.current_location and stats
+                                                    advance_game_time(minutes=travel_duration_minutes)
+                                                    update_npc_locations(current_game_time)
+                                                    process_time_based_player_needs(player, travel_duration_minutes)
+                                                    print(f"Ticket bought. Travelled to {chosen_dest_name}.")
+                                                else:
+                                                    print(f"Error: Destination city '{chosen_dest_name}' not found in WORLD_MAP.")
+                                                    player.money += travel_details['cost'] # Refund
+                                            else:
+                                                print(f"Not enough money. Need ${travel_details['cost']}.")
+                                        else:
+                                            print("Travel cancelled.")
                         # --- REST/SLEEP --- (HOME / ACCOMMODATION_CHEAP)
                         elif (current_poi_for_explore.category == "HOME" and chosen_interaction_text == "Rest (8 hours)") or \
                              (current_poi_for_explore.category == "ACCOMMODATION_CHEAP" and chosen_interaction_text.startswith("Sleep")):
@@ -1303,6 +1331,19 @@ def main():
                                 elif succ_score==1: fg=random.randint(10,20); player.fame+=fg; print(f"Okay interview. (Fame +{fg})")
                                 else: player.stress=min(100,player.stress+5); print("Didn't go smoothly. (Stress +5)")
                                 player.active_opportunities["interview_city_chronicle"]="completed"; total_mins=max(30,total_mins)
+
+                                # Log interview to schedule
+                                interview_start_time = current_game_time.copy() # Time before advancing for the interview itself
+                                interview_end_time = interview_start_time.copy()
+                                interview_end_time.advance_time(minutes=total_mins)
+                                player.schedule.add_event(
+                                    start_time=interview_start_time,
+                                    end_time=interview_end_time,
+                                    description=f"Interview: {current_poi_for_explore.name} with {interviewer_npc.name}",
+                                    category="Interview",
+                                    details={"poi_id": current_poi_for_explore.poi_id, "interviewer_npc_id": interviewer_npc.npc_id}
+                                )
+
                                 advance_game_time(total_mins); update_npc_locations(current_game_time); process_time_based_player_needs(player,total_mins)
                         # --- HIRE PR MANAGER ---
                         elif current_poi_for_explore.category == "OFFICE_PR_AGENCY" and chosen_interaction_text == "Inquire about PR representation":
@@ -1389,7 +1430,23 @@ def main():
                     event = opts[gig_key]; can_perf, msg = event.can_perform(player)
                     if not can_perf: print(f"Cannot perform {event.name}: {msg}"); advance_game_time(60); update_npc_locations(current_game_time); process_time_based_player_needs(player,60)
                     elif event.perform_event(player):
-                        gig_duration = 180; advance_game_time(gig_duration); update_npc_locations(current_game_time); process_time_based_player_needs(player,gig_duration)
+                        gig_duration_minutes = 180
+
+                        # Log to schedule before advancing global time
+                        gig_start_time = current_game_time.copy()
+                        gig_end_time = current_game_time.copy()
+                        gig_end_time.advance_time(minutes=gig_duration_minutes)
+                        event_name_for_schedule = event.name
+                        venue_name_for_schedule = event.location.name if hasattr(event.location, 'name') else "Unknown Venue"
+                        player.schedule.add_event(
+                            start_time=gig_start_time,
+                            end_time=gig_end_time,
+                            description=f"Gig: {event_name_for_schedule} at {venue_name_for_schedule}",
+                            category="Gig",
+                            details={"event_id": event.event_id if hasattr(event, "event_id") else event.name, "venue_id": venue.venue_id if hasattr(venue,"venue_id") else venue_name_for_schedule} # Assuming venue is event.location
+                        )
+
+                        advance_game_time(gig_duration_minutes); update_npc_locations(current_game_time); process_time_based_player_needs(player,gig_duration_minutes)
                         player.check_and_unlock_staff()
                         venue_name = event.location.name if hasattr(event.location, 'name') else "the venue"
                         post_gig_outcome = check_for_post_gig_random_event(player,event.event_type,venue_name=venue_name)
@@ -1455,8 +1512,60 @@ def main():
                 elif food_key=="0": print("Cancelled eating.")
             print("--------------------")
 
-        # Choice 11: Staff Actions
+        # Choice 11: View Schedule
         elif choice == "11":
+            print("\n--- View Schedule ---")
+            schedule_view_options = {
+                "1": "Today's Schedule",
+                "2": "Tomorrow's Schedule",
+                "3": "This Week's Schedule",
+                "0": "Back"
+            }
+            view_choice = present_choices(schedule_view_options, "Select schedule view:")
+
+            if view_choice == "0":
+                print("Returning to main menu.")
+            elif view_choice in ["1", "2", "3"]:
+                from game.game_time import GameTime # For creating target dates
+
+                target_time = current_game_time.copy()
+                if view_choice == "2": # Tomorrow
+                    target_time.advance_time(minutes=24*60) # Advance by one day
+
+                scheduled_items = []
+                if view_choice == "1" or view_choice == "2": # Today or Tomorrow
+                    scheduled_items = player.schedule.get_events_for_day(target_time.year, target_time.month, target_time.day)
+                    day_str = "Today" if view_choice == "1" else "Tomorrow"
+                    print(f"\n--- {day_str}'s Schedule ({target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
+                elif view_choice == "3": # This Week
+                    scheduled_items = player.schedule.get_events_for_week(target_time.year, target_time.month, target_time.day)
+                    print(f"\n--- This Week's Schedule (Starting {target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
+
+                if not scheduled_items:
+                    print("Nothing scheduled.")
+                else:
+                    for item in scheduled_items:
+                        # Ensure start_time and end_time are GameTime objects
+                        start_display = f"{item.start_time.hour:02d}:{item.start_time.minute:02d}" if hasattr(item.start_time, 'hour') else str(item.start_time)
+                        end_display = f"{item.end_time.hour:02d}:{item.end_time.minute:02d}" if hasattr(item.end_time, 'hour') else str(item.end_time)
+
+                        # Include date for weekly view or if event spans multiple days (not handled yet but good for future)
+                        date_prefix = ""
+                        if view_choice == "3": # For weekly view, show the date of the event
+                             date_prefix = f"{item.start_time.year}-{item.start_time.month:02d}-{item.start_time.day:02d} "
+
+                        print(f"{date_prefix}{start_display} - {end_display}: {item.description} ({item.category})")
+
+                advance_game_time(minutes=10) # Time spent checking schedule
+                update_npc_locations(current_game_time)
+                process_time_based_player_needs(player, 10)
+            else:
+                print("Invalid schedule view choice.")
+            print("--------------------")
+
+
+        # Choice 12: Staff Actions (Shifted from 11)
+        elif choice == "12":
             if not (player.has_manager or player.has_pr_manager): print("No staff yet.")
             else:
                 print("\n--- Staff Actions ---"); staff_opts={}; current_opt_idx = 1
