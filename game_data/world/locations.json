@@ -1,0 +1,32 @@
+[
+  {
+    "id": "your_hometown",
+    "name": "Your Hometown",
+    "description": "A quiet place, good for starting out.",
+    "poi_definition_file": "your_hometown_pois.json",
+    "travel_connections": [
+      {"to_location_id": "city_center", "cost": 20, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "austin_tx", "cost": 120, "time_hours": 10, "method": "Bus"}
+    ]
+  },
+  {
+    "id": "city_center",
+    "name": "City Center",
+    "description": "A bustling hub with more opportunities.",
+    "poi_definition_file": "city_center_pois.json",
+    "travel_connections": [
+      {"to_location_id": "your_hometown", "cost": 20, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "austin_tx", "cost": 60, "time_hours": 6, "method": "Bus"}
+    ]
+  },
+  {
+    "id": "austin_tx",
+    "name": "Austin, TX",
+    "description": "The Live Music Capital of the World. Keep Austin Weird!",
+    "poi_definition_file": "austin_tx_pois.json",
+    "travel_connections": [
+      {"to_location_id": "your_hometown", "cost": 120, "time_hours": 10, "method": "Bus"},
+      {"to_location_id": "city_center", "cost": 60, "time_hours": 6, "method": "Bus"}
+    ]
+  }
+]

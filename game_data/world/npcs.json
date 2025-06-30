@@ -1,0 +1,107 @@
+[
+  {
+    "npc_id": "joe001",
+    "name": "Old Timer Joe",
+    "personality_key": "old_timer_joe",
+    "home_location_poi_id": "hometown_music_shop_oldtimers",
+    "initial_current_location_poi_id": "hometown_music_shop_oldtimers",
+    "schedule": {
+      "Weekday_Morning": "hometown_music_shop_oldtimers",
+      "Weekday_Afternoon": "hometown_music_shop_oldtimers",
+      "Weekend_Morning": "hometown_music_shop_oldtimers",
+      "Weekend_Evening": "hometown_community_hall"
+    }
+  },
+  {
+    "npc_id": "sarah001",
+    "name": "Sarah the Fan",
+    "personality_key": "adoring_fan",
+    "home_location_location_id": "your_hometown",
+    "initial_current_location_location_id": "your_hometown",
+    "schedule": {
+      "open_mic_night_at_community_hall": "hometown_community_hall"
+    }
+  },
+  {
+    "npc_id": "vic001",
+    "name": "Vic Vega",
+    "personality_key": "gruff_club_owner",
+    "home_location_poi_id": "citycenter_rustymug",
+    "initial_current_location_poi_id": "citycenter_rustymug",
+    "schedule": {
+      "Weekday_Afternoon": "citycenter_rustymug",
+      "Weekday_Evening": "citycenter_rustymug",
+      "Weekend_Evening": "citycenter_rustymug"
+    }
+  },
+  {
+    "npc_id": "alex001",
+    "name": "Alex 'Shredder' Miles",
+    "personality_key": "potential_bandmate_guitarist",
+    "home_location_poi_id": "citycenter_proaudio",
+    "initial_current_location_poi_id": "citycenter_proaudio",
+    "schedule": {
+      "Weekday_Afternoon": "citycenter_proaudio",
+      "Weekday_Evening": "citycenter_rustymug",
+      "Weekend_Afternoon": "citycenter_proaudio",
+      "Weekend_Evening": "citycenter_rustymug"
+    }
+  },
+  {
+    "npc_id": "casey001",
+    "name": "Casey 'The Cynic' Jones",
+    "personality_key": "music_blogger_critical",
+    "home_location_poi_id": "citycenter_dailygrind_cafe",
+    "initial_current_location_poi_id": "citycenter_dailygrind_cafe",
+    "schedule": {
+      "Weekday_Morning": "citycenter_dailygrind_cafe",
+      "Weekday_Afternoon": "citycenter_dailygrind_cafe",
+      "Weekday_Evening": "citycenter_rustymug",
+      "Weekend_Evening": "citycenter_grandetheater"
+    }
+  },
+  {
+    "npc_id": "brenda_reporter001",
+    "name": "Brenda Reporter",
+    "personality_key": "interviewer_professional",
+    "home_location_poi_id": "citycenter_chronicle_news",
+    "initial_current_location_poi_id": "citycenter_chronicle_news",
+    "schedule": {
+      "Weekday_Morning": "citycenter_chronicle_news",
+      "Weekday_Afternoon": "citycenter_chronicle_news"
+    }
+  },
+  {
+    "npc_id": "ms_sharp_pr001",
+    "name": "Ms. Patricia Sharp",
+    "personality_key": "pr_agent_evaluator",
+    "home_location_poi_id": "citycenter_sharp_pr",
+    "initial_current_location_poi_id": "citycenter_sharp_pr",
+    "schedule": {
+      "Weekday_Morning": "citycenter_sharp_pr",
+      "Weekday_Afternoon": "citycenter_sharp_pr"
+    }
+  },
+  {
+    "npc_id": "dj_dr_vibes",
+    "name": "DJ 'Dr. Vibes'",
+    "personality_key": "dj_eclectic_local",
+    "home_location_poi_id": "austin_kaus_radio",
+    "initial_current_location_poi_id": "austin_kaus_radio",
+    "schedule": {
+      "Weekday_Afternoon": "austin_kaus_radio",
+      "Weekday_Evening": "austin_kaus_radio"
+    }
+  },
+  {
+    "npc_id": "cliff_sound_owner",
+    "name": "Clifford 'Cliff' Mayes",
+    "personality_key": "gruff_club_owner",
+    "home_location_poi_id": "austin_iconic_club",
+    "initial_current_location_poi_id": "austin_iconic_club",
+    "schedule": {
+      "Weekday_Evening": "austin_iconic_club",
+      "Weekend_Evening": "austin_iconic_club"
+    }
+  }
+]

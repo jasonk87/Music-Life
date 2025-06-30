@@ -1,0 +1,173 @@
+{
+  "location_id": "city_center",
+  "points_of_interest": [
+    {
+      "poi_id": "citycenter_proaudio",
+      "name": "Pro Audio Central",
+      "description": "High-end instruments and recording gear.",
+      "category": "SHOP_MUSIC",
+      "interaction_options": ["Browse items for sale", "Repair Gear", "Talk to Sales Rep"],
+      "properties": {
+        "shop_inventory_item_ids": ["basic_electric_guitar", "practice_amp_small", "guitar_strings_basic", "guitar_picks_assorted"]
+      }
+    },
+    {
+      "poi_id": "citycenter_sharp_pr",
+      "name": "Sharp PR Solutions",
+      "description": "A modern office for a boutique PR agency. They look like they mean business.",
+      "category": "OFFICE_PR_AGENCY",
+      "interaction_options": ["Inquire about PR representation"],
+      "properties": {
+        "comfort_modifier_hourly": 0,
+        "owner_npc_id": "ms_sharp_pr001"
+      }
+    },
+    {
+      "poi_id": "citycenter_chronicle_news",
+      "name": "City Center Chronicle",
+      "description": "The bustling office of the city's main newspaper and online news hub.",
+      "category": "OFFICE_NEWS_AGENCY",
+      "interaction_options": ["Look for today's paper", "Ask for a journalist"],
+      "properties": {
+        "comfort_modifier_hourly": -1,
+        "owner_npc_id": "brenda_reporter001"
+      }
+    },
+    {
+      "poi_id": "citycenter_indiehits_records",
+      "name": "Indie Hits Records",
+      "description": "A small but ambitious record label. They seem to like fresh sounds.",
+      "category": "OFFICE_RECORD_LABEL",
+      "interaction_options": [],
+      "properties": {
+        "min_fame_to_submit": 75,
+        "genres_preferred": ["Indie", "Pop", "Rock", "Electronic"]
+      }
+    },
+    {
+      "poi_id": "citycenter_dailygrind_cafe",
+      "name": "The Daily Grind Cafe",
+      "description": "Popular hangout, good coffee, free Wi-Fi.",
+      "category": "POI_CAFE",
+      "interaction_options": ["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"],
+      "properties": {
+        "comfort_modifier_hourly": 1
+      }
+    },
+    {
+      "poi_id": "citycenter_airport",
+      "name": "City Center International Airport",
+      "description": "Flights to other major cities (when you can afford them).",
+      "category": "TRANSPORT_AIRPORT",
+      "interaction_options": ["View Departures & Buy Tickets"],
+      "properties": {}
+    },
+    {
+      "poi_id": "citycenter_bus_station",
+      "name": "Main Bus Terminal (City Center)",
+      "description": "Regional and long-haul bus services.",
+      "category": "TRANSPORT_BUS",
+      "interaction_options": ["View Departures & Buy Tickets"],
+      "properties": {}
+    },
+    {
+      "poi_id": "citycenter_motel_cheap",
+      "name": "Sleep EZ Motel",
+      "description": "A cheap, somewhat clean room for the night. Better than the streets.",
+      "category": "ACCOMMODATION_CHEAP",
+      "interaction_options": ["Rent Room ($50/night)", "Sleep (8 hours, if rented)"],
+      "properties": {
+        "rest_quality": 0.4,
+        "stress_modifier_hourly": -2,
+        "comfort_modifier_hourly": -3
+      }
+    },
+    {
+      "poi_id": "citycenter_starlight_studio",
+      "name": "Starlight Recording Studio",
+      "description": "A decent local recording studio. Sessions can be booked by the hour.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book recording session", "Talk to Sound Engineer (if available)"],
+      "properties": {
+        "studio_quality": 0.6,
+        "hourly_rate": 50
+      }
+    },
+    {
+      "poi_id": "citycenter_supervalu",
+      "name": "SuperValue Mart",
+      "description": "A large supermarket with a wide variety of groceries.",
+      "category": "SHOP_FOOD",
+      "interaction_options": ["Buy Food Items"],
+      "properties": {
+        "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag"]
+      }
+    },
+    {
+      "poi_id": "citycenter_burgerblast",
+      "name": "Burger Blast",
+      "description": "A generic but reliable fast food burger chain.",
+      "category": "FOOD_FASTFOOD",
+      "interaction_options": [],
+      "properties": {
+        "menu_items": [
+          {"display_text": "Order Blast Burger ($7)", "item_id": "food_blast_burger", "cost": 7, "effects": {"hunger": -40, "energy": 10, "comfort": 0}},
+          {"display_text": "Order Value Meal ($10)", "item_id": "food_value_meal", "cost": 10, "effects": {"hunger": -60, "energy": 15, "comfort": -1}},
+          {"display_text": "Order Soda ($2)", "item_id": "food_soda", "cost": 2, "effects": {"hunger": -5, "energy": 5}},
+          {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
+        ]
+      }
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "citycenter_rustymug",
+      "name": "The Rusty Mug",
+      "description": "A well-known club for upcoming bands.",
+      "venue_type": "CLUB",
+      "category": "VENUE_CLUB",
+      "capacity": 150,
+      "prestige": 4,
+      "properties": {
+        "can_rent_gear": true,
+        "gear_rental_fee": 30,
+        "available_rental_gear_ids": ["basic_electric_guitar", "practice_amp_small"],
+        "owner_npc_id": "vic001"
+      },
+      "events_hosted_ids": ["debut_rusty_mug"]
+    },
+    {
+      "venue_id": "citycenter_grandetheater",
+      "name": "Grande Concert Hall",
+      "description": "A prestigious venue for established artists.",
+      "venue_type": "CONCERT_HALL",
+      "category": "VENUE_THEATER",
+      "capacity": 1000,
+      "prestige": 8,
+      "properties": {
+        "can_rent_gear": true,
+        "gear_rental_fee": 100,
+        "available_rental_gear_ids": ["pro_electric_guitar", "pro_bass_guitar", "pro_amp_large", "pro_drum_kit"]
+      },
+      "events_hosted_ids": ["opening_act_grande"]
+    }
+  ],
+  "intra_city_poi_connections": [
+    {
+      "pois": ["citycenter_bus_station", "citycenter_rustymug"],
+      "walk": {"time": 25, "cost": 0}, "bike": {"time": 10, "cost": 0, "requires_bike": true}, "taxi": {"time": 7, "cost": 12}
+    },
+    {
+      "pois": ["citycenter_rustymug", "citycenter_proaudio"],
+      "walk": {"time": 10, "cost": 0}, "bike": {"time": 4, "cost": 0, "requires_bike": true}, "taxi": {"time": 3, "cost": 7}
+    },
+    {
+      "pois": ["citycenter_dailygrind_cafe", "citycenter_rustymug"],
+      "walk": {"time": 12, "cost": 0}, "bike": {"time": 5, "cost": 0, "requires_bike": true}, "taxi": {"time": 4, "cost": 9}
+    },
+    {
+      "pois": ["citycenter_bus_station", "citycenter_airport"],
+      "walk": {"time": 60, "cost": 0}, "taxi": {"time": 15, "cost": 25}
+    }
+  ]
+}

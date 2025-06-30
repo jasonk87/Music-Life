@@ -1,0 +1,100 @@
+{
+  "location_id": "your_hometown",
+  "points_of_interest": [
+    {
+      "poi_id": "hometown_music_shop_oldtimers",
+      "name": "Old Timer's Music Shop",
+      "description": "Sells basic gear and instruments.",
+      "category": "SHOP_MUSIC",
+      "interaction_options": ["Browse items for sale", "Repair Gear", "Talk to Old Timer Joe"],
+      "properties": {
+        "shop_inventory_item_ids": ["worn_acoustic_guitar", "guitar_strings_basic", "guitar_picks_assorted"],
+        "owner_npc_id": "joe001"
+      }
+    },
+    {
+      "poi_id": "hometown_rehearsal_garage",
+      "name": "Garage Rehearsal Space",
+      "description": "A bit rough but it's cheap.",
+      "category": "REHEARSAL_STUDIO",
+      "interaction_options": ["Book Rehearsal Slot (1 hour, $10)"],
+      "properties": {}
+    },
+    {
+      "poi_id": "hometown_player_home",
+      "name": "Your Apartment",
+      "description": "Your starting digs. A bit small, but it's home.",
+      "category": "HOME",
+      "interaction_options": ["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Relax at home (2 hours)"],
+      "properties": {
+        "rest_quality": 0.8,
+        "stress_modifier_hourly": -10,
+        "comfort_modifier_hourly": 5
+      }
+    },
+    {
+      "poi_id": "hometown_bus_stop",
+      "name": "Hometown Bus Stop",
+      "description": "A dusty bus stop for regional travel to City Center.",
+      "category": "TRANSPORT_BUS",
+      "interaction_options": ["View Departures & Buy Tickets"],
+      "properties": {}
+    },
+    {
+      "poi_id": "hometown_bodega",
+      "name": "Corner Bodega",
+      "description": "A small grocery store with basic necessities.",
+      "category": "SHOP_FOOD",
+      "interaction_options": ["Buy Food Items", "Chat with Clerk"],
+      "properties": {
+        "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag"]
+      }
+    },
+    {
+      "poi_id": "hometown_diner",
+      "name": "Greasy Spoon Diner",
+      "description": "Cheap, fast, and... food-like substances.",
+      "category": "FOOD_FASTFOOD",
+      "interaction_options": [], "properties": {
+        "menu_items": [
+          {"display_text": "Order Greasy Breakfast ($8)", "item_id": "food_greasy_breakfast", "cost": 8, "effects": {"hunger": -50, "energy": 15, "comfort": 1}},
+          {"display_text": "Order Cheap Burger ($5)", "item_id": "food_cheap_burger", "cost": 5, "effects": {"hunger": -35, "energy": 10, "comfort": -2}},
+          {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
+        ]
+      }
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "hometown_community_hall",
+      "name": "Community Hall",
+      "description": "Hosts local events.",
+      "venue_type": "HALL",
+      "category": "VENUE_HALL",
+      "capacity": 50,
+      "prestige": 1,
+      "properties": {
+        "can_rent_gear": false
+      },
+      "events_hosted_ids": ["open_mic_hometown_hall"]
+    }
+  ],
+  "intra_city_poi_connections": [
+    {
+      "pois": ["hometown_player_home", "hometown_music_shop_oldtimers"],
+      "walk": {"time": 15, "cost": 0}, "bike": {"time": 5, "cost": 0, "requires_bike": true}, "taxi": {"time": 3, "cost": 8}
+    },
+    {
+      "pois": ["hometown_player_home", "hometown_community_hall"],
+      "walk": {"time": 10, "cost": 0}, "bike": {"time": 3, "cost": 0, "requires_bike": true}, "taxi": {"time": 2, "cost": 6}
+    },
+    {
+      "pois": ["hometown_player_home", "hometown_bus_stop"],
+      "walk": {"time": 20, "cost": 0}, "bike": {"time": 7, "cost": 0, "requires_bike": true}, "taxi": {"time": 5, "cost": 10}
+    },
+    {
+      "pois": ["hometown_music_shop_oldtimers", "hometown_community_hall"],
+      "walk": {"time": 5, "cost": 0}, "bike": {"time": 2, "cost": 0, "requires_bike": true}
+    }
+  ]
+}

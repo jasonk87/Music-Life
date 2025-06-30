@@ -1,0 +1,108 @@
+{
+  "location_id": "austin_tx",
+  "points_of_interest": [
+    {
+      "poi_id": "austin_guitar_emporium",
+      "name": "Austin Guitar Emporium",
+      "description": "Guitars, amps, and everything in between.",
+      "category": "SHOP_MUSIC",
+      "interaction_options": ["Browse items for sale", "Repair Gear", "Talk to Staff"],
+      "properties": {
+        "shop_inventory_item_ids": ["basic_electric_guitar", "pro_electric_guitar", "practice_amp_small", "guitar_strings_basic", "merch_tshirt_basic"]
+      }
+    },
+    {
+      "poi_id": "austin_kaus_radio",
+      "name": "KAUS Austin Radio",
+      "description": "Independent Austin radio, playing local and eclectic sounds.",
+      "category": "MEDIA_RADIO_STATION",
+      "interaction_options": ["Talk to DJ 'Dr. Vibes'", "Submit Demo for Airplay", "Inquire about Local Artist Spotlight"],
+      "properties": {
+        "owner_npc_id": "dj_dr_vibes"
+      }
+    },
+    {
+      "poi_id": "austin_vinyl_frontier",
+      "name": "Vinyl Frontier Records",
+      "description": "A haven for record collectors and music lovers.",
+      "category": "SHOP_RECORDS",
+      "interaction_options": ["Browse Records", "Talk to Clerk"],
+      "properties": {}
+    },
+    {
+      "poi_id": "austin_capitol_view",
+      "name": "Capitol View Park",
+      "description": "A park with a view of the State Capitol building.",
+      "category": "POI_PARK",
+      "interaction_options": ["Relax", "People Watch"],
+      "properties": {
+        "comfort_modifier_hourly": 1
+      }
+    },
+    {
+      "poi_id": "austin_roadside_motel",
+      "name": "Austin Roadside Motel",
+      "description": "Basic, clean, and affordable.",
+      "category": "ACCOMMODATION_CHEAP",
+      "interaction_options": ["Rent Room ($60/night)", "Sleep (8 hours, if rented)"],
+      "properties": {
+        "rest_quality": 0.5,
+        "stress_modifier_hourly": -1,
+        "comfort_modifier_hourly": -2
+      }
+    },
+    {
+      "poi_id": "austin_weird_beans_cafe",
+      "name": "Weird Beans Cafe",
+      "description": "A quirky cafe popular with musicians and artists.",
+      "category": "POI_CAFE",
+      "interaction_options": ["Grab Coffee ($6)", "People Watch", "Look for Gig Flyers"],
+      "properties": {
+        "comfort_modifier_hourly": 2
+      }
+    },
+    {
+      "poi_id": "austin_main_bus_terminal",
+      "name": "Austin Main Bus Terminal",
+      "description": "Connects Austin to other Texan cities and beyond.",
+      "category": "TRANSPORT_BUS",
+      "interaction_options": ["View Departures & Buy Tickets"],
+      "properties": {}
+    },
+    {
+      "poi_id": "austin_soundcheck_rehearsal",
+      "name": "SoundCheck Rehearsal Studios",
+      "description": "Professional rehearsal rooms by the hour.",
+      "category": "REHEARSAL_STUDIO",
+      "interaction_options": ["Book Rehearsal Slot (1 hour, $25)"],
+      "properties": {}
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "austin_local_stage",
+      "name": "Austin Local Stage",
+      "description": "A small, friendly venue for local acts.",
+      "venue_type": "BAR_GIG",
+      "category": "VENUE_CLUB",
+      "capacity": 80,
+      "prestige": 3,
+      "properties": {},
+      "events_hosted_ids": []
+    },
+    {
+      "venue_id": "austin_iconic_club",
+      "name": "The Sixth Street Sound",
+      "description": "A legendary club on 6th Street, known for blues and rock.",
+      "venue_type": "CLUB",
+      "category": "VENUE_CLUB",
+      "capacity": 250,
+      "prestige": 7,
+      "properties": {
+        "owner_npc_id": "cliff_sound_owner"
+      },
+      "events_hosted_ids": []
+    }
+  ],
+  "intra_city_poi_connections": [] // Leaving empty for now, can be added later
+}
