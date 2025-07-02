@@ -1158,6 +1158,154 @@ def handle_phone_menu(player):
                 break
     print("--------------------") # Separator after phone menu closes
 
+# --- Travel Menu Handler ---
+def handle_travel_menu(player):
+    """Handles the player's travel choices."""
+    while True:
+        clear_screen_ish()
+        current_city_name = player.current_location.name if player.current_location else "Unknown City"
+        print(f"\n--- Travel Options --- (Currently in {current_city_name})")
+        print(f"--- {get_current_time_str()} ---")
+
+        travel_submenu_options = {
+            "1": f"Travel within {current_city_name} (to another POI)",
+            "2": "Travel to another City (Inter-City)",
+            "0": "Back to Main Menu"
+        }
+        choice = present_choices(travel_submenu_options, title="Travel Where?")
+
+        if choice == "1": # Travel within current city
+            print(f"\n--- Travel within {player.current_location.name} ---")
+            if not player.current_poi:
+                print("You are not at a specific POI. Explore first to set your starting point for local travel.")
+                # advance_game_time(minutes=1); update_npc_locations(current_game_time); process_time_based_player_needs(player, 1)
+                # No time passes for this check, loop back to travel menu
+                continue # Loop back to travel menu choices
+
+            current_city_object = player.current_location
+            all_city_pois_and_venues = current_city_object.points_of_interest + current_city_object.venues
+            dest_poi_options = [poi_obj for poi_obj in all_city_pois_and_venues if poi_obj != player.current_poi]
+
+            if not dest_poi_options:
+                print("No other specific POIs to travel to in this city from your current POI.")
+            else:
+                dest_display_list = [f"{poi.name} ({poi.category if hasattr(poi,'category') else poi.venue_type})" for poi in dest_poi_options]
+                dest_choice_idx_str = present_choices(dest_display_list, "Choose destination POI:")
+                if dest_choice_idx_str and dest_choice_idx_str.isdigit():
+                    chosen_destination_poi = dest_poi_options[int(dest_choice_idx_str) - 1]
+                    origin_poi_id = player.current_poi.poi_id if hasattr(player.current_poi, 'poi_id') else getattr(player.current_poi, 'venue_id', None)
+                    dest_poi_id = chosen_destination_poi.poi_id if hasattr(chosen_destination_poi, 'poi_id') else getattr(chosen_destination_poi, 'venue_id', None)
+
+                    if not origin_poi_id or not dest_poi_id :
+                        print("Error determining travel route IDs.")
+                        continue # Loop back to travel menu
+
+                    connection_key = frozenset({origin_poi_id, dest_poi_id})
+                    travel_modes_data = current_city_object.intra_city_poi_connections.get(connection_key)
+
+                    if not travel_modes_data:
+                        print(f"No direct travel route defined between {player.current_poi.name} and {chosen_destination_poi.name}.")
+                    else:
+                        print(f"Travel modes to {chosen_destination_poi.name}:")
+                        available_modes_for_choice = {}; mode_map = {}; choice_num = 1
+                        if "walk" in travel_modes_data:
+                            mode_info = travel_modes_data["walk"]
+                            available_modes_for_choice[str(choice_num)] = f"Walk: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
+                            mode_map[str(choice_num)] = ("walk", mode_info); choice_num += 1
+                        if player.has_bike and "bike" in travel_modes_data: # Check if player has bike
+                            mode_info = travel_modes_data["bike"]
+                            available_modes_for_choice[str(choice_num)] = f"Bike: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
+                            mode_map[str(choice_num)] = ("bike", mode_info); choice_num += 1
+                        if "taxi" in travel_modes_data:
+                            mode_info = travel_modes_data["taxi"]
+                            available_modes_for_choice[str(choice_num)] = f"Taxi: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
+                            mode_map[str(choice_num)] = ("taxi", mode_info); choice_num += 1
+
+                        if not available_modes_for_choice:
+                            print("No travel modes available for this route currently (e.g., bike required but not owned).")
+                            continue # Loop back to travel menu choices
+
+                        mode_choice_key = present_choices(available_modes_for_choice, "Choose travel mode:")
+                        if mode_choice_key and mode_choice_key in mode_map:
+                            chosen_mode_name, chosen_mode_details = mode_map[mode_choice_key]
+                            if chosen_mode_name == "taxi" and player.money < chosen_mode_details['cost']:
+                                print(f"Not enough money for a taxi."); continue
+                            # Check gear capacity against the chosen mode
+                            if player.get_current_gear_load() > player.get_current_gear_capacity(chosen_mode_name):
+                                print(f"Too much gear to travel by {chosen_mode_name}. Manage inventory or choose another mode."); continue
+
+                            if chosen_mode_name == "taxi":
+                                player.money -= chosen_mode_details['cost']
+                                print(f"Paid ${chosen_mode_details['cost']} for the taxi.")
+
+                            player.travel_within_city(chosen_destination_poi, chosen_mode_details['time']) # This only sets current_poi
+                            minutes_passed = chosen_mode_details['time']
+                            advance_game_time(minutes=minutes_passed)
+                            update_npc_locations(current_game_time)
+                            process_time_based_player_needs(player, minutes_passed)
+                            print("--------------------") # Separator after action
+                            break # Intra-city travel successful, exit travel sub-menu to main game loop
+            # If any condition above caused a 'continue', or if no choice made, we loop in travel menu.
+            # If travel occurs (break), we go back to main menu.
+
+        elif choice == "2": # Travel to another city
+            print("\n--- Inter-City Travel Information ---")
+            current_city = player.current_location
+            if not current_city:
+                print("Error: Player not in a valid location.")
+                continue # Loop back to travel menu
+
+            transport_hubs_in_city = [poi for poi in (current_city.points_of_interest + current_city.venues) if hasattr(poi, 'category') and poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]]
+
+            if not transport_hubs_in_city:
+                print(f"{current_city.name} doesn't seem to have any major bus stations or airports defined for inter-city travel.")
+            elif player.current_poi and player.current_poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
+                # Player is at a transport hub, directly use "Explore POI" to buy tickets
+                print(f"You are currently at {player.current_poi.name}, which is a transport hub.")
+                print("Use the 'Explore current POI/Area' option from the main menu to find departures and buy tickets.")
+                # This choice effectively ends here, player needs to go back to main menu and explore.
+                # No break here, let them choose "Back to Main Menu" from travel menu or another travel option.
+            else:
+                print(f"To travel to another city, you need to first go to a transport hub (bus station or airport) within {current_city.name}.")
+                if player.current_poi:
+                    print(f"You are currently at: {player.current_poi.name}.")
+                else: # Should not happen if intra-city travel requires a current_poi
+                    print(f"You are currently in the general area of {current_city.name}, not at a specific POI.")
+
+                print(f"\nAvailable transport hubs in {current_city.name}:")
+                if not transport_hubs_in_city: # Should be caught above, but defensive
+                     print("None found.")
+                else:
+                    hub_display_list = [f"{hub.name} ({hub.category})" for hub in transport_hubs_in_city]
+                    # We don't offer to travel to them from here directly, as that's an intra-city travel action.
+                    # This option is now purely informational if not at a hub.
+                    for hub_info in hub_display_list: print(f" - {hub_info}")
+                    print(f"\nUse 'Travel within {current_city.name}' to go to one of these hubs first.")
+            # No break here, this option is now more informational or directs to Explore POI.
+            # Player remains in travel sub-menu.
+
+        elif choice == "0":
+            print("Returning to main activities.")
+            # advance_game_time(minutes=1) # Minimal time for opening and closing menu - already handled if an action was taken
+            # update_npc_locations(current_game_time)
+            # process_time_based_player_needs(player, 1)
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 1)
+            break # Exit travel menu loop
+        else:
+            print("Invalid travel option.")
+            advance_game_time(minutes=1)
+            update_npc_locations(current_game_time)
+            process_time_based_player_needs(player, 1)
+
+        # Decide if actions within travel menu should loop or exit to main menu
+        # For now, let's make them loop back to travel menu unless "Back" is chosen.
+        # Actual travel actions will likely break this loop and return to main game loop.
+        # So, if choice was 1 or 2, and they completed, they'd typically break.
+        # For this structural step, we are just showing the menu.
+        # The `break` statements commented out above would be used if an action was fully completed.
+    print("--------------------")
+
 
 def main():
     if not setup_world(): # Call new setup_world and check for success
@@ -1242,18 +1390,27 @@ def main():
 
 
         main_menu_options = {
-            "1": "Practice a skill", "2": "Travel to another City", "3": "Travel within this City (to another POI)",
-            "4": "Explore current POI/Area", "5": "Check available gigs (at current City)",
-            "6": "Prepare for a gig", "7": "Attempt a gig", "8": "View detailed player stats",
-            "9": "Talk to someone (at current POI/Area)", "10": "Eat food from inventory",
-            "11": "Use Phone", # Replaces View Schedule
+            "1": "Practice a skill",
+            "2": "Travel",  # New consolidated travel option
+            "3": "Explore current POI/Area", # Was 4
+            "4": "Check available gigs (at current City)", # Was 5
+            "5": "Prepare for a gig", # Was 6
+            "6": "Attempt a gig", # Was 7
+            "7": "View detailed player stats", # Was 8
+            "8": "Talk to someone (at current POI/Area)", # Was 9
+            "9": "Eat food from inventory", # Was 10
+            "10": "Use Phone", # Was 11
         }
-        if player.has_manager or player.has_pr_manager: main_menu_options["12"] = "Staff Actions" # Remains shifted
+        if player.has_manager or player.has_pr_manager: main_menu_options["11"] = "Staff Actions" # Was 12
         main_menu_options["00"] = "Advance time by 1 hour (debug)"; main_menu_options["0"] = "Quit game"
 
         choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
         if choice is None: continue
+
+        # Clear screen after getting main menu choice, before processing the action.
+        # This ensures the HUD and menu are cleared before action-specific output.
         clear_screen_ish()
+
 
         # --- Action Handling (Most of this logic remains the same, but relies on WORLD_MAP and NPC_REGISTRY being populated from JSON) ---
 
@@ -1269,87 +1426,14 @@ def main():
                 advance_game_time(minutes=minutes_passed); update_npc_locations(current_game_time); process_time_based_player_needs(player, minutes_passed)
             except ValueError: print("Invalid number of hours.")
 
-        # Choice 2: Inter-City Travel Info
+        # Choice 2: Travel (Calls handle_travel_menu)
         elif choice == "2":
-            print("\n--- Inter-City Travel Information ---")
-            current_city = player.current_location
-            if not current_city: print("Error: Player not in a valid location."); continue # Should not happen
+            handle_travel_menu(player)
+            # Time advancement and further screen clearing are handled within handle_travel_menu
+            # or by the main loop's clear_screen_ish at the start of the next iteration / in action handlers.
 
-            transport_hubs_in_city = [poi for poi in (current_city.points_of_interest + current_city.venues) if hasattr(poi, 'category') and poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]]
-
-            if not transport_hubs_in_city: print(f"{current_city.name} doesn't seem to have any major bus stations or airports defined for inter-city travel.")
-            elif player.current_poi and player.current_poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
-                print(f"You are currently at {player.current_poi.name}. Use 'Explore current POI/Area' to find departures and buy tickets.")
-            else:
-                print(f"To travel to another city, go to a transport hub (bus station or airport).")
-                if player.current_poi: print(f"You are currently at: {player.current_poi.name}.")
-                else: print(f"You are currently in the general area of {current_city.name}.")
-                print(f"\nAvailable transport hubs in {current_city.name}:")
-                hub_display_list = [f"{hub.name} ({hub.category})" for hub in transport_hubs_in_city] + ["Nevermind / Stay in current area"]
-                hub_choice_idx_str = present_choices(hub_display_list, "Go to which transport hub? (Or select 'Nevermind')")
-                if hub_choice_idx_str and hub_choice_idx_str.isdigit():
-                    choice_idx = int(hub_choice_idx_str) -1
-                    if 0 <= choice_idx < len(transport_hubs_in_city):
-                        chosen_hub_poi = transport_hubs_in_city[choice_idx]
-                        print(f"\nTo get to {chosen_hub_poi.name}, use option '3. Travel within this City'.")
-            print("--------------------")
-
-        # Choice 3: Travel within City
-        elif choice == "3":
-            print(f"\n--- Travel within {player.current_location.name} ---")
-            if not player.current_poi: print("You are not at a specific POI. Explore first."); continue
-
-            current_city_object = player.current_location
-            all_city_pois_and_venues = current_city_object.points_of_interest + current_city_object.venues
-            dest_poi_options = [poi_obj for poi_obj in all_city_pois_and_venues if poi_obj != player.current_poi]
-
-            if not dest_poi_options: print("No other specific POIs to travel to in this city.")
-            else:
-                dest_display_list = [f"{poi.name} ({poi.category if hasattr(poi,'category') else poi.venue_type})" for poi in dest_poi_options]
-                dest_choice_idx_str = present_choices(dest_display_list, "Choose destination POI:")
-                if dest_choice_idx_str and dest_choice_idx_str.isdigit():
-                    chosen_destination_poi = dest_poi_options[int(dest_choice_idx_str) - 1]
-                    origin_poi_id = player.current_poi.poi_id if hasattr(player.current_poi, 'poi_id') else getattr(player.current_poi, 'venue_id', None)
-                    dest_poi_id = chosen_destination_poi.poi_id if hasattr(chosen_destination_poi, 'poi_id') else getattr(chosen_destination_poi, 'venue_id', None)
-
-                    if not origin_poi_id or not dest_poi_id : print("Error determining travel route IDs."); continue
-
-                    connection_key = frozenset({origin_poi_id, dest_poi_id})
-                    travel_modes_data = current_city_object.intra_city_poi_connections.get(connection_key)
-
-                    if not travel_modes_data: print(f"No direct travel route defined between {player.current_poi.name} and {chosen_destination_poi.name}.")
-                    else:
-                        print(f"Travel modes to {chosen_destination_poi.name}:")
-                        available_modes_for_choice = {}; mode_map = {}; choice_num = 1
-                        if "walk" in travel_modes_data:
-                            mode_info = travel_modes_data["walk"]
-                            available_modes_for_choice[str(choice_num)] = f"Walk: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
-                            mode_map[str(choice_num)] = ("walk", mode_info); choice_num += 1
-                        if player.has_bike and "bike" in travel_modes_data:
-                            mode_info = travel_modes_data["bike"]
-                            available_modes_for_choice[str(choice_num)] = f"Bike: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
-                            mode_map[str(choice_num)] = ("bike", mode_info); choice_num += 1
-                        if "taxi" in travel_modes_data:
-                            mode_info = travel_modes_data["taxi"]
-                            available_modes_for_choice[str(choice_num)] = f"Taxi: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
-                            mode_map[str(choice_num)] = ("taxi", mode_info); choice_num += 1
-
-                        if not available_modes_for_choice: print("No travel modes available for this route."); continue
-
-                        mode_choice_key = present_choices(available_modes_for_choice, "Choose travel mode:")
-                        if mode_choice_key and mode_choice_key in mode_map:
-                            chosen_mode_name, chosen_mode_details = mode_map[mode_choice_key]
-                            if chosen_mode_name == "taxi" and player.money < chosen_mode_details['cost']: print(f"Not enough money for a taxi."); continue
-                            if player.get_current_gear_load() > player.get_current_gear_capacity(chosen_mode_name): print(f"Too much gear to travel by {chosen_mode_name}."); continue
-
-                            if chosen_mode_name == "taxi": player.money -= chosen_mode_details['cost']; print(f"Paid ${chosen_mode_details['cost']} for the taxi.")
-                            player.travel_within_city(chosen_destination_poi, chosen_mode_details['time']) # This only sets current_poi
-                            minutes_passed = chosen_mode_details['time']
-                            advance_game_time(minutes=minutes_passed); update_npc_locations(current_game_time); process_time_based_player_needs(player, minutes_passed)
-            print("--------------------")
-
-        # Choice 4: Explore POI/Area
-        elif choice == "4":
+        # Choice 3: Explore current POI/Area (Was 4)
+        elif choice == "3": # Was 4
             current_poi_for_explore = player.current_poi
             current_location_for_explore = player.current_location
             print(f"\n--- Exploring {current_poi_for_explore.name if current_poi_for_explore else current_location_for_explore.name} ---")
@@ -1616,8 +1700,8 @@ def main():
                  process_time_based_player_needs(player, 15)
             print("--------------------")
 
-        # Choice 5: Check Gigs
-        elif choice == "5":
+        # Choice 4: Check available gigs (at current City) (Was 5)
+        elif choice == "4": # Was 5
             print(f"\n--- Gigs available in {player.current_location.name} ---")
             all_gigs = player.current_location.get_all_events_at_location()
             active_gigs = [event for event in all_gigs if event.is_active]
@@ -1632,8 +1716,8 @@ def main():
                     else: print("   Preparation: Not Required.")
             print("--------------------")
 
-        # Choice 6: Prepare Gig
-        elif choice == "6":
+        # Choice 5: Prepare for a gig (Was 6)
+        elif choice == "5": # Was 6
             print(f"\n--- Prepare for a Gig ---")
             all_gigs = player.current_location.get_all_events_at_location()
             preparable = [e for e in all_gigs if e.is_active and e.preparation_tasks_required and not e.are_preparations_complete()]
@@ -1651,8 +1735,8 @@ def main():
                         advance_game_time(120); update_npc_locations(current_game_time); process_time_based_player_needs(player,120)
             print("--------------------")
 
-        # Choice 7: Attempt Gig
-        elif choice == "7":
+        # Choice 6: Attempt a gig (Was 7)
+        elif choice == "6": # Was 7
             print(f"\n--- Attempt a Gig ---")
             all_gigs = player.current_location.get_all_events_at_location() # Use current_location consistently
             performable = [e for e in all_gigs if e.is_active and (not e.preparation_tasks_required or e.are_preparations_complete())]
@@ -1703,12 +1787,12 @@ def main():
                             owner=NPC_REGISTRY[owner_id]; owner.update_relationship(-10); owner.add_memory(f"{player.name} failed gig '{event.name}'."); print(f"Rel with {owner.name} worsened.")
             print("--------------------")
 
-        # Choice 8: View Player Stats
-        elif choice == "8":
+        # Choice 7: View detailed player stats (Was 8)
+        elif choice == "7": # Was 8
             print("\n--- Player Stats ---"); print(player); print(get_current_time_str()); print("--------------------")
 
-        # Choice 9: Talk to Someone
-        elif choice == "9":
+        # Choice 8: Talk to someone (at current POI/Area) (Was 9)
+        elif choice == "8": # Was 9
             print("--- Talk to Someone ---")
             target_area_name = player.current_poi.name if player.current_poi else player.current_location.name
             available_npcs = []
@@ -1729,8 +1813,8 @@ def main():
                 npc_key = present_choices(display, f"Who at {target_area_name}?")
                 if npc_key and npc_key in opts: talk_to_npc_instance(player, opts[npc_key])
 
-        # Choice 10: Eat from Inventory
-        elif choice == "10":
+        # Choice 9: Eat food from inventory (Was 10)
+        elif choice == "9": # Was 10
             print("\n--- Eat Food From Inventory ---")
             food_items = [item for item in player.gear_inventory if item.gear_type == "FOOD"]
             if not food_items: print("No food in inventory.")
@@ -1746,13 +1830,13 @@ def main():
                 elif food_key=="0": print("Cancelled eating.")
             print("--------------------")
 
-        # Choice 11: Use Phone
-        elif choice == "11":
+        # Choice 10: Use Phone (Was 11)
+        elif choice == "10": # Was 11
             handle_phone_menu(player)
             # Time advancement is handled within handle_phone_menu choices or when backing out.
 
-        # Choice 12: Staff Actions (Shifted from 11)
-        elif choice == "12":
+        # Choice 11: Staff Actions (Was 12)
+        elif choice == "11": # Was 12
             if not (player.has_manager or player.has_pr_manager): print("No staff yet.")
             else:
                 print("\n--- Staff Actions ---"); staff_opts={}; current_opt_idx = 1
