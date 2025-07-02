@@ -946,6 +946,48 @@ def talk_to_npc_instance(player, npc_instance):
                 npc_instance.add_memory(memory_detail)
                 print(f"(Relationship with {npc_instance.name} updated by {relationship_points})")
 
+            # --- Add Contact Logic ---
+            is_already_contact = any(contact['npc_id'] == npc_instance.npc_id for contact in player.contacts)
+            MIN_REL_TO_EXCHANGE = 30 # Configurable minimum relationship score
+
+            if not is_already_contact and npc_instance.relationship_score >= MIN_REL_TO_EXCHANGE:
+                print(f"\n(You feel like you've made a connection with {npc_instance.name}.)")
+                exchange_options = {
+                    "1": "Continue conversation like normal",
+                    "2": f"Ask {npc_instance.name} if they'd like to exchange numbers"
+                }
+                # This present_choices is nested; ensure it doesn't break flow if player says 'bye' etc.
+                # The main loop of talk_to_npc_instance handles 'bye'.
+                contact_action_choice = present_choices(exchange_options, title="Deepen connection?")
+
+                if contact_action_choice == "2":
+                    npc_agrees_to_exchange = False
+                    # Simple agreement logic based on relationship score
+                    if npc_instance.relationship_score >= 70: npc_agrees_to_exchange = random.random() < 0.95 # Very likely
+                    elif npc_instance.relationship_score >= 50: npc_agrees_to_exchange = random.random() < 0.75 # Likely
+                    else: npc_agrees_to_exchange = random.random() < 0.50 # Fair chance
+
+                    if npc_agrees_to_exchange:
+                        player.contacts.append({
+                            'npc_id': npc_instance.npc_id,
+                            'name': npc_instance.name,
+                            'notes': f"Met at {player.current_poi.name if player.current_poi else player.current_location.name} on {get_current_time_str(date_only=True)}. Rel: {npc_instance.relationship_score}"
+                        })
+                        print(f"You exchanged numbers with {npc_instance.name}! They've been added to your phone contacts.")
+                        npc_instance.add_memory(f"Exchanged numbers with {player.name}.")
+                        npc_instance.update_relationship(10) # Bonus for successful exchange
+                    else:
+                        print(f"{npc_instance.name} politely declines to exchange numbers right now. Maybe another time.")
+                        npc_instance.add_memory(f"Politely declined to exchange numbers with {player.name}.")
+                        npc_instance.update_relationship(-2) # Small penalty for awkward ask
+
+                    # Time passes for this specific interaction attempt
+                    exchange_attempt_time = 5
+                    advance_game_time(minutes=exchange_attempt_time)
+                    update_npc_locations(current_game_time) # Update NPC locations after time passes
+                    process_time_based_player_needs(player, exchange_attempt_time) # Process player needs
+            # --- End Add Contact Logic ---
+
 # --- Phone Menu Handler ---
 def handle_phone_menu(player):
     """Handles the player's phone interactions."""
@@ -1016,13 +1058,58 @@ def handle_phone_menu(player):
             advance_game_time(minutes=5)
             update_npc_locations(current_game_time)
             process_time_based_player_needs(player, 5)
-        elif choice == "3":
-            # Placeholder for "Contacts"
+        elif choice == "3": # View Contacts
             print("\n--- Contacts ---")
-            print("(Feature coming soon! Your contact list is currently empty.)")
-            advance_game_time(minutes=2)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 2)
+            if not player.contacts:
+                print("Your contact list is empty.")
+                advance_game_time(minutes=1) # Time to check empty list
+                update_npc_locations(current_game_time)
+                process_time_based_player_needs(player, 1)
+            else:
+                contact_options = {}
+                for i, contact in enumerate(player.contacts):
+                    contact_options[str(i+1)] = f"{contact['name']} (Notes: {contact.get('notes', 'N/A')})"
+                contact_options["0"] = "Back to Phone Menu"
+
+                selected_contact_key = present_choices(contact_options, "Select a contact to view/call:")
+
+                if selected_contact_key == "0":
+                    pass # Just go back to phone menu loop
+                elif selected_contact_key in contact_options:
+                    selected_contact_index = int(selected_contact_key) - 1
+                    if 0 <= selected_contact_index < len(player.contacts):
+                        chosen_contact = player.contacts[selected_contact_index]
+
+                        print(f"\nCalling {chosen_contact['name']}...")
+                        # Simulate call attempt
+                        call_time_minutes = random.randint(2, 5)
+                        advance_game_time(minutes=call_time_minutes)
+                        update_npc_locations(current_game_time) # Update NPC locations as time passed
+
+                        # Basic outcome: NPC is busy or doesn't pick up.
+                        # More complex interactions can be added later.
+                        # For now, just a generic message.
+                        # Could check NPC schedule or relationship for varied simple responses later.
+
+                        # Find the actual NPC object to potentially use their current state or personality
+                        npc_object = NPC_REGISTRY.get(chosen_contact['npc_id'])
+
+                        possible_responses = [
+                            f"{chosen_contact['name']} doesn't pick up. You leave a voicemail.",
+                            f"The call goes straight to {chosen_contact['name']}'s voicemail.",
+                            f"{chosen_contact['name']} is busy right now. Try again later.",
+                            f"You hear a generic voicemail greeting from {chosen_contact['name']}.",
+                        ]
+                        if npc_object: # If we found the NPC in the registry
+                            npc_object.add_memory(f"Received a call attempt from {player.name} (went to voicemail/busy).")
+                            # Could potentially influence relationship slightly if desired, e.g., player.name spamming calls.
+
+                        print(random.choice(possible_responses))
+                        process_time_based_player_needs(player, call_time_minutes)
+                    else:
+                        print("Invalid contact selection.") # Should not happen with present_choices
+                else:
+                    print("Invalid choice.") # Should not happen
         elif choice == "0":
             print("Putting phone away.")
             # Minimal time for just opening and closing phone if no action taken before this loop iteration

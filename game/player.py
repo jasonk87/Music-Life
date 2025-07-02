@@ -47,6 +47,7 @@ class Player:
         }
 
         self.schedule = PlayerSchedule() # Initialize schedule
+        self.contacts = [] # List of dictionaries: {'npc_id': 'id', 'name': 'NPC Name', 'notes': 'Optional notes'}
 
 
     def get_current_gear_capacity(self, travel_mode=None):

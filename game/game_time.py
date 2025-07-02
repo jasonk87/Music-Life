@@ -83,5 +83,7 @@ def advance_game_time(minutes=0):
     # print(f"Time advanced by {minutes} minutes. Current time: {current_game_time}")
 
 
-def get_current_time_str():
+def get_current_time_str(date_only=False):
+    if date_only:
+        return f"{current_game_time.year}-{current_game_time.month:02d}-{current_game_time.day:02d}"
     return str(current_game_time)
