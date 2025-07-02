@@ -576,7 +576,7 @@ from game.location import Location
 from game.venue import Venue
 from game.poi import PointOfInterest
 from game.event import Event
-from game.game_time import current_game_time, advance_game_time, get_current_time_str
+from game.game_time import current_game_time, advance_game_time, get_current_time_str, calculate_player_age # Added calculate_player_age
 from game.dialogue import generate_npc_response, NPC_PERSONALITIES # Ensure NPC_PERSONALITIES is imported if used directly
 from game.random_events import check_for_random_event, check_for_post_gig_random_event
 from game.song import Song
@@ -909,6 +909,26 @@ def present_choices(options, title="Choose an option:"):
     print("Too many invalid attempts.")
     return None
 
+# --- HUD Display Function ---
+def display_hud(player, current_game_time_obj):
+    """Displays the Heads-Up Display with current player stats."""
+    # Import necessary function here if not already globally available in main.py
+    # from game.game_time import calculate_player_age # Not needed if main.py imports game.game_time.* or specific items
+
+    # Calculate current age
+    # The player.age attribute is the starting age. We calculate current age dynamically.
+    current_age = calculate_player_age(player.start_date, current_game_time_obj, player.age)
+
+    hud_lines = [
+        "===============================================================================",
+        f"| {player.name} | Age: {current_age} | Fame: {player.fame} | Money: ${player.money}",
+        f"| Location: {player.current_location.name if player.current_location else 'N/A'} / {player.current_poi.name if player.current_poi else 'N/A'}",
+        f"| Hair: {player.hair_length} | Beard: {player.beard_length}",
+        f"| Date: {get_current_time_str(date_only=True)} | Time: {current_game_time_obj.hour:02d}:{current_game_time_obj.minute:02d}",
+        "==============================================================================="
+    ]
+    print("\n".join(hud_lines))
+
 # --- Helper for NPC Interaction --- (Keep existing talk_to_npc_instance)
 def talk_to_npc_instance(player, npc_instance):
     if not npc_instance:
@@ -1188,15 +1208,37 @@ def main():
 
     # Game Loop (largely unchanged, but ensure it uses the new WORLD_MAP and NPC_REGISTRY correctly)
     while True:
-        clear_screen_ish()
-        # Display current location name; if current_location is None, handle gracefully
-        current_loc_name_display = player.current_location.name if player.current_location else "Unknown Location"
-        print(f"--- Current Location: {current_loc_name_display} ---")
-        print(f"--- {get_current_time_str()} ---")
-        print(f"--- Player: {player.name} | Fame: {player.fame} | Money: ${player.money} | Energy: {player.energy}/100 | Stress: {player.stress}/100 ---")
-        # Display current POI name; if current_poi is None, use location name
-        current_poi_name_display = player.current_poi.name if player.current_poi else current_loc_name_display
-        print(f"--- Currently at: {current_poi_name_display} ---")
+        # Display HUD first
+        display_hud(player, current_game_time) # Pass the global current_game_time object
+
+        # Then clear screen for menu, but HUD remains visible from this turn's print
+        # clear_screen_ish() # This might clear the HUD too soon. Let's test behavior.
+                           # If HUD should persist above a cleared section for menu,
+                           # clear_screen_ish might need to be called *after* HUD and *before* menu options.
+                           # For now, let's print HUD, then menu directly. clear_screen_ish can be called
+                           # at the start of action handlers if they produce a lot of text.
+                           # OR, the HUD is just the first thing printed, then other status lines, then menu.
+
+        # Standard status lines that were previously printed:
+        # These are now mostly covered by the HUD, but we can print a simplified version or context.
+        # For now, the HUD should cover these. We can refine if it feels redundant or lacking.
+
+        # clear_screen_ish() # Call clear_screen_ish *after* HUD if HUD is meant to be "sticky" at top before menu.
+                           # Let's try printing HUD, then the main menu title directly.
+                           # The current `clear_screen_ish` prints many newlines, so it will push the HUD up.
+                           # This is typical for text adventures.
+
+        # Main menu choices will appear below the HUD.
+        # The existing `clear_screen_ish()` called before action handling will clear the old menu AND old HUD.
+        # The new HUD will be printed at the top of the next loop. This is the standard way.
+
+        # The old status lines are now incorporated into display_hud.
+        # current_loc_name_display = player.current_location.name if player.current_location else "Unknown Location"
+        # print(f"--- Current Location: {current_loc_name_display} ---")
+        # print(f"--- {get_current_time_str()} ---")
+        # print(f"--- Player: {player.name} | Fame: {player.fame} | Money: ${player.money} | Energy: {player.energy}/100 | Stress: {player.stress}/100 ---")
+        # current_poi_name_display = player.current_poi.name if player.current_poi else current_loc_name_display
+        # print(f"--- Currently at: {current_poi_name_display} ---")
 
 
         main_menu_options = {

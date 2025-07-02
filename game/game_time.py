@@ -87,3 +87,23 @@ def get_current_time_str(date_only=False):
     if date_only:
         return f"{current_game_time.year}-{current_game_time.month:02d}-{current_game_time.day:02d}"
     return str(current_game_time)
+
+def calculate_player_age(player_start_date, current_time, initial_age=18):
+    """
+    Calculates the player's age based on their start date in the game and the current game time.
+    Age increments on the anniversary of the start month and day.
+    """
+    if not player_start_date or not current_time:
+        return initial_age # Should not happen if player_start_date is set
+
+    years_passed = current_time.year - player_start_date.year
+    age = initial_age + years_passed
+
+    # Check if the anniversary of the start month/day has passed this year
+    if current_time.month < player_start_date.month:
+        age -= 1 # Anniversary month not yet reached this year
+    elif current_time.month == player_start_date.month:
+        if current_time.day < player_start_date.day:
+            age -= 1 # Anniversary day not yet reached this month
+
+    return age

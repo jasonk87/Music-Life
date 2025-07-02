@@ -3,6 +3,7 @@ class Player:
         self.name = name
 from game.gear import GearItem
 from game.player_schedule import PlayerSchedule # Import PlayerSchedule
+from game.game_time import current_game_time # Import global game time for start_date
 
 class Player:
     def __init__(self, name):
@@ -48,6 +49,12 @@ class Player:
 
         self.schedule = PlayerSchedule() # Initialize schedule
         self.contacts = [] # List of dictionaries: {'npc_id': 'id', 'name': 'NPC Name', 'notes': 'Optional notes'}
+
+        # HUD Related Attributes
+        self.age = 18 # Starting age
+        self.hair_length = "Medium" # Options: Short, Medium, Long (or numerical)
+        self.beard_length = "Clean-shaven" # Options: Clean-shaven, Short, Medium, Long
+        self.start_date = current_game_time.copy() # Set player's start date to current game time
 
 
     def get_current_gear_capacity(self, travel_mode=None):
