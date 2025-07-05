@@ -51,10 +51,19 @@ class Player:
         self.contacts = [] # List of dictionaries: {'npc_id': 'id', 'name': 'NPC Name', 'notes': 'Optional notes'}
 
         # HUD Related Attributes
-        self.age = 18 # Starting age
-        self.hair_length = "Medium" # Options: Short, Medium, Long (or numerical)
-        self.beard_length = "Clean-shaven" # Options: Clean-shaven, Short, Medium, Long
+        self.age = 18 # Starting age (this will be the initial_age for calculation)
+        self.hair_length = 3 # Numerical: 0 (Bald/Shaved) to 10 (Very Long)
+        self.beard_length = 0 # Numerical: 0 (Clean-shaven) to 10 (Very Long Beard)
         self.start_date = current_game_time.copy() # Set player's start date to current game time
+
+        self.hair_growth_progress = 0.0 # Accumulates points towards next length level
+        self.beard_growth_progress = 0.0 # Accumulates points towards next length level
+
+        # Constants for growth mechanics (can be tuned)
+        self.HAIR_POINTS_PER_LENGTH_LEVEL = 100.0 # How many progress points to gain one length level for hair
+        self.BEARD_POINTS_PER_LENGTH_LEVEL = 80.0 # How many progress points to gain one length level for beard
+        self.MAX_HAIR_LENGTH = 10
+        self.MAX_BEARD_LENGTH = 10
 
 
     def get_current_gear_capacity(self, travel_mode=None):

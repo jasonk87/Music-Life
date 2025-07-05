@@ -623,6 +623,37 @@ def process_time_based_player_needs(player, minutes_just_passed):
         player.stress = min(100, player.stress + (hours_passed_float * stress_from_starvation_hourly_rate))
         player.stress = int(round(player.stress))
 
+    # Hair and Beard Growth
+    # Define points per day (24 hours * 60 minutes)
+    # Example: 10 points for hair per day, 12.5 for beard per day to make them grow at slightly different rates
+    # These values mean hair needs 10 days for a level, beard needs ~6.4 days.
+    POINTS_PER_DAY_HAIR = 10.0
+    POINTS_PER_DAY_BEARD = 12.5
+
+    hair_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_HAIR
+    player.hair_growth_progress += hair_growth_to_add
+
+    beard_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_BEARD
+    player.beard_growth_progress += beard_growth_to_add
+
+    # Check for hair length increase
+    if player.hair_growth_progress >= player.HAIR_POINTS_PER_LENGTH_LEVEL:
+        levels_gained = int(player.hair_growth_progress // player.HAIR_POINTS_PER_LENGTH_LEVEL)
+        player.hair_length = min(player.MAX_HAIR_LENGTH, player.hair_length + levels_gained)
+        player.hair_growth_progress %= player.HAIR_POINTS_PER_LENGTH_LEVEL
+        if levels_gained > 0:
+            print(f"DEBUG: Your hair grew! New length: {player.hair_length}/{player.MAX_HAIR_LENGTH}")
+
+
+    # Check for beard length increase
+    if player.beard_growth_progress >= player.BEARD_POINTS_PER_LENGTH_LEVEL:
+        levels_gained = int(player.beard_growth_progress // player.BEARD_POINTS_PER_LENGTH_LEVEL)
+        player.beard_length = min(player.MAX_BEARD_LENGTH, player.beard_length + levels_gained)
+        player.beard_growth_progress %= player.BEARD_POINTS_PER_LENGTH_LEVEL
+        if levels_gained > 0:
+            print(f"DEBUG: Your beard grew! New length: {player.beard_length}/{player.MAX_BEARD_LENGTH}")
+
+
 # Helper function to get a POI or Venue by its ID from WORLD_MAP (after it's populated)
 # This is needed because schedules in JSON will use IDs, not direct object references yet.
 # And also to link NPC owners to their POIs/Venues.
@@ -923,7 +954,7 @@ def display_hud(player, current_game_time_obj):
         "===============================================================================",
         f"| {player.name} | Age: {current_age} | Fame: {player.fame} | Money: ${player.money}",
         f"| Location: {player.current_location.name if player.current_location else 'N/A'} / {player.current_poi.name if player.current_poi else 'N/A'}",
-        f"| Hair: {player.hair_length} | Beard: {player.beard_length}",
+        f"| Hair Length: {player.hair_length}/{player.MAX_HAIR_LENGTH} | Beard Length: {player.beard_length}/{player.MAX_BEARD_LENGTH}", # Display numerical value
         f"| Date: {get_current_time_str(date_only=True)} | Time: {current_game_time_obj.hour:02d}:{current_game_time_obj.minute:02d}",
         "==============================================================================="
     ]
