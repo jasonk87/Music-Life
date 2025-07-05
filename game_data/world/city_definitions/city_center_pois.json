@@ -117,6 +117,20 @@
           {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
         ]
       }
+    },
+    {
+      "poi_id": "citycenter_trendy_salon",
+      "name": "Chic & Unique Salon",
+      "description": "A modern salon that offers stylish haircuts and beard trims. A bit pricey.",
+      "category": "SHOP_BARBER",
+      "interaction_options": [
+        "Talk to Stylist Antoine",
+        "Get a haircut",
+        "Shave or Trim beard"
+      ],
+      "properties": {
+        "owner_npc_id": "stylist_antoine_npc"
+      }
     }
   ],
   "venues": [
@@ -168,6 +182,10 @@
     {
       "pois": ["citycenter_bus_station", "citycenter_airport"],
       "walk": {"time": 60, "cost": 0}, "taxi": {"time": 15, "cost": 25}
+    },
+    {
+      "pois": ["citycenter_dailygrind_cafe", "citycenter_trendy_salon"],
+      "walk": {"time": 8, "cost": 0}, "bike": {"time": 3, "cost": 0, "requires_bike": true}, "taxi": {"time": 2, "cost": 6}
     }
   ]
 }

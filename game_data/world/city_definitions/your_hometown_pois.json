@@ -62,6 +62,20 @@
           {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
         ]
       }
+    },
+    {
+      "poi_id": "hometown_barber_shop",
+      "name": "Old Style Cuts",
+      "description": "A classic, no-frills barber shop. Smells of talcum powder and old magazines.",
+      "category": "SHOP_BARBER",
+      "interaction_options": [
+        "Talk to Barber Bill",
+        "Get a haircut",
+        "Shave or Trim beard"
+      ],
+      "properties": {
+        "owner_npc_id": "barber_bill_npc"
+      }
     }
   ],
   "venues": [
@@ -95,6 +109,10 @@
     {
       "pois": ["hometown_music_shop_oldtimers", "hometown_community_hall"],
       "walk": {"time": 5, "cost": 0}, "bike": {"time": 2, "cost": 0, "requires_bike": true}
+    },
+    {
+      "pois": ["hometown_player_home", "hometown_barber_shop"],
+      "walk": {"time": 12, "cost": 0}, "bike": {"time": 4, "cost": 0, "requires_bike": true}, "taxi": {"time": 3, "cost": 7}
     }
   ]
 }

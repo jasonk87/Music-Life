@@ -103,5 +103,30 @@
       "Weekday_Evening": "austin_iconic_club",
       "Weekend_Evening": "austin_iconic_club"
     }
+  },
+  {
+    "npc_id": "barber_bill_npc",
+    "name": "Barber Bill",
+    "personality_key": "friendly_shopkeeper",
+    "home_location_poi_id": "hometown_barber_shop",
+    "initial_current_location_poi_id": "hometown_barber_shop",
+    "schedule": {
+      "Weekday_Morning": "hometown_barber_shop",
+      "Weekday_Afternoon": "hometown_barber_shop",
+      "Weekend_Morning": "hometown_barber_shop"
+    }
+  },
+  {
+    "npc_id": "stylist_antoine_npc",
+    "name": "Antoine 'The Style' Dubois",
+    "personality_key": "stylish_artistic",
+    "home_location_poi_id": "citycenter_trendy_salon",
+    "initial_current_location_poi_id": "citycenter_trendy_salon",
+    "schedule": {
+      "Weekday_Morning": "citycenter_trendy_salon",
+      "Weekday_Afternoon": "citycenter_trendy_salon",
+      "Weekday_Evening": "citycenter_trendy_salon",
+      "Weekend_Afternoon": "citycenter_trendy_salon"
+    }
   }
 ]

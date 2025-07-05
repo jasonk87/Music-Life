@@ -1709,7 +1709,99 @@ def main():
                                 else: print(f"{pr_agent.name}: '{player.name}, you need more buzz (Fame {player.fame}/{req_fame}). Come back later.'"); pr_agent.add_memory(f"Met {player.name}, not ready.")
                                 advance_game_time(60);update_npc_locations(current_game_time);process_time_based_player_needs(player,60)
                         # --- OTHER/NOT IMPLEMENTED ---
-                        else: print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
+                        # SHOP_BARBER interactions
+                        elif current_poi_for_explore.category == "SHOP_BARBER":
+                            if chosen_interaction_text == "Get a haircut":
+                                print("\n--- Get a Haircut ---")
+                                print(f"Your current hair length: {player.hair_length}/{player.MAX_HAIR_LENGTH}")
+                                if player.hair_length == 0:
+                                    print("Your head is already shaved clean!")
+                                else:
+                                    haircut_options = {
+                                        "1": f"Buzz Cut (Set to 1/{player.MAX_HAIR_LENGTH}) - $15",
+                                        "2": f"Short Trim (Set to {max(1, player.hair_length - 2)}/{player.MAX_HAIR_LENGTH}) - $12", # Trim by 2 levels
+                                        "3": f"Standard Cut (Set to 3/{player.MAX_HAIR_LENGTH}) - $20",
+                                        "0": "Nevermind"
+                                    }
+                                    hair_choice = present_choices(haircut_options, "Choose a style:")
+                                    cost = 0
+                                    new_length = player.hair_length
+                                    valid_cut = False
+
+                                    if hair_choice == "1": cost, new_length, valid_cut = 15, 1, True
+                                    elif hair_choice == "2": cost, new_length, valid_cut = 12, max(1, player.hair_length - 2), True
+                                    elif hair_choice == "3": cost, new_length, valid_cut = 20, 3, True
+                                    elif hair_choice == "0": print("Decided against a haircut for now."); valid_cut = False # Handled
+                                    else: print("Invalid choice.")
+
+                                    if valid_cut and cost > 0:
+                                        if player.money >= cost:
+                                            player.money -= cost
+                                            player.hair_length = new_length
+                                            player.hair_growth_progress = 0.0
+                                            advance_game_time(minutes=30)
+                                            update_npc_locations(current_game_time)
+                                            process_time_based_player_needs(player, 30)
+                                            print(f"Got a haircut! New hair length: {player.hair_length}/{player.MAX_HAIR_LENGTH}. Paid ${cost}.")
+                                            print(f"Money: ${player.money}")
+                                        else:
+                                            print(f"Not enough money. You need ${cost}.")
+                                    elif valid_cut and cost == 0: # Should not happen with current options but good for future
+                                         print("No changes made to your hair.")
+
+
+                            elif chosen_interaction_text == "Shave or Trim beard":
+                                print("\n--- Beard Grooming ---")
+                                print(f"Your current beard length: {player.beard_length}/{player.MAX_BEARD_LENGTH}")
+
+                                beard_groom_options = {
+                                    "1": f"Clean Shave (Set to 0/{player.MAX_BEARD_LENGTH}) - $10",
+                                    "0": "Nevermind"
+                                }
+                                if player.beard_length > 0: # Only offer trim if there's a beard
+                                    beard_groom_options["2"] = f"Beard Trim (Set to {max(0, player.beard_length - 2)}/{player.MAX_BEARD_LENGTH}) - $8"
+                                    beard_groom_options["3"] = f"Style Beard (Set to 2/{player.MAX_BEARD_LENGTH}, if current > 2 else current) - $12"
+
+
+                                beard_choice = present_choices(beard_groom_options, "Choose an option:")
+                                cost = 0
+                                new_length = player.beard_length
+                                valid_groom = False
+
+                                if beard_choice == "1": cost, new_length, valid_groom = 10, 0, True
+                                elif beard_choice == "2" and player.beard_length > 0: cost, new_length, valid_groom = 8, max(0, player.beard_length - 2), True
+                                elif beard_choice == "3" and player.beard_length > 0: cost, new_length, valid_groom = 12, (2 if player.beard_length > 2 else player.beard_length) , True
+                                elif beard_choice == "0": print("Decided against beard grooming for now."); valid_groom = False
+                                else: print("Invalid choice.")
+
+                                if valid_groom and cost > 0 :
+                                    if player.money >= cost:
+                                        player.money -= cost
+                                        player.beard_length = new_length
+                                        player.beard_growth_progress = 0.0
+                                        advance_game_time(minutes=20)
+                                        update_npc_locations(current_game_time)
+                                        process_time_based_player_needs(player, 20)
+                                        print(f"Beard groomed! New beard length: {player.beard_length}/{player.MAX_BEARD_LENGTH}. Paid ${cost}.")
+                                        print(f"Money: ${player.money}")
+                                    else:
+                                        print(f"Not enough money. You need ${cost}.")
+                                elif valid_groom and cost == 0:
+                                    print("No changes made to your beard.")
+
+                            # "Talk to Barber Bill" or "Talk to Stylist Antoine" will be handled by the generic talk logic
+                            # if owner_npc_id is set on the POI and the NPC is present.
+                            elif "Talk to" in chosen_interaction_text:
+                                # This will be caught by the generic talk logic later if not handled here
+                                # For now, let it fall through or add specific barber talk if needed
+                                print(f"You chat with the barber/stylist for a bit.")
+                                advance_game_time(minutes=10)
+                                update_npc_locations(current_game_time)
+                                process_time_based_player_needs(player,10)
+                            else:
+                                print(f"(Action '{chosen_interaction_text}' at the barber shop is not fully implemented yet.)")
+                        else:
+                            print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
                 else:
                     if current_poi_for_explore and current_poi_for_explore.category == "OFFICE_NEWS_AGENCY" and \
                        player.active_opportunities.get("interview_city_chronicle") == "pending_player_action" and \
