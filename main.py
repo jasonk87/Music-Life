@@ -14,10 +14,13 @@ import json
 
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
+from game.chart import Chart # Import the new Chart class
 
 WORLD_MAP = {}
 NPC_REGISTRY = {}
 PLAYER_HOME_POI_ID_GLOBAL = None
+ACTIVE_CHARTS = [] # Global list to hold active chart objects
+LAST_CHART_UPDATE_DAY = -1 # Stores the game day number of the last chart update
 
 # --- Player Needs Update Function ---
 def process_time_based_player_needs(player, minutes_just_passed):
@@ -167,6 +170,15 @@ def setup_world():
     player_home_obj = get_poi_or_venue_by_id("hometown_player_home")
     if player_home_obj: PLAYER_HOME_POI_ID_GLOBAL = player_home_obj.poi_id
     else: print("CRITICAL ERROR: Player home POI 'hometown_player_home' not found.")
+
+    # Initialize ACTIVE_CHARTS
+    ACTIVE_CHARTS.clear()
+    hometown_chart = Chart(name="Hometown Local Hits", max_size=10, chart_genre_preference="Indie") # Example
+    city_chart = Chart(name="City Center Top Tracks", max_size=20) # Example
+    ACTIVE_CHARTS.append(hometown_chart)
+    ACTIVE_CHARTS.append(city_chart)
+    print(f"Initialized {len(ACTIVE_CHARTS)} charts.")
+
     print(f"World setup complete. Loaded {len(WORLD_MAP)} locations and {len(NPC_REGISTRY)} NPCs.")
     return True
 
@@ -309,7 +321,7 @@ def handle_phone_menu(player):
                     print(random.choice(responses))
         elif choice == "4": # Music Management
             print("\n--- Music Management ---")
-            music_opts = {"1": "Self-Release Song", "2": "View Released Songs (TBD)", "0": "Back"}
+            music_opts = {"1": "Self-Release Song", "2": "View Released Songs (TBD)", "3": "View Charts", "0": "Back"}
             music_choice = present_choices(music_opts, "Music Management Options:")
             adv_time = 5 # Base time for accessing this menu
 
@@ -349,6 +361,16 @@ def handle_phone_menu(player):
             elif music_choice == "2":
                 print("Viewing released songs... (TBD)")
                 # Future: List released songs, their stats, chart positions etc.
+            elif music_choice == "3": # View Charts
+                print("\n--- Current Music Charts ---")
+                if not ACTIVE_CHARTS:
+                    print("No music charts available at the moment.")
+                else:
+                    for i, chart_obj in enumerate(ACTIVE_CHARTS):
+                        print(f"\n{i+1}. {chart_obj.name}")
+                        print(chart_obj) # Relies on Chart.__str__
+                input("Press Enter to continue...") # Pause to read charts
+                adv_time += 5 # Time for checking charts
             # choice "0" (Back) is handled by falling through
             adv_time = max(1, adv_time) # Ensure some time passes if only browsing menus
 
@@ -357,6 +379,24 @@ def handle_phone_menu(player):
         if adv_time > 0: advance_game_time(adv_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time)
         if choice in ["1","2","3", "4"] and present_choices({"1":"Continue phone","0":"Put away"},"Done?")=="0": print("Putting phone away."); break
     print("--------------------")
+
+# --- Chart Update Function ---
+def update_all_charts(player_obj, current_game_time_obj):
+    """Iterates through all active charts and calls their weekly update."""
+    if not hasattr(player_obj, 'songs_written') or not hasattr(player_obj, 'name') or not hasattr(player_obj, 'fame'):
+        print("Error: Player object is not correctly initialized for chart updates.")
+        return
+
+    print("\n--- Weekly Chart Updates Processing ---")
+    for chart in ACTIVE_CHARTS:
+        chart.update_weekly(
+            all_player_songs=player_obj.songs_written,
+            player_name=player_obj.name,
+            player_fame=player_obj.fame,
+            current_game_time_obj=current_game_time_obj
+        )
+    print("--- Weekly Chart Updates Finished ---\n")
+
 
 def handle_travel_menu(player):
     while True:
@@ -430,7 +470,19 @@ def main():
     if GEAR_CATALOG.get("guitar_picks_assorted"): player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
     print(f"\n--- {get_current_time_str()} ---"); print(player)
 
+    global LAST_CHART_UPDATE_DAY
+    LAST_CHART_UPDATE_DAY = current_game_time.day # Initialize to current day to prevent immediate update
+
     while True:
+        # Check for weekly chart update
+        # Trigger if it's a new week (e.g. current day is a Sunday-equivalent like 7, 14, 21, 28)
+        # and we haven't updated for this specific day yet.
+        # Using (day % 7 == 1) to make it Monday-like, assuming day 1 is Monday.
+        if (current_game_time.day % 7 == 1) and (current_game_time.day != LAST_CHART_UPDATE_DAY):
+            update_all_charts(player, current_game_time.copy())
+            LAST_CHART_UPDATE_DAY = current_game_time.day
+            # Potentially save game or specific chart data here if needed in future
+
         display_hud(player, current_game_time)
         main_menu_opts = {"1":"Practice skill", "2":"Travel", "3":"Explore POI/Area", "4":"Check Gigs (City)",
                           "5":"Prep Gig", "6":"Attempt Gig", "7":"Player Stats", "8":"Talk", "9":"Eat Food", "10":"Phone"}

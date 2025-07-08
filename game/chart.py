@@ -1,0 +1,207 @@
+class Chart:
+    def __init__(self, name, max_size=10, chart_genre_preference=None):
+        self.name = name
+        self.max_size = max_size
+        self.chart_genre_preference = chart_genre_preference # Optional: e.g., "Indie", "Rock"
+        self.entries = [] # List of dictionaries, each representing a charted song
+
+        # Each entry dictionary could look like:
+        # {
+        #     'song_id': 'uuid_string_here',
+        #     'song_obj': song_object_reference, # For easy access to qualities
+        #     'song_title': 'Title of Song',
+        #     'artist_name': 'Player Name',
+        #     'current_position': 1,
+        #     'previous_position': 2, # Or None if new entry
+        #     'weeks_on_chart': 1,
+        #     'peak_position': 1,
+        #     'chart_score': 150.75
+        # }
+
+    def __str__(self):
+        if not self.entries:
+            return f"--- {self.name} (Top {self.max_size}) ---\nChart is currently empty."
+
+        s = f"--- {self.name} (Top {self.max_size}) ---\n"
+        # Sort entries by current_position for display
+        sorted_entries = sorted(self.entries, key=lambda x: x['current_position'])
+        for entry in sorted_entries:
+            pos_change = ""
+            if entry['previous_position'] is not None:
+                if entry['previous_position'] > entry['current_position']:
+                    pos_change = " (Up)"
+                elif entry['previous_position'] < entry['current_position']:
+                    pos_change = " (Down)"
+                else:
+                    pos_change = " (-)" # No change
+
+            s += (f"{entry['current_position']}. {entry['song_title']} by {entry['artist_name']} "
+                  f"[Score: {entry['chart_score']:.2f}, Weeks: {entry['weeks_on_chart']}, Peak: {entry['peak_position']}]"
+                  f"{pos_change}\n")
+        return s
+
+    # Methods for updating the chart will be added later:
+    # - add_song_candidate(song, player_fame)
+    # - calculate_song_chart_score(song, player_fame)
+    # - update_weekly()
+    # - sort_and_trim_entries()
+
+    def calculate_song_chart_score(self, song_obj, player_fame):
+        """
+        Calculates a score for a song based on its qualities and player's fame.
+        This score determines its likelihood of charting and its position.
+        """
+        # Base score from song & recording quality (e.g., out of 200 points)
+        # song_quality and recording_quality are 0.0 - 1.0
+        score = (song_obj.song_quality * 75) + (song_obj.recording_quality * 50) # Max 125 from quality
+
+        # Fame contribution (e.g., up to 50 points)
+        # Player fame can be 0-1000. Let's scale it: max 50 points for 500+ fame.
+        fame_bonus = min(50, player_fame / 10)
+        score += fame_bonus
+
+        # Genre preference bonus (e.g., up to 25 points)
+        if self.chart_genre_preference:
+            if song_obj.genre == self.chart_genre_preference:
+                score += 25
+            # Optional: minor bonus for related genres, or penalty for clashing ones (not implemented here)
+
+        # Randomness factor (e.g., +/- 10 points)
+        # score += random.uniform(-10, 10) # Requires import random
+
+        # Ensure score is not negative, though unlikely with current formula
+        return max(0, score)
+
+    def _sort_and_trim_entries(self):
+        """
+        Sorts entries by chart_score (desc) and trims to max_size.
+        Updates current_position and previous_position.
+        """
+        # Store previous positions before re-sorting
+        old_positions = {entry['song_id']: entry['current_position'] for entry in self.entries}
+
+        # Sort by chart_score in descending order
+        self.entries.sort(key=lambda x: x['chart_score'], reverse=True)
+
+        # Trim to max_size
+        self.entries = self.entries[:self.max_size]
+
+        # Update positions
+        for i, entry in enumerate(self.entries):
+            entry['current_position'] = i + 1
+            entry['previous_position'] = old_positions.get(entry['song_id']) # Might be None if it wasn't on chart
+            # Update peak position
+            if entry['peak_position'] is None or entry['current_position'] < entry['peak_position']:
+                entry['peak_position'] = entry['current_position']
+
+    def _add_or_update_song_entry(self, song_obj, chart_score, player_name):
+        """
+        Adds a new song or updates an existing one in the chart entries if it qualifies.
+        This is typically called before _sort_and_trim_entries.
+        """
+        existing_entry = next((e for e in self.entries if e['song_id'] == song_obj.song_id), None)
+
+        if existing_entry:
+            # Update existing song's score if it's still being considered (e.g. re-evaluated)
+            existing_entry['chart_score'] = chart_score
+            # Weeks on chart and peak position are managed by update_weekly and _sort_and_trim_entries
+        else:
+            # Add as a new candidate if not already present
+            # current_position and previous_position will be set by _sort_and_trim_entries
+            self.entries.append({
+                'song_id': song_obj.song_id,
+                'song_obj': song_obj, # Keep reference for easy access to changing qualities if needed later
+                'song_title': song_obj.title,
+                'artist_name': player_name,
+                'current_position': None, # Placeholder, will be set by sort_and_trim
+                'previous_position': None, # Placeholder
+                'weeks_on_chart': 0, # Will be incremented in update_weekly if it makes the cut
+                'peak_position': None, # Placeholder
+                'chart_score': chart_score
+            })
+
+    def update_weekly(self, all_player_songs, player_name, player_fame, current_game_time_obj):
+        """
+        Main weekly update logic for the chart.
+        - Decays scores of existing songs.
+        - Considers new releases from the player.
+        - Re-sorts and trims the chart.
+        """
+        print(f"\nUpdating chart: {self.name} for week of {current_game_time_obj.get_time_string_for_schedule()}...")
+        # Decay existing entries and increment weeks on chart
+        for entry in self.entries:
+            entry['chart_score'] *= 0.85 # Decay factor
+            entry['weeks_on_chart'] += 1
+            # Mark for removal if score is too low or too many weeks (e.g. > 20 weeks)
+            if entry['chart_score'] < 10 or entry['weeks_on_chart'] > 52: # Example thresholds
+                entry['chart_score'] = -1 # Mark for removal by sort_and_trim
+
+        # Consider player's released songs as candidates
+        # A song is a candidate if it was released recently or is already on the chart
+        # Recency window: e.g., released in the last 8 weeks.
+        RECENCY_WINDOW_DAYS = 8 * 7
+
+        for song in all_player_songs:
+            if song.is_released:
+                is_on_chart = any(e['song_id'] == song.song_id for e in self.entries if e['chart_score'] > 0)
+
+                days_since_release = float('inf')
+                if song.release_date and hasattr(current_game_time_obj, 'days_difference') and hasattr(song.release_date, 'year'): # Check if release_date is GameTime like
+                    try:
+                        days_since_release = current_game_time_obj.days_difference(song.release_date)
+                    except ValueError:
+                        print(f"Warning: Could not calculate days_difference for song '{song.title}' release_date.")
+                        # Keep days_since_release as float('inf') or handle as very old
+
+                if is_on_chart or (days_since_release <= RECENCY_WINDOW_DAYS):
+                    # If already on chart, its score was decayed. Re-calculate to see if it stays.
+                    # If new and recent, calculate its initial score.
+                    current_chart_score = self.calculate_song_chart_score(song, player_fame)
+                    self._add_or_update_song_entry(song, current_chart_score, player_name)
+
+        self._sort_and_trim_entries()
+        print(f"Chart '{self.name}' update complete. {len(self.entries)} songs.")
+        # print(self) # Optionally print the chart after update for debugging
+
+
+if __name__ == '__main__':
+    import random # Needed for calculate_song_chart_score if randomness is used
+    from game.song import Song # Actual Song class for better testing
+    from game.game_time import GameTime # Actual GameTime for release_date
+
+    # Basic test
+    test_chart = Chart(name="Global Test Hits", max_size=3)
+    print(test_chart)
+
+    # Mock song objects for testing structure
+    class MockSong:
+        def __init__(self, song_id, title, genre, song_quality, recording_quality):
+            self.song_id = song_id
+            self.title = title
+            self.genre = genre
+            self.song_quality = song_quality
+            self.recording_quality = recording_quality
+
+    song_a = MockSong("id_a", "Summer Breeze", "Pop", 0.8, 0.7)
+    song_b = MockSong("id_b", "Rock The Night", "Rock", 0.9, 0.85)
+    song_c = MockSong("id_c", "Indie Anthem", "Indie", 0.7, 0.6)
+    song_d = MockSong("id_d", "Forgotten Tune", "Pop", 0.5, 0.4)
+
+    test_chart.entries = [
+        {
+            'song_id': song_b.song_id, 'song_obj': song_b, 'song_title': song_b.title, 'artist_name': 'The Rockers',
+            'current_position': 1, 'previous_position': 2, 'weeks_on_chart': 5, 'peak_position': 1, 'chart_score': 250.0
+        },
+        {
+            'song_id': song_a.song_id, 'song_obj': song_a, 'song_title': song_a.title, 'artist_name': 'Pop Star',
+            'current_position': 2, 'previous_position': 1, 'weeks_on_chart': 10, 'peak_position': 1, 'chart_score': 220.5
+        },
+        {
+            'song_id': song_c.song_id, 'song_obj': song_c, 'song_title': song_c.title, 'artist_name': 'Indie Kid',
+            'current_position': 3, 'previous_position': None, 'weeks_on_chart': 1, 'peak_position': 3, 'chart_score': 180.0
+        },
+    ]
+    print("\nPopulated chart:")
+    print(test_chart)
+
+    print("\nChart class initial structure test complete.")

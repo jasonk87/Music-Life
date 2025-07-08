@@ -71,6 +71,22 @@ class GameTime:
             return NotImplemented
         return self._to_tuple() >= other._to_tuple()
 
+    def days_difference(self, other_time_obj):
+        """
+        Calculates the approximate number of days between this GameTime object (self) and another (other_time_obj).
+        Assumes self is later than other_time_obj. Returns a positive float.
+        Simplified: 30 days per month.
+        """
+        if not isinstance(other_time_obj, GameTime):
+            raise ValueError("Can only calculate difference with another GameTime object.")
+
+        # Calculate total days from a common epoch (year 0, month 0, day 0) for both times
+        self_total_days = self.year * 360 + self.month * 30 + self.day + (self.hour / 24.0) + (self.minute / (24.0 * 60.0))
+        other_total_days = other_time_obj.year * 360 + other_time_obj.month * 30 + other_time_obj.day + \
+                           (other_time_obj.hour / 24.0) + (other_time_obj.minute / (24.0 * 60.0))
+
+        return abs(self_total_days - other_total_days)
+
 
 # Global game time instance
 current_game_time = GameTime()
