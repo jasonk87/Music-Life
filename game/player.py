@@ -1,6 +1,3 @@
-class Player:
-    def __init__(self, name):
-        self.name = name
 from game.gear import GearItem
 from game.player_schedule import PlayerSchedule # Import PlayerSchedule
 from game.game_time import current_game_time # Import global game time for start_date
@@ -69,6 +66,8 @@ class Player:
         self.BEARD_POINTS_PER_LENGTH_LEVEL = 80.0 # How many progress points to gain one length level for beard
         self.MAX_HAIR_LENGTH = 10
         self.MAX_BEARD_LENGTH = 10
+
+        self.feedback_received = [] # List to store feedback/review dictionaries
 
 
     def get_current_gear_capacity(self, travel_mode=None):

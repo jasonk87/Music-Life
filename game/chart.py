@@ -159,14 +159,46 @@ class Chart:
                     current_chart_score = self.calculate_song_chart_score(song, player_fame)
                     self._add_or_update_song_entry(song, current_chart_score, player_name)
 
-        self._sort_and_trim_entries()
+
+        # Store pre-update state for feedback generation
+        previous_chart_state = {e['song_id']: e.copy() for e in self.entries}
+
+        self._sort_and_trim_entries() # This updates positions and weeks for songs that remain
+
+        # After sorting and trimming, generate feedback for new entries or significant changes
+        # This needs access to the player object to add feedback.
+        # For now, this method will return a list of events that main can process into feedback.
+        feedback_events = []
+
+        for entry in self.entries:
+            song_id = entry['song_id']
+            prev_entry_details = previous_chart_state.get(song_id)
+
+            if prev_entry_details is None or \
+               (prev_entry_details.get('current_position') is None and entry['current_position'] is not None) or \
+               (prev_entry_details.get('weeks_on_chart', 0) == 0 and entry['weeks_on_chart'] == 1) : # Check if it's a new entry this week
+                feedback_events.append({
+                    "type": "chart_debut",
+                    "song_id": song_id,
+                    "song_obj": entry['song_obj'], # Pass song_obj for feedback generator
+                    "chart_details": entry.copy()
+                })
+            elif entry['current_position'] == 1 and (prev_entry_details is None or prev_entry_details.get('current_position') != 1): # Hit #1
+                feedback_events.append({
+                    "type": "hit_number_one",
+                    "song_id": song_id,
+                    "song_obj": entry['song_obj'],
+                    "chart_details": entry.copy()
+                })
+            # Add other significant jump checks if desired
+
         print(f"Chart '{self.name}' update complete. {len(self.entries)} songs.")
-        # print(self) # Optionally print the chart after update for debugging
+        return feedback_events
 
 
 if __name__ == '__main__':
-    import random # Needed for calculate_song_chart_score if randomness is used
-    from game.song import Song # Actual Song class for better testing
+    import random
+    from game.song import Song
     from game.game_time import GameTime # Actual GameTime for release_date
 
     # Basic test

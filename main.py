@@ -15,6 +15,7 @@ import json
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 from game.chart import Chart # Import the new Chart class
+from game.feedback_generator import generate_feedback_for_song # Import feedback generator
 
 WORLD_MAP = {}
 NPC_REGISTRY = {}
@@ -321,7 +322,14 @@ def handle_phone_menu(player):
                     print(random.choice(responses))
         elif choice == "4": # Music Management
             print("\n--- Music Management ---")
-            music_opts = {"1": "Self-Release Song", "2": "View Released Songs (TBD)", "3": "View Charts", "0": "Back"}
+            unread_feedback_count = sum(1 for f_item in player.feedback_received if not f_item.get("read", False))
+            music_opts = {
+                "1": "Self-Release Song",
+                "2": f"Check Reviews/Fan Mail{' (NEW)' if unread_feedback_count > 0 else ''}",
+                "3": "View Charts",
+                "4": "View Released Songs (TBD)", # Moved this down
+                "0": "Back"
+            }
             music_choice = present_choices(music_opts, "Music Management Options:")
             adv_time = 5 # Base time for accessing this menu
 
@@ -344,8 +352,16 @@ def handle_phone_menu(player):
                                 player.money -= release_cost
                                 if song_to_release.mark_as_released(current_game_time.copy()): # Pass a copy
                                     print(f"Successfully self-released '{song_to_release.title}'. Money: ${player.money}")
-                                    # Future: Add to local chart processing queue, generate initial buzz, etc.
-                                    player.fame += 5 # Small fame boost for releasing
+
+                                    # Generate initial buzz feedback
+                                    buzz_feedback = generate_feedback_for_song(song_to_release, player, feedback_type="general_release")
+                                    if buzz_feedback:
+                                        player.feedback_received.append(buzz_feedback)
+                                        if buzz_feedback.get("impact", {}).get("fame", 0) > 0: player.fame += buzz_feedback["impact"]["fame"]
+                                        if buzz_feedback.get("impact", {}).get("stress", 0) != 0: player.stress = max(0,min(100, player.stress + buzz_feedback["impact"]["stress"]))
+                                        print(f"News: {buzz_feedback['source']} commented on '{song_to_release.title}'!")
+
+                                    player.fame += 2 # Small base fame boost for releasing, separate from review impact
                                     adv_time += 60 # Releasing takes some time
                                 else:
                                     print(f"Failed to release '{song_to_release.title}'.") # Should already be handled by mark_as_released
@@ -358,9 +374,26 @@ def handle_phone_menu(player):
                         print("Release process cancelled.")
                     else:
                         print("Invalid song selection for release.")
-            elif music_choice == "2":
-                print("Viewing released songs... (TBD)")
-                # Future: List released songs, their stats, chart positions etc.
+            elif music_choice == "2": # Check Reviews/Fan Mail
+                print("\n--- Reviews & Fan Mail ---")
+                if not player.feedback_received:
+                    print("No feedback received yet.")
+                else:
+                    # Display feedback, newest first
+                    for i, fb_item in enumerate(reversed(player.feedback_received)):
+                        print(f"\n{i+1}. {'[UNREAD] ' if not fb_item.get('read') else ''}From: {fb_item['source']} (Song: '{fb_item['song_title']}')")
+                        print(f"   Date: {fb_item['date_generated'].get_time_string_for_schedule()}")
+                        print(f"   Quote: \"{fb_item['quote']}\"")
+                        if fb_item.get('impact'):
+                            print(f"   Impact: {fb_item['impact']}")
+                        if not fb_item.get('read'):
+                            fb_item['read'] = True # Mark as read upon viewing
+
+                    # Simple way to clear old feedback could be added here later if list gets too long
+                    # e.g. player.feedback_received = player.feedback_received[-50:] # Keep last 50
+                input("Press Enter to continue...")
+                adv_time += 10
+
             elif music_choice == "3": # View Charts
                 print("\n--- Current Music Charts ---")
                 if not ACTIVE_CHARTS:
@@ -370,7 +403,28 @@ def handle_phone_menu(player):
                         print(f"\n{i+1}. {chart_obj.name}")
                         print(chart_obj) # Relies on Chart.__str__
                 input("Press Enter to continue...") # Pause to read charts
-                adv_time += 5 # Time for checking charts
+                adv_time += 5
+            elif music_choice == "4": # View Released Songs
+                print("\n--- Your Released Music ---")
+                released_songs = [s for s in player.songs_written if s.is_released]
+                if not released_songs:
+                    print("You haven't released any music yet.")
+                else:
+                    for i, song_obj in enumerate(released_songs):
+                        print(f"\n{i+1}. {str(song_obj)}") # Full song details
+                        charted_on = []
+                        for chart in ACTIVE_CHARTS:
+                            for entry in chart.entries:
+                                if entry['song_id'] == song_obj.song_id:
+                                    charted_on.append(f"  - On '{chart.name}': Pos #{entry['current_position']} (Peak: #{entry['peak_position']}, Weeks: {entry['weeks_on_chart']})")
+                                    break
+                        if charted_on:
+                            print("  Chart Performance:")
+                            for line in charted_on: print(line)
+                        else:
+                            print("  Not currently on any major charts.")
+                input("Press Enter to continue...")
+                adv_time += 10
             # choice "0" (Back) is handled by falling through
             adv_time = max(1, adv_time) # Ensure some time passes if only browsing menus
 
@@ -389,12 +443,36 @@ def update_all_charts(player_obj, current_game_time_obj):
 
     print("\n--- Weekly Chart Updates Processing ---")
     for chart in ACTIVE_CHARTS:
-        chart.update_weekly(
+        feedback_events = chart.update_weekly( # update_weekly now returns feedback_events
             all_player_songs=player_obj.songs_written,
             player_name=player_obj.name,
             player_fame=player_obj.fame,
-            current_game_time_obj=current_game_time_obj
+            current_game_time_obj=current_game_time_obj # Already a copy from main loop
         )
+        # Process feedback events generated by this chart update
+        if feedback_events:
+            for event_data in feedback_events:
+                # Ensure song_obj is present in event_data, passed from Chart.update_weekly
+                song_for_feedback = event_data.get("song_obj")
+                if not song_for_feedback:
+                    # Try to find it if only ID was passed (fallback, ideally song_obj is always there)
+                    song_for_feedback = next((s for s in player_obj.songs_written if s.song_id == event_data["song_id"]), None)
+
+                if song_for_feedback:
+                    chart_feedback = generate_feedback_for_song(
+                        song_obj=song_for_feedback,
+                        player_obj=player_obj,
+                        chart_entry_details=event_data.get("chart_details"),
+                        feedback_type=event_data.get("type", "general_chart_event")
+                    )
+                    if chart_feedback:
+                        player_obj.feedback_received.append(chart_feedback)
+                        if chart_feedback.get("impact", {}).get("fame", 0) > 0: player_obj.fame += chart_feedback["impact"]["fame"]
+                        if chart_feedback.get("impact", {}).get("stress", 0) != 0: player_obj.stress = max(0,min(100, player_obj.stress + chart_feedback["impact"]["stress"]))
+                        print(f"Chart News ({chart.name}): {chart_feedback['source']} on '{song_for_feedback.title}': \"{chart_feedback['quote'][:50]}...\"")
+                else:
+                    print(f"Warning: Could not find song with ID {event_data.get('song_id')} for feedback generation.")
+
     print("--- Weekly Chart Updates Finished ---\n")
 
 
