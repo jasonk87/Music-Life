@@ -954,11 +954,30 @@ def display_hud(player, current_game_time_obj):
         "===============================================================================",
         f"| {player.name} | Age: {current_age} | Fame: {player.fame} | Money: ${player.money}",
         f"| Location: {player.current_location.name if player.current_location else 'N/A'} / {player.current_poi.name if player.current_poi else 'N/A'}",
-        f"| Hair Length: {player.hair_length}/{player.MAX_HAIR_LENGTH} | Beard Length: {player.beard_length}/{player.MAX_BEARD_LENGTH}", # Display numerical value
+        f"| Hair: {get_hair_length_description(player.hair_length)} ({player.hair_length}/{player.MAX_HAIR_LENGTH}) | Beard: {get_beard_length_description(player.beard_length)} ({player.beard_length}/{player.MAX_BEARD_LENGTH})",
         f"| Date: {get_current_time_str(date_only=True)} | Time: {current_game_time_obj.hour:02d}:{current_game_time_obj.minute:02d}",
         "==============================================================================="
     ]
     print("\n".join(hud_lines))
+
+# --- HUD Helper Functions for Appearance ---
+def get_hair_length_description(length_value: int) -> str:
+    """Converts numerical hair length to a descriptive string."""
+    if length_value == 0: return "Bald"
+    elif length_value <= 2: return "Very Short"
+    elif length_value <= 4: return "Short"
+    elif length_value <= 6: return "Medium"
+    elif length_value <= 8: return "Long"
+    else: return "Very Long" # Covers 9-10 and any potential overflow if MAX_HAIR_LENGTH changes
+
+def get_beard_length_description(length_value: int) -> str:
+    """Converts numerical beard length to a descriptive string."""
+    if length_value == 0: return "Clean-shaven"
+    elif length_value <= 2: return "Stubble"
+    elif length_value <= 4: return "Short Beard"
+    elif length_value <= 6: return "Medium Beard"
+    elif length_value <= 8: return "Long Beard"
+    else: return "Wizard Beard" # Covers 9-10 and potential overflow
 
 # --- Helper for NPC Interaction --- (Keep existing talk_to_npc_instance)
 def talk_to_npc_instance(player, npc_instance):
