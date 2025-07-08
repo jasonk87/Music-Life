@@ -1,597 +1,25 @@
-<<<<<<< SEARCH
-        # print(f"DEBUG: Stress increased due to starvation. New stress: {player.stress}")
-
-
-def setup_world():
-    global WORLD_MAP, NPC_REGISTRY
-    # Create Locations
-    home_town = Location("Your Hometown", "A quiet place, good for starting out.")
-    city_center = Location("City Center", "A bustling hub with more opportunities.")
-    # Add more locations if desired (e.g., "The Suburbs", "University District")
-
-    WORLD_MAP = {
-        home_town.name: home_town,
-        city_center.name: city_center,
-    }
-
-    # Define Venues and POIs
-    # Hometown Venues
-    community_hall = Venue(
-        venue_id="hometown_community_hall",
-        name="Community Hall",
-        description="Hosts local events.",
-        venue_type="HALL",
-        category="VENUE_HALL",
-        capacity=50,
-        prestige=1,
-        parent_location_id=home_town.name,
-        can_rent_gear=False # Community hall doesn't rent gear
-    )
-    home_town.add_venue(community_hall)
-
-    # Hometown POIs
-    music_shop_home = PointOfInterest(
-        poi_id="hometown_music_shop_oldtimers",
-        name="Old Timer's Music Shop",
-        description="Sells basic gear and instruments.",
-        category="SHOP_MUSIC",
-        interaction_options=["Browse items for sale", "Repair Gear", "Talk to Old Timer Joe"],
-        parent_location_id=home_town.name
-    )
-    music_shop_home.shop_inventory_item_ids = [
-        "worn_acoustic_guitar",
-        "guitar_strings_basic",
-        "guitar_picks_assorted"
-    ]
-    home_town.add_poi(music_shop_home)
-    rehearsal_space_home = PointOfInterest(
-        poi_id="hometown_rehearsal_garage",
-        name="Garage Rehearsal Space",
-        description="A bit rough but it's cheap.",
-        category="REHEARSAL_STUDIO",
-        interaction_options=["Book Rehearsal Slot (1 hour, $10)"], # Refined text
-        parent_location_id=home_town.name
-    )
-    home_town.add_poi(rehearsal_space_home)
-
-    # City Center Venues
-    rusty_mug_club = Venue(
-        venue_id="citycenter_rustymug",
-        name="The Rusty Mug",
-        description="A well-known club for upcoming bands.",
-        venue_type="CLUB",
-        category="VENUE_CLUB",
-        capacity=150,
-        prestige=4,
-        parent_location_id=city_center.name,
-        can_rent_gear=True,
-        gear_rental_fee=30, # Cost to rent at Rusty Mug
-        available_rental_gear_ids=["basic_electric_guitar", "practice_amp_small"] # What they offer
-    )
-    city_center.add_venue(rusty_mug_club)
-    grande_theater = Venue(
-        venue_id="citycenter_grandetheater",
-        name="Grande Concert Hall",
-        description="A prestigious venue for established artists.",
-        venue_type="CONCERT_HALL",
-        category="VENUE_THEATER",
-        capacity=1000,
-        prestige=8,
-        parent_location_id=city_center.name,
-        can_rent_gear=True, # High-end venues often have backline
-        gear_rental_fee=100,
-        available_rental_gear_ids=["pro_electric_guitar", "pro_bass_guitar", "pro_amp_large", "pro_drum_kit"] # Example pro gear
-    )
-    city_center.add_venue(grande_theater)
-
-    # City Center POIs
-    pro_music_store = PointOfInterest(
-        poi_id="citycenter_proaudio",
-        name="Pro Audio Central",
-        description="High-end instruments and recording gear.",
-        category="SHOP_MUSIC",
-        interaction_options=["Browse items for sale", "Repair Gear", "Talk to Sales Rep"],
-        parent_location_id=city_center.name
-    )
-    pro_music_store.shop_inventory_item_ids = [
-        "basic_electric_guitar",
-        "practice_amp_small",
-        "guitar_strings_basic",
-        "guitar_picks_assorted"
-        # Can add more expensive/pro items from catalog here later
-    ]
-    city_center.add_poi(pro_music_store)
-
-    pr_agency_poi = PointOfInterest(
-        poi_id="citycenter_sharp_pr",
-        name="Sharp PR Solutions",
-        description="A modern office for a boutique PR agency. They look like they mean business.",
-        category="OFFICE_PR_AGENCY", # New category for PR agencies
-        interaction_options=["Inquire about PR representation"],
-        parent_location_id=city_center.name,
-        comfort_modifier_hourly=0 # Neutral office environment
-    )
-    city_center.add_poi(pr_agency_poi)
-
-    news_agency_poi = PointOfInterest(
-        poi_id="citycenter_chronicle_news",
-        name="City Center Chronicle",
-        description="The bustling office of the city's main newspaper and online news hub.",
-        category="OFFICE_NEWS_AGENCY",
-        interaction_options=["Look for today's paper", "Ask for a journalist"],
-        parent_location_id=city_center.name,
-        comfort_modifier_hourly=-1
-    )
-    city_center.add_poi(news_agency_poi)
-
-    record_label_office = PointOfInterest(
-        poi_id="citycenter_indiehits_records",
-        name="Indie Hits Records",
-        description="A small but ambitious record label. They seem to like fresh sounds.",
-        category="OFFICE_RECORD_LABEL",
-        interaction_options=[], # Will be dynamically generated or set based on fame
-        parent_location_id=city_center.name,
-        min_fame_to_submit=75, # Lowered for easier early testing
-        genres_preferred=["Indie", "Pop", "Rock", "Electronic"]
-    )
-    # Dynamically create interaction option text based on min_fame_to_submit
-    record_label_office.interaction_options = [
-        f"Submit Demo (requires {record_label_office.min_fame_to_submit} fame)",
-        "Talk to A&R Rep (requires Manager)" # Placeholder for now
-    ]
-    city_center.add_poi(record_label_office)
-    downtown_cafe = PointOfInterest(
-        poi_id="citycenter_dailygrind_cafe",
-        name="The Daily Grind Cafe",
-        description="Popular hangout, good coffee, free Wi-Fi.",
-        category="POI_CAFE",
-        interaction_options=["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"],
-        parent_location_id=city_center.name,
-        comfort_modifier_hourly=1 # Slightly comforting to be in a cafe
-    )
-    city_center.add_poi(downtown_cafe)
-
-    # --- Define New Key POIs for Intra-City Travel & Player Start ---
-    # Your Hometown
-    player_home = PointOfInterest(
-        poi_id="hometown_player_home",
-        name="Your Apartment",
-        description="Your starting digs. A bit small, but it's home.",
-        category="HOME",
-        interaction_options=["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Relax at home (2 hours)"],
-        parent_location_id=home_town.name,
-        rest_quality=0.8,
-        stress_modifier_hourly=-10,
-        comfort_modifier_hourly=5 # Home is very comforting
-    )
-    home_town.add_poi(player_home)
-
-    bus_stop_hometown = PointOfInterest(
-        poi_id="hometown_bus_stop",
-        name="Hometown Bus Stop",
-        description="A dusty bus stop for regional travel to City Center.",
-        category="TRANSPORT_BUS",
-        interaction_options=["View Departures & Buy Tickets"], # Standardized option
-        parent_location_id=home_town.name
-    )
-    home_town.add_poi(bus_stop_hometown)
-
-    hometown_grocery = PointOfInterest(
-        poi_id="hometown_bodega",
-        name="Corner Bodega",
-        description="A small grocery store with basic necessities.",
-        category="SHOP_FOOD", # New category
-        interaction_options=["Buy Food Items", "Chat with Clerk"],
-        parent_location_id=home_town.name
-    )
-    hometown_grocery.shop_inventory_item_ids = ["food_energy_bar", "food_grocery_bag"]
-    home_town.add_poi(hometown_grocery)
-
-    hometown_fastfood = PointOfInterest(
-        poi_id="hometown_diner",
-        name="Greasy Spoon Diner",
-        description="Cheap, fast, and... food-like substances.",
-        category="FOOD_FASTFOOD",
-        interaction_options=[], # Will be populated from menu_items
-        parent_location_id=home_town.name
-    )
-    hometown_fastfood.menu_items = [
-        {"display_text": "Order Greasy Breakfast ($8)", "item_id": "food_greasy_breakfast", "cost": 8, "effects": {"hunger": -50, "energy": 15, "comfort": 1}},
-        {"display_text": "Order Cheap Burger ($5)", "item_id": "food_cheap_burger", "cost": 5, "effects": {"hunger": -35, "energy": 10, "comfort": -2}},
-        {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
-    ]
-    hometown_fastfood.interaction_options = [item["display_text"] for item in hometown_fastfood.menu_items]
-    home_town.add_poi(hometown_fastfood)
-
-    # City Center
-    city_airport = PointOfInterest(
-        poi_id="citycenter_airport",
-        name="City Center International Airport",
-        description="Flights to other major cities (when you can afford them).",
-        category="TRANSPORT_AIRPORT",
-        interaction_options=["View Departures & Buy Tickets"], # Standardized option
-        parent_location_id=city_center.name
-    )
-    city_center.add_poi(city_airport)
-
-    city_bus_station = PointOfInterest(
-        poi_id="citycenter_bus_station",
-        name="Main Bus Terminal (City Center)",
-        description="Regional and long-haul bus services.",
-        category="TRANSPORT_BUS",
-        interaction_options=["View Departures & Buy Tickets"], # Standardized option
-        parent_location_id=city_center.name
-    )
-    city_center.add_poi(city_bus_station)
-
-    crash_pad_motel = PointOfInterest(
-        poi_id="citycenter_motel_cheap",
-        name="Sleep EZ Motel",
-        description="A cheap, somewhat clean room for the night. Better than the streets.",
-        category="ACCOMMODATION_CHEAP",
-        interaction_options=["Rent Room ($50/night)", "Sleep (8 hours, if rented)"],
-        parent_location_id=city_center.name,
-        rest_quality=0.4,
-        stress_modifier_hourly=-2,
-        comfort_modifier_hourly=-3 # Grim places can reduce comfort
-    )
-    city_center.add_poi(crash_pad_motel)
-
-    starlight_studio = PointOfInterest(
-        poi_id="citycenter_starlight_studio",
-        name="Starlight Recording Studio",
-        description="A decent local recording studio. Sessions can be booked by the hour.",
-        category="STUDIO_RECORDING",
-        interaction_options=["Book recording session", "Talk to Sound Engineer (if available)"],
-        parent_location_id=city_center.name,
-        studio_quality=0.6, # Mid-tier studio
-        hourly_rate=50      # $50 per hour
-    )
-    city_center.add_poi(starlight_studio)
-
-    city_grocery_super = PointOfInterest(
-        poi_id="citycenter_supervalu",
-        name="SuperValue Mart",
-        description="A large supermarket with a wide variety of groceries.",
-        category="SHOP_FOOD",
-        interaction_options=["Buy Food Items"],
-        parent_location_id=city_center.name,
-    )
-    city_grocery_super.shop_inventory_item_ids = ["food_energy_bar", "food_grocery_bag"] # Could have more/different items
-    city_center.add_poi(city_grocery_super)
-
-    city_fastfood_chain = PointOfInterest(
-        poi_id="citycenter_burgerblast",
-        name="Burger Blast",
-        description="A generic but reliable fast food burger chain.",
-        category="FOOD_FASTFOOD",
-        interaction_options=[], # Will be populated from menu_items
-        parent_location_id=city_center.name
-    )
-    city_fastfood_chain.menu_items = [
-        {"display_text": "Order Blast Burger ($7)", "item_id": "food_blast_burger", "cost": 7, "effects": {"hunger": -40, "energy": 10, "comfort": 0}},
-        {"display_text": "Order Value Meal ($10)", "item_id": "food_value_meal", "cost": 10, "effects": {"hunger": -60, "energy": 15, "comfort": -1}},
-        {"display_text": "Order Soda ($2)", "item_id": "food_soda", "cost": 2, "effects": {"hunger": -5, "energy": 5}},
-        {"display_text": "Order Water (Free)", "item_id": "food_water", "cost": 0, "effects": {"hunger": 0, "energy": 1}}
-    ]
-    city_fastfood_chain.interaction_options = [item["display_text"] for item in city_fastfood_chain.menu_items]
-    city_center.add_poi(city_fastfood_chain)
-
-    # city_restaurant_mid (The Cozy Nook Eatery) - for later, more complex food/social
-    # For now, just grocery and fast food.
-
-
-    # --- AUSTIN, TEXAS ---
-    austin = Location("Austin, TX", "The Live Music Capital of the World. Keep Austin Weird!")
-    WORLD_MAP[austin.name] = austin
-
-    # Austin Venues
-    austin_local_stage = Venue(
-        venue_id="austin_local_stage", name="Austin Local Stage", description="A small, friendly venue for local acts.",
-        venue_type="BAR_GIG", category="VENUE_CLUB", capacity=80, prestige=3, parent_location_id=austin.name
-    )
-    austin.add_venue(austin_local_stage)
-
-    austin_iconic_club = Venue(
-        venue_id="austin_iconic_club", name="The Sixth Street Sound", description="A legendary club on 6th Street, known for blues and rock.",
-        venue_type="CLUB", category="VENUE_CLUB", capacity=250, prestige=7, parent_location_id=austin.name,
-        owner_npc_id="cliff_sound_owner" # New NPC
-    )
-    austin.add_venue(austin_iconic_club)
-    # TODO: Add events to these Austin venues later
-
-    # Austin POIs
-    austin_music_store = PointOfInterest(
-        poi_id="austin_guitar_emporium", name="Austin Guitar Emporium", description="Guitars, amps, and everything in between.",
-        category="SHOP_MUSIC", interaction_options=["Browse items for sale", "Repair Gear", "Talk to Staff"], parent_location_id=austin.name
-    )
-    austin_music_store.shop_inventory_item_ids = ["basic_electric_guitar", "pro_electric_guitar", "practice_amp_small", "guitar_strings_basic", "merch_tshirt_basic"]
-    austin.add_poi(austin_music_store)
-
-    austin_radio_station = PointOfInterest(
-        poi_id="austin_kaus_radio", name="KAUS Austin Radio", description="Independent Austin radio, playing local and eclectic sounds.",
-        category="MEDIA_RADIO_STATION",
-        interaction_options=["Talk to DJ 'Dr. Vibes'", "Submit Demo for Airplay", "Inquire about Local Artist Spotlight"],
-        parent_location_id=austin.name,
-        owner_npc_id="dj_dr_vibes" # New NPC
-    )
-    austin.add_poi(austin_radio_station)
-
-    austin_record_store = PointOfInterest(
-        poi_id="austin_vinyl_frontier", name="Vinyl Frontier Records", description="A haven for record collectors and music lovers.",
-        category="SHOP_RECORDS", # New Category, or use SHOP_MUSIC with different inventory type
-        interaction_options=["Browse Records", "Talk to Clerk"], parent_location_id=austin.name
-        # shop_inventory_item_ids could list specific famous (but genericized) album names or genre packs later
-    )
-    austin.add_poi(austin_record_store)
-
-    austin_landmark = PointOfInterest(
-        poi_id="austin_capitol_view", name="Capitol View Park", description="A park with a view of the State Capitol building.",
-        category="POI_PARK", interaction_options=["Relax", "People Watch"], parent_location_id=austin.name, comfort_modifier_hourly=1
-    )
-    austin.add_poi(austin_landmark)
-
-    austin_motel = PointOfInterest(
-        poi_id="austin_roadside_motel", name="Austin Roadside Motel", description="Basic, clean, and affordable.",
-        category="ACCOMMODATION_CHEAP", interaction_options=["Rent Room ($60/night)", "Sleep (8 hours, if rented)"],
-        parent_location_id=austin.name, rest_quality=0.5, stress_modifier_hourly=-1, comfort_modifier_hourly=-2
-    )
-    austin.add_poi(austin_motel)
-
-    austin_cafe = PointOfInterest(
-        poi_id="austin_weird_beans_cafe", name="Weird Beans Cafe", description="A quirky cafe popular with musicians and artists.",
-        category="POI_CAFE", interaction_options=["Grab Coffee ($6)", "People Watch", "Look for Gig Flyers"],
-        parent_location_id=austin.name, comfort_modifier_hourly=2
-    )
-    austin.add_poi(austin_cafe)
-
-    austin_bus_terminal = PointOfInterest(
-        poi_id="austin_main_bus_terminal", name="Austin Main Bus Terminal", description="Connects Austin to other Texan cities and beyond.",
-        category="TRANSPORT_BUS", interaction_options=["View Departures & Buy Tickets"], parent_location_id=austin.name
-    )
-    austin.add_poi(austin_bus_terminal)
-
-    austin_rehearsal = PointOfInterest(
-        poi_id="austin_soundcheck_rehearsal", name="SoundCheck Rehearsal Studios", description="Professional rehearsal rooms by the hour.",
-        category="REHEARSAL_STUDIO", interaction_options=["Book Rehearsal Slot (1 hour, $25)"], parent_location_id=austin.name
-    )
-    austin.add_poi(austin_rehearsal)
-
-    # Austin NPCs
-    dj_dr_vibes = NPC(npc_id="dj_dr_vibes", name="DJ 'Dr. Vibes'", personality_key="dj_eclectic_local", home_location=austin_radio_station, current_location=austin_radio_station)
-    dj_dr_vibes.schedule = {"Weekday_Afternoon": austin_radio_station, "Weekday_Evening": austin_radio_station}
-    NPC_REGISTRY[dj_dr_vibes.npc_id] = dj_dr_vibes
-
-    cliff_sound_owner = NPC(npc_id="cliff_sound_owner", name="Clifford 'Cliff' Mayes", personality_key="gruff_club_owner", # Can reuse or make specific later
-                              home_location=austin_iconic_club, current_location=austin_iconic_club)
-    cliff_sound_owner.schedule = {"Weekday_Evening": austin_iconic_club, "Weekend_Evening": austin_iconic_club}
-    NPC_REGISTRY[cliff_sound_owner.npc_id] = cliff_sound_owner
-    # Note: owner_npc_id was set on austin_iconic_club at definition.
-
-    # --- END AUSTIN, TEXAS ---
-
-    # Update existing locations with connections to Austin
-    home_town.add_travel_connection(austin.name, cost=120, time_hours=10) # e.g., Long bus ride
-    city_center.add_travel_connection(austin.name, cost=60, time_hours=6)  # e.g., Shorter bus ride / regional flight
-
-    # Add connections from Austin to existing locations
-    austin.add_travel_connection(home_town.name, cost=120, time_hours=10)
-    austin.add_travel_connection(city_center.name, cost=60, time_hours=6)
-
-
-    # Define Travel Connections (Location Name -> {cost, time}) # INTER-CITY
-    home_town.add_travel_connection(city_center.name, cost=20, time_hours=2)
-    city_center.add_travel_connection(home_town.name, cost=20, time_hours=2)
-
-    # --- Define Intra-City POI Connections ---
-    # Your Hometown Connections
-    home_town.intra_city_poi_connections[frozenset({player_home.poi_id, music_shop_home.poi_id})] = {
-        "walk": {"time": 15, "cost": 0},
-        "bike": {"time": 5, "cost": 0, "requires_bike": True},
-        "taxi": {"time": 3, "cost": 8}
-    }
-    home_town.intra_city_poi_connections[frozenset({player_home.poi_id, community_hall.venue_id})] = {
-        "walk": {"time": 10, "cost": 0},
-        "bike": {"time": 3, "cost": 0, "requires_bike": True},
-        "taxi": {"time": 2, "cost": 6}
-    }
-    home_town.intra_city_poi_connections[frozenset({player_home.poi_id, bus_stop_hometown.poi_id})] = {
-        "walk": {"time": 20, "cost": 0},
-        "bike": {"time": 7, "cost": 0, "requires_bike": True},
-        "taxi": {"time": 5, "cost": 10}
-    }
-    home_town.intra_city_poi_connections[frozenset({music_shop_home.poi_id, community_hall.venue_id})] = {
-        "walk": {"time": 5, "cost": 0},
-        "bike": {"time": 2, "cost": 0, "requires_bike": True},
-        # No direct taxi, too short / must walk from player_home
-    }
-    # City Center Connections (Example - can be expanded)
-    # Assuming city_bus_station, rusty_mug_club, pro_music_store, downtown_cafe, city_airport, crash_pad_motel are defined POI/Venue objects
-    city_center.intra_city_poi_connections[frozenset({city_bus_station.poi_id, rusty_mug_club.venue_id})] = {
-        "walk": {"time": 25, "cost": 0},
-        "bike": {"time": 10, "cost": 0, "requires_bike": True}, # Player might not have bike in new city initially
-        "taxi": {"time": 7, "cost": 12}
-    }
-    city_center.intra_city_poi_connections[frozenset({rusty_mug_club.venue_id, pro_music_store.poi_id})] = {
-        "walk": {"time": 10, "cost": 0},
-        "bike": {"time": 4, "cost": 0, "requires_bike": True},
-        "taxi": {"time": 3, "cost": 7}
-    }
-    city_center.intra_city_poi_connections[frozenset({downtown_cafe.poi_id, rusty_mug_club.venue_id})] = {
-        "walk": {"time": 12, "cost": 0},
-        "bike": {"time": 5, "cost": 0, "requires_bike": True},
-        "taxi": {"time": 4, "cost": 9}
-    }
-    city_center.intra_city_poi_connections[frozenset({city_bus_station.poi_id, city_airport.poi_id})] = {
-        "walk": {"time": 60, "cost": 0}, # Long walk
-        # "bike": {"time": 25, "cost": 0, "requires_bike": True}, # Maybe not bikeable easily
-        "taxi": {"time": 15, "cost": 25} # Airport taxi usually more
-    }
-
-    # Events (now primarily associated with Venues)
-    open_mic_event = Event(
-        name="Open Mic Night",
-        event_type="OPEN_MIC",
-        location=community_hall,
-        required_skills={"vocals": 1, "guitar": 1},
-        required_gear_types=["INSTRUMENT_ACOUSTIC"], # Open mic often acoustic
-        description="A chance to show your skills at the local Community Hall."
-    )
-    community_hall.add_event(open_mic_event)
-
-    first_club_gig_event = Event(
-        name="Debut at 'The Rusty Mug'",
-        event_type="CLUB_GIG",
-        location=rusty_mug_club,
-        required_skills={"vocals": 5, "guitar": 5, "stage_presence": 3},
-        required_gear_types=["INSTRUMENT_ELECTRIC", "AMPLIFIER"], # Electric gig
-        description="Your first real club gig! Make it count.",
-    )
-    first_club_gig_event.preparation_tasks_required = {
-        "Write Setlist (3 songs)": False,
-        "Rehearse Set (2 hours)": False,
-        "Promote Gig Locally (social media post)": False
-    }
-    rusty_mug_club.add_event(first_club_gig_event)
-
-    # Example of a higher tier event (player likely won't qualify for a while)
-    opening_act_concert = Event(
-        name="Opening Act for Major Band",
-        event_type="CONCERT",
-        location=grande_theater,
-        required_skills={"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10},
-        required_gear_types=["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], # Full band setup
-        description="A huge opportunity to open for a touring band at the Grande Concert Hall!",
-    )
-    opening_act_concert.preparation_tasks_required = {
-        "Finalize Setlist (5 songs, original material preferred)": False,
-        "Intensive Rehearsal Week (10 hours)": False,
-        "Coordinate with Main Act's Team": False,
-        "Sound Check (2 hours, day of show)": False,
-    }
-    # This event might only be added if player has a manager or high fame
-    # For now, add it so it's visible if player gets to City Center.
-    grande_theater.add_event(opening_act_concert)
-
-    # --- Instantiate NPCs ---
-    # Old Timer Joe at his music shop in Hometown
-    # For schedule, using object references directly instead of names for now for simplicity
-    joe = NPC(npc_id="joe001", name="Old Timer Joe", personality_key="old_timer_joe", home_location=music_shop_home)
-    joe.current_location = music_shop_home
-    joe.schedule = {
-        "Weekday_Morning": music_shop_home,
-        "Weekday_Afternoon": music_shop_home,
-        "Weekend_Morning": music_shop_home, # Covers Saturday and Sunday morning
-        "Weekend_Evening": community_hall  # Covers Sunday evening (and Saturday if no other rule overrides)
-    }
-    NPC_REGISTRY[joe.npc_id] = joe
-    music_shop_home.owner_npc_id = joe.npc_id
-
-    # Sarah the Fan, often found where music is, especially in Hometown
-    sarah = NPC(npc_id="sarah001", name="Sarah the Fan", personality_key="adoring_fan", home_location=WORLD_MAP["Your Hometown"])
-    sarah.current_location = WORLD_MAP["Your Hometown"]
-    sarah.schedule = {
-        "open_mic_night_at_community_hall": community_hall
-    }
-    NPC_REGISTRY[sarah.npc_id] = sarah
-
-    # Vic Vega, owner of The Rusty Mug in City Center
-    vic = NPC(npc_id="vic001", name="Vic Vega", personality_key="gruff_club_owner", home_location=rusty_mug_club)
-    vic.current_location = rusty_mug_club
-    vic.schedule = {
-        "Weekday_Afternoon": rusty_mug_club,
-        "Weekday_Evening": rusty_mug_club,
-        "Weekend_Evening": rusty_mug_club, # Covers Sat/Sun evenings
-    }
-    NPC_REGISTRY[vic.npc_id] = vic
-    rusty_mug_club.owner_npc_id = vic.npc_id
-
-    # Potential Bandmate - Alex Miles
-    alex = NPC(npc_id="alex001", name="Alex 'Shredder' Miles", personality_key="potential_bandmate_guitarist", home_location=pro_music_store)
-    alex.current_location = pro_music_store # Starts at the pro music store
-    # alex.skills = {"guitar": 18, "songwriting": 7} # Store skills if NPC class supports it, or for dev reference
-    alex.schedule = {
-        "Weekday_Afternoon": pro_music_store, # Using keys from get_time_slot_key
-        "Weekday_Evening": rusty_mug_club,
-        "Weekend_Afternoon": pro_music_store, # Assuming Weekend maps to Saturday/Sunday
-        "Weekend_Evening": rusty_mug_club,
-    }
-    NPC_REGISTRY[alex.npc_id] = alex
-
-    # Music Blogger - Casey Jones
-    casey = NPC(npc_id="casey001", name="Casey 'The Cynic' Jones", personality_key="music_blogger_critical", home_location=downtown_cafe) # Home is the cafe
-    casey.current_location = downtown_cafe # Starts at the cafe
-    casey.schedule = {
-        "Weekday_Morning": downtown_cafe,
-        "Weekday_Afternoon": downtown_cafe,
-        "Weekday_Evening": rusty_mug_club, # Checks out gigs at Rusty Mug
-        "Weekend_Evening": grande_theater, # Might check out bigger shows at Grande Theater too
-    }
-    NPC_REGISTRY[casey.npc_id] = casey
-
-    # Interviewer NPC at the News Agency
-    # news_agency_poi was defined earlier as: city_center.add_poi(news_agency_poi)
-    # We need to ensure news_agency_poi is accessible here or passed correctly.
-    # Assuming news_agency_poi is the variable holding the City Center Chronicle POI object.
-    brenda_reporter = NPC(
-        npc_id="brenda_reporter001",
-        name="Brenda Reporter",
-        personality_key="interviewer_professional",
-        home_location=news_agency_poi, # Needs news_agency_poi to be defined in this scope
-        current_location=news_agency_poi
-    )
-    brenda_reporter.schedule = {
-        "Weekday_Morning": news_agency_poi,
-        "Weekday_Afternoon": news_agency_poi,
-        # Evenings and weekends she's off or somewhere else (e.g., home_location if different)
-    }
-    NPC_REGISTRY[brenda_reporter.npc_id] = brenda_reporter
-    if news_agency_poi:
-        news_agency_poi.owner_npc_id = brenda_reporter.npc_id
-
-    # PR Agent NPC at Sharp PR Solutions
-    # pr_agency_poi was defined earlier as: city_center.add_poi(pr_agency_poi)
-    ms_sharp = NPC(
-        npc_id="ms_sharp_pr001",
-        name="Ms. Patricia Sharp",
-        personality_key="pr_agent_evaluator",
-        home_location=pr_agency_poi,
-        current_location=pr_agency_poi
-    )
-    ms_sharp.schedule = {
-        "Weekday_Morning": pr_agency_poi,
-        "Weekday_Afternoon": pr_agency_poi,
-    }
-    NPC_REGISTRY[ms_sharp.npc_id] = ms_sharp
-    if pr_agency_poi:
-        pr_agency_poi.owner_npc_id = ms_sharp.npc_id # Ms. Sharp is the main contact/owner
-
-
-# --- Time and Scheduling Helpers ---
-def get_day_of_week_name(day_number_in_month):
-=======
 # game/main.py
 from game.player import Player
 from game.location import Location
 from game.venue import Venue
 from game.poi import PointOfInterest
 from game.event import Event
-from game.game_time import current_game_time, advance_game_time, get_current_time_str, calculate_player_age # Added calculate_player_age
-from game.dialogue import generate_npc_response, NPC_PERSONALITIES # Ensure NPC_PERSONALITIES is imported if used directly
+from game.game_time import current_game_time, advance_game_time, get_current_time_str, calculate_player_age, GameTime
+from game.dialogue import generate_npc_response, NPC_PERSONALITIES
 from game.random_events import check_for_random_event, check_for_post_gig_random_event
 from game.song import Song
-from game.gear import GearItem # For creating gear instances if needed by PR manager etc.
+from game.gear import GearItem
 import random
-import json # For loading world data
+import json
 
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 
 WORLD_MAP = {}
 NPC_REGISTRY = {}
-PLAYER_HOME_POI_ID_GLOBAL = None # Will be set after world load
+PLAYER_HOME_POI_ID_GLOBAL = None
 
-# --- Player Needs Update Function --- (Keep existing process_time_based_player_needs)
+# --- Player Needs Update Function ---
 def process_time_based_player_needs(player, minutes_just_passed):
     if minutes_just_passed <= 0:
         return
@@ -623,1412 +51,776 @@ def process_time_based_player_needs(player, minutes_just_passed):
         player.stress = min(100, player.stress + (hours_passed_float * stress_from_starvation_hourly_rate))
         player.stress = int(round(player.stress))
 
-    # Hair and Beard Growth
-    # Define points per day (24 hours * 60 minutes)
-    # Example: 10 points for hair per day, 12.5 for beard per day to make them grow at slightly different rates
-    # These values mean hair needs 10 days for a level, beard needs ~6.4 days.
     POINTS_PER_DAY_HAIR = 10.0
     POINTS_PER_DAY_BEARD = 12.5
-
     hair_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_HAIR
     player.hair_growth_progress += hair_growth_to_add
-
     beard_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_BEARD
     player.beard_growth_progress += beard_growth_to_add
 
-    # Check for hair length increase
     if player.hair_growth_progress >= player.HAIR_POINTS_PER_LENGTH_LEVEL:
         levels_gained = int(player.hair_growth_progress // player.HAIR_POINTS_PER_LENGTH_LEVEL)
         player.hair_length = min(player.MAX_HAIR_LENGTH, player.hair_length + levels_gained)
         player.hair_growth_progress %= player.HAIR_POINTS_PER_LENGTH_LEVEL
-        if levels_gained > 0:
-            print(f"DEBUG: Your hair grew! New length: {player.hair_length}/{player.MAX_HAIR_LENGTH}")
+        if levels_gained > 0: print(f"DEBUG: Your hair grew! New length: {player.hair_length}/{player.MAX_HAIR_LENGTH}")
 
-
-    # Check for beard length increase
     if player.beard_growth_progress >= player.BEARD_POINTS_PER_LENGTH_LEVEL:
         levels_gained = int(player.beard_growth_progress // player.BEARD_POINTS_PER_LENGTH_LEVEL)
         player.beard_length = min(player.MAX_BEARD_LENGTH, player.beard_length + levels_gained)
         player.beard_growth_progress %= player.BEARD_POINTS_PER_LENGTH_LEVEL
-        if levels_gained > 0:
-            print(f"DEBUG: Your beard grew! New length: {player.beard_length}/{player.MAX_BEARD_LENGTH}")
+        if levels_gained > 0: print(f"DEBUG: Your beard grew! New length: {player.beard_length}/{player.MAX_BEARD_LENGTH}")
 
-
-# Helper function to get a POI or Venue by its ID from WORLD_MAP (after it's populated)
-# This is needed because schedules in JSON will use IDs, not direct object references yet.
-# And also to link NPC owners to their POIs/Venues.
-_POI_VENUE_ID_MAP = {} # Internal map for quick ID lookups after loading
+_POI_VENUE_ID_MAP = {}
 
 def _build_poi_venue_id_map():
     _POI_VENUE_ID_MAP.clear()
     for location in WORLD_MAP.values():
-        for poi in location.points_of_interest:
-            _POI_VENUE_ID_MAP[poi.poi_id] = poi
-        for venue in location.venues:
-            _POI_VENUE_ID_MAP[venue.venue_id] = venue
+        for poi in location.points_of_interest: _POI_VENUE_ID_MAP[poi.poi_id] = poi
+        for venue in location.venues: _POI_VENUE_ID_MAP[venue.venue_id] = venue
 
 def get_poi_or_venue_by_id(target_id):
     return _POI_VENUE_ID_MAP.get(target_id)
 
-
 def setup_world():
     global WORLD_MAP, NPC_REGISTRY, PLAYER_HOME_POI_ID_GLOBAL
-    WORLD_MAP.clear()
-    NPC_REGISTRY.clear()
-    _POI_VENUE_ID_MAP.clear()
-
-
-    # 1. Load Locations
+    WORLD_MAP.clear(); NPC_REGISTRY.clear(); _POI_VENUE_ID_MAP.clear()
     try:
-        with open("game_data/world/locations.json", 'r') as f:
-            locations_data = json.load(f)
-    except FileNotFoundError:
-        print("FATAL ERROR: game_data/world/locations.json not found!")
-        return False # Indicate failure
-    except json.JSONDecodeError as e:
-        print(f"FATAL ERROR: Could not decode game_data/world/locations.json: {e}")
-        return False
-
-    temp_location_id_map = {} # Maps location_id (from JSON) to Location object
+        with open("game_data/world/locations.json", 'r') as f: locations_data = json.load(f)
+    except Exception as e: print(f"FATAL ERROR loading locations.json: {e}"); return False
+    temp_location_id_map = {}
     for loc_data in locations_data:
-        location = Location(loc_data["name"], loc_data["description"])
-        location.id = loc_data["id"]
-        WORLD_MAP[location.name] = location # Keep WORLD_MAP keyed by name for existing game logic
-        temp_location_id_map[location.id] = location
-
-
-    # 2. Load POIs and Venues for each Location
+        location = Location(loc_data["name"], loc_data["description"]); location.id = loc_data["id"]
+        WORLD_MAP[location.name] = location; temp_location_id_map[location.id] = location
     for loc_id_from_json, location_obj in temp_location_id_map.items():
         poi_file_name = next((ld["poi_definition_file"] for ld in locations_data if ld["id"] == loc_id_from_json), None)
-        if not poi_file_name:
-            print(f"Warning: No POI definition file specified for location ID '{loc_id_from_json}' ({location_obj.name}).")
-            continue
-
+        if not poi_file_name: print(f"Warning: No POI file for {location_obj.name}."); continue
         poi_file_path = f"game_data/world/city_definitions/{poi_file_name}"
         try:
-            with open(poi_file_path, 'r') as f:
-                city_def_data = json.load(f)
-        except FileNotFoundError:
-            print(f"ERROR: POI definition file {poi_file_path} not found for location {location_obj.name}!")
-            continue
-        except json.JSONDecodeError as e:
-            print(f"ERROR: Could not decode {poi_file_path} for location {location_obj.name}: {e}!")
-            continue
-
+            with open(poi_file_path, 'r') as f: city_def_data = json.load(f)
+        except Exception as e: print(f"ERROR loading {poi_file_path}: {e}"); continue
         for poi_data in city_def_data.get("points_of_interest", []):
-            properties = poi_data.get("properties", {})
-            poi = PointOfInterest(
-                poi_id=poi_data["poi_id"], name=poi_data["name"], description=poi_data["description"],
-                category=poi_data["category"],
-                interaction_options=list(poi_data.get("interaction_options", [])),
-                parent_location_id=location_obj.name, # Uses name for now
-                rest_quality=properties.get("rest_quality", 0.0),
-                stress_modifier_hourly=properties.get("stress_modifier_hourly", 0),
-                studio_quality=properties.get("studio_quality", 0.0),
-                hourly_rate=properties.get("hourly_rate", 0),
-                min_fame_to_submit=properties.get("min_fame_to_submit", 0),
-                genres_preferred=list(properties.get("genres_preferred", [])),
-                comfort_modifier_hourly=properties.get("comfort_modifier_hourly", 0)
-            )
-            if "shop_inventory_item_ids" in properties: poi.shop_inventory_item_ids = list(properties["shop_inventory_item_ids"])
-            if "menu_items" in properties:
-                poi.menu_items = list(properties["menu_items"])
-                if poi.category == "FOOD_FASTFOOD" and not poi.interaction_options:
-                    poi.interaction_options = [item["display_text"] for item in poi.menu_items]
-            if "owner_npc_id" in properties: poi.owner_npc_id = properties["owner_npc_id"] # Store ID string
-
-            if poi.poi_id == "citycenter_indiehits_records": # Example of specific POI logic after generic load
-                 poi.interaction_options = [f"Submit Demo (requires {poi.min_fame_to_submit} fame)", "Talk to A&R Rep (requires Manager)"]
+            props = poi_data.get("properties", {})
+            poi = PointOfInterest(poi_id=poi_data["poi_id"], name=poi_data["name"], description=poi_data["description"],
+                                  category=poi_data["category"], interaction_options=list(poi_data.get("interaction_options", [])),
+                                  parent_location_id=location_obj.name, **props)
+            if "shop_inventory_item_ids" in props: poi.shop_inventory_item_ids = list(props["shop_inventory_item_ids"])
+            if "menu_items" in props:
+                poi.menu_items = list(props["menu_items"])
+                if poi.category == "FOOD_FASTFOOD" and not poi.interaction_options: poi.interaction_options = [item["display_text"] for item in poi.menu_items]
+            if poi.poi_id == "citycenter_indiehits_records": poi.interaction_options = [f"Submit Demo (requires {poi.min_fame_to_submit} fame)", "Talk to A&R Rep (requires Manager)"]
             location_obj.add_poi(poi)
-
         for venue_data in city_def_data.get("venues", []):
-            properties = venue_data.get("properties", {})
-            venue = Venue(
-                venue_id=venue_data["venue_id"], name=venue_data["name"], description=venue_data["description"],
-                venue_type=venue_data["venue_type"], category=venue_data["category"],
-                capacity=venue_data["capacity"], prestige=venue_data["prestige"], parent_location_id=location_obj.name,
-                can_rent_gear=properties.get("can_rent_gear", False),
-                gear_rental_fee=properties.get("gear_rental_fee", 0),
-                available_rental_gear_ids=list(properties.get("available_rental_gear_ids", []))
-            )
-            if "owner_npc_id" in properties: venue.owner_npc_id = properties["owner_npc_id"] # Store ID string
+            props = venue_data.get("properties", {})
+            venue = Venue(venue_id=venue_data["venue_id"], name=venue_data["name"], description=venue_data["description"],
+                          venue_type=venue_data["venue_type"], category=venue_data["category"],
+                          capacity=venue_data["capacity"], prestige=venue_data["prestige"],
+                          parent_location_id=location_obj.name, **props)
             venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
             location_obj.add_venue(venue)
-
         for conn_data in city_def_data.get("intra_city_poi_connections", []):
             poi_ids_tuple = tuple(sorted(conn_data["pois"]))
-            if len(poi_ids_tuple) == 2:
-                modes = {k: v for k, v in conn_data.items() if k != "pois"}
-                location_obj.intra_city_poi_connections[frozenset(poi_ids_tuple)] = modes
-
-    _build_poi_venue_id_map() # Populate the ID map for quick lookups
-
-    # 3. Load NPCs
+            if len(poi_ids_tuple) == 2: location_obj.intra_city_poi_connections[frozenset(poi_ids_tuple)] = {k: v for k, v in conn_data.items() if k != "pois"}
+    _build_poi_venue_id_map()
     try:
-        with open("game_data/world/npcs.json", 'r') as f:
-            npcs_data = json.load(f)
-    except FileNotFoundError:
-        print("ERROR: game_data/world/npcs.json not found!")
-        return False
-    except json.JSONDecodeError as e:
-        print(f"ERROR: Could not decode game_data/world/npcs.json: {e}")
-        return False
-
+        with open("game_data/world/npcs.json", 'r') as f: npcs_data = json.load(f)
+    except Exception as e: print(f"ERROR loading npcs.json: {e}"); return False
     for npc_data in npcs_data:
-        home_loc_obj = None
-        if "home_location_poi_id" in npc_data:
-            home_loc_obj = get_poi_or_venue_by_id(npc_data["home_location_poi_id"])
-        elif "home_location_location_id" in npc_data:
-            # This assumes home_location_location_id is a name that exists in WORLD_MAP
-            home_loc_obj = WORLD_MAP.get(npc_data["home_location_location_id"])
-
-        current_loc_obj = None
-        if "initial_current_location_poi_id" in npc_data:
-            current_loc_obj = get_poi_or_venue_by_id(npc_data["initial_current_location_poi_id"])
-        elif "initial_current_location_location_id" in npc_data:
-             current_loc_obj = WORLD_MAP.get(npc_data["initial_current_location_location_id"])
-
-        if not home_loc_obj and npc_data.get("schedule"):
-            first_sched_id = list(npc_data["schedule"].values())[0]
-            home_loc_obj = get_poi_or_venue_by_id(first_sched_id)
+        home_loc_obj = get_poi_or_venue_by_id(npc_data.get("home_location_poi_id")) or WORLD_MAP.get(npc_data.get("home_location_location_id"))
+        current_loc_obj = get_poi_or_venue_by_id(npc_data.get("initial_current_location_poi_id")) or WORLD_MAP.get(npc_data.get("initial_current_location_location_id"))
+        if not home_loc_obj and npc_data.get("schedule"): home_loc_obj = get_poi_or_venue_by_id(list(npc_data["schedule"].values())[0])
         if not current_loc_obj: current_loc_obj = home_loc_obj
-
-        if not home_loc_obj:
-             print(f"Warning: Could not determine home location for NPC {npc_data['name']}. NPC might not be placed correctly.")
-        if not current_loc_obj:
-             print(f"Warning: Could not determine current location for NPC {npc_data['name']}. NPC might not be placed correctly.")
-
-
-        npc = NPC( npc_id=npc_data["npc_id"], name=npc_data["name"], personality_key=npc_data["personality_key"],
-            home_location=home_loc_obj, current_location=current_loc_obj )
-
+        if not home_loc_obj: print(f"Warning: No home location for NPC {npc_data['name']}.")
+        if not current_loc_obj: print(f"Warning: No current location for NPC {npc_data['name']}.")
+        npc = NPC(npc_id=npc_data["npc_id"], name=npc_data["name"], personality_key=npc_data["personality_key"], home_location=home_loc_obj, current_location=current_loc_obj)
         for time_slot, loc_id_str in npc_data.get("schedule", {}).items():
             scheduled_loc_obj = get_poi_or_venue_by_id(loc_id_str)
             if scheduled_loc_obj: npc.schedule[time_slot] = scheduled_loc_obj
             else: print(f"Warning: Scheduled POI/Venue ID '{loc_id_str}' not found for {npc.name}'s schedule.")
         NPC_REGISTRY[npc.npc_id] = npc
-
-    # 4. Link NPC owners to POIs/Venues (objects)
-    for location in WORLD_MAP.values():
-        for item_list in [location.points_of_interest, location.venues]:
+    for loc in WORLD_MAP.values():
+        for item_list in [loc.points_of_interest, loc.venues]:
             for item in item_list:
                 if hasattr(item, 'owner_npc_id') and isinstance(item.owner_npc_id, str):
-                    owner_npc_object = NPC_REGISTRY.get(item.owner_npc_id)
-                    if owner_npc_object: item.owner_npc_id = owner_npc_object
-                    else:
-                        print(f"Warning: Owner NPC ID '{item.owner_npc_id}' (string) not found in NPC_REGISTRY for '{item.name}'. Setting owner to None.")
-                        item.owner_npc_id = None
-
-
-    # 5. Establish Inter-City Travel Connections
+                    owner_npc = NPC_REGISTRY.get(item.owner_npc_id)
+                    if owner_npc: item.owner_npc_id = owner_npc
+                    else: print(f"Warning: Owner NPC ID '{item.owner_npc_id}' not found for '{item.name}'."); item.owner_npc_id = None
     for loc_data in locations_data:
-        current_location_obj = temp_location_id_map.get(loc_data["id"]) # Use temp_location_id_map for consistency
-        if not current_location_obj: continue
+        curr_loc_obj = temp_location_id_map.get(loc_data["id"])
+        if not curr_loc_obj: continue
         for conn_data in loc_data.get("travel_connections", []):
             target_loc_obj = temp_location_id_map.get(conn_data["to_location_id"])
-            if target_loc_obj:
-                current_location_obj.add_travel_connection(
-                    target_loc_obj.name, cost=conn_data["cost"], time_hours=conn_data["time_hours"]
-                )
-            else:
-                print(f"Warning: Target location ID '{conn_data['to_location_id']}' for travel from '{current_location_obj.name}' not found.")
-
-    # --- Event Creation (Still Python-based for now, linking to loaded venues) ---
-    event_definitions = [
-        {"id": "open_mic_hometown_hall", "venue_id": "hometown_community_hall", "name": "Open Mic Night", "type": "OPEN_MIC",
-         "skills": {"vocals": 1, "guitar": 1}, "gear": ["INSTRUMENT_ACOUSTIC"], "desc": "A chance to show your skills..."},
-        {"id": "debut_rusty_mug", "venue_id": "citycenter_rustymug", "name": "Debut at 'The Rusty Mug'", "type": "CLUB_GIG",
-         "skills": {"vocals": 5, "guitar": 5, "stage_presence": 3}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"],
-         "desc": "Your first real club gig! Make it count.",
-         "prep_tasks": {"Write Setlist (3 songs)": False, "Rehearse Set (2 hours)": False, "Promote Gig Locally (social media post)": False}},
-        {"id": "opening_act_grande", "venue_id": "citycenter_grandetheater", "name": "Opening Act for Major Band", "type": "CONCERT",
-         "skills": {"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10},
-         "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"],
-         "desc": "A huge opportunity...",
-         "prep_tasks": {"Finalize Setlist (5 songs, original material preferred)": False, "Intensive Rehearsal Week (10 hours)": False,
-                        "Coordinate with Main Act's Team": False, "Sound Check (2 hours, day of show)": False,}}
+            if target_loc_obj: curr_loc_obj.add_travel_connection(target_loc_obj.name, cost=conn_data["cost"], time_hours=conn_data["time_hours"])
+            else: print(f"Warning: Target location ID '{conn_data['to_location_id']}' for travel from '{curr_loc_obj.name}' not found.")
+    event_defs = [
+        {"id": "open_mic_hometown_hall", "venue_id": "hometown_community_hall", "name": "Open Mic Night", "type": "OPEN_MIC", "skills": {"vocals": 1, "guitar": 1}, "gear": ["INSTRUMENT_ACOUSTIC"], "desc": "A chance to show your skills..."},
+        {"id": "debut_rusty_mug", "venue_id": "citycenter_rustymug", "name": "Debut at 'The Rusty Mug'", "type": "CLUB_GIG", "skills": {"vocals": 5, "guitar": 5, "stage_presence": 3}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"], "desc": "Your first real club gig!", "prep_tasks": {"Write Setlist (3 songs)": False, "Rehearse Set (2 hours)": False, "Promote Gig Locally": False}},
+        {"id": "opening_act_grande", "venue_id": "citycenter_grandetheater", "name": "Opening Act for Major Band", "type": "CONCERT", "skills": {"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "A huge opportunity...", "prep_tasks": {"Finalize Setlist (5 songs)": False, "Intensive Rehearsal (10 hours)": False, "Coordinate with Main Act": False, "Sound Check (2 hours)": False}}
     ]
-
-    for event_def in event_definitions:
-        venue_obj = get_poi_or_venue_by_id(event_def["venue_id"])
-        if venue_obj and isinstance(venue_obj, Venue):
-            # Check if this event was listed in the venue's JSON definition
-            if event_def["id"] in getattr(venue_obj, 'events_hosted_ids_from_json', []):
-                event = Event( name=event_def["name"], event_type=event_def["type"], location=venue_obj,
-                               required_skills=event_def["skills"], required_gear_types=event_def["gear"],
-                               description=event_def["desc"] )
-                if "prep_tasks" in event_def: event.preparation_tasks_required = event_def["prep_tasks"]
-                venue_obj.add_event(event)
-        else:
-            print(f"Warning: Venue ID '{event_def['venue_id']}' for event '{event_def['name']}' not found or not a Venue.")
-
-    # --- Global Player Home POI ID ---
+    for ed in event_defs:
+        vo = get_poi_or_venue_by_id(ed["venue_id"])
+        if vo and isinstance(vo, Venue) and ed["id"] in getattr(vo, 'events_hosted_ids_from_json', [ed["id"]]):
+            is_tour_gig_flag = "tour" in ed.get("name", "").lower()
+            evt = Event(name=ed["name"], event_type=ed["type"], location=vo, required_skills=ed["skills"], required_gear_types=ed["gear"], description=ed["desc"], is_tour_gig=is_tour_gig_flag)
+            if "prep_tasks" in ed: evt.preparation_tasks_required = ed["prep_tasks"]
+            vo.add_event(evt)
+        else: print(f"Warning: Venue ID '{ed['venue_id']}' for event '{ed['name']}' not found or not a Venue.")
     player_home_obj = get_poi_or_venue_by_id("hometown_player_home")
     if player_home_obj: PLAYER_HOME_POI_ID_GLOBAL = player_home_obj.poi_id
-    else: print("CRITICAL ERROR: Player home POI 'hometown_player_home' not found after loading world data.")
+    else: print("CRITICAL ERROR: Player home POI 'hometown_player_home' not found.")
+    print(f"World setup complete. Loaded {len(WORLD_MAP)} locations and {len(NPC_REGISTRY)} NPCs.")
+    return True
 
-    print(f"World setup complete. Loaded {len(WORLD_MAP)} locations and {len(NPC_REGISTRY)} specific NPCs from JSON data.")
-    return True # Indicate success
-
-
-# --- Time and Scheduling Helpers --- (Keep existing get_day_of_week_name, get_time_slot_key, update_npc_locations)
 def get_day_of_week_name(day_number_in_month):
-    day_index = (day_number_in_month - 1) % 7
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    return days[day_index]
+    return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][(day_number_in_month - 1) % 7]
 
-def get_time_slot_key(game_time_obj):
-    day_name = get_day_of_week_name(game_time_obj.day)
-    hour = game_time_obj.hour
+def get_time_slot_key(gt_obj):
+    day_name = get_day_of_week_name(gt_obj.day)
+    hour = gt_obj.hour
     day_type = "Weekend" if day_name in ["Saturday", "Sunday"] else "Weekday"
-    time_period = "Night"
-    if 6 <= hour <= 11: time_period = "Morning"
-    elif 12 <= hour <= 17: time_period = "Afternoon"
-    elif 18 <= hour <= 23: time_period = "Evening"
-    return f"{day_type}_{time_period}"
+    if 6 <= hour <= 11: period = "Morning"
+    elif 12 <= hour <= 17: period = "Afternoon"
+    elif 18 <= hour <= 23: period = "Evening"
+    else: period = "Night"
+    return f"{day_type}_{period}"
 
-def update_npc_locations(game_time_obj):
-    current_time_slot_key = get_time_slot_key(game_time_obj)
+def update_npc_locations(gt_obj):
+    time_slot_key = get_time_slot_key(gt_obj)
     for npc in NPC_REGISTRY.values():
-        scheduled_destination = npc.home_location
-        if current_time_slot_key in npc.schedule:
-            scheduled_destination_ref = npc.schedule[current_time_slot_key]
-            if isinstance(scheduled_destination_ref, (PointOfInterest, Venue, Location)): # Already an object
-                 scheduled_destination = scheduled_destination_ref
-            else: # Should be an ID string now if loaded from JSON and not resolved, though loading logic tries to resolve
-                 resolved_loc = get_poi_or_venue_by_id(scheduled_destination_ref) # Check POI/Venue map
-                 if not resolved_loc: resolved_loc = WORLD_MAP.get(scheduled_destination_ref) # Check Location map (by name)
-                 if resolved_loc: scheduled_destination = resolved_loc
-                 else: print(f"Warning: NPC {npc.name} schedule contains unresolved location ID: {scheduled_destination_ref}")
+        dest_ref = npc.schedule.get(time_slot_key)
+        dest = None
+        if isinstance(dest_ref, (PointOfInterest, Venue, Location)):
+            dest = dest_ref
+        elif isinstance(dest_ref, str):
+            dest = get_poi_or_venue_by_id(dest_ref) or WORLD_MAP.get(dest_ref)
+
+        if dest is None : dest = npc.home_location
 
         if npc.npc_id == "sarah001":
-            community_hall_obj = get_poi_or_venue_by_id("hometown_community_hall")
-            if community_hall_obj:
-                open_mic_active = any(event.name == "Open Mic Night" and event.is_active for event in community_hall_obj.events_hosted)
-                if "open_mic_night_at_community_hall" in npc.schedule and open_mic_active:
-                    if npc.schedule["open_mic_night_at_community_hall"] == community_hall_obj :
-                         scheduled_destination = community_hall_obj
-            else: # Should not happen if world loaded correctly
-                print("Warning: Hometown Community Hall object not found for Sarah's schedule check.")
+            comm_hall = get_poi_or_venue_by_id("hometown_community_hall")
+            if comm_hall and any(e.name == "Open Mic Night" and e.is_active for e in getattr(comm_hall, 'events_hosted', [])):
+                scheduled_loc_for_open_mic = npc.schedule.get("open_mic_night_at_community_hall")
+                if isinstance(scheduled_loc_for_open_mic, str): scheduled_loc_for_open_mic = get_poi_or_venue_by_id(scheduled_loc_for_open_mic)
+                if scheduled_loc_for_open_mic == comm_hall: dest = comm_hall
+        if npc.current_location != dest: npc.current_location = dest
 
-
-        if npc.current_location != scheduled_destination:
-            npc.current_location = scheduled_destination
-
-
-# --- UI Helper Functions --- (Keep existing clear_screen_ish, present_choices)
-def clear_screen_ish():
-    print("\n" * 30)
+def clear_screen_ish(): print("\n" * 30)
 
 def present_choices(options, title="Choose an option:"):
     print(f"\n--- {title} ---")
-    if isinstance(options, list):
-        for i, option_text in enumerate(options): print(f"{i+1}. {option_text}")
-    elif isinstance(options, dict):
-        for key, text in options.items(): print(f"{key}. {text}")
-    else:
-        print("Error: Invalid options type for present_choices.")
-        return None
-    max_attempts = 3
-    for attempt in range(max_attempts):
+    if isinstance(options, list): [print(f"{i+1}. {opt}") for i, opt in enumerate(options)]
+    elif isinstance(options, dict): [print(f"{k}. {v}") for k, v in options.items()]
+    else: print("Error: Invalid options for present_choices."); return None
+    for _ in range(3):
         choice = input("> ")
-        if isinstance(options, list):
-            if choice.isdigit() and 1 <= int(choice) <= len(options): return str(int(choice))
-        elif isinstance(options, dict):
-            if choice in options: return choice
-        print(f"Invalid choice. Please enter a valid number/key. ({max_attempts - 1 - attempt} attempts left)")
-    print("Too many invalid attempts.")
-    return None
+        if isinstance(options, list) and choice.isdigit() and 1 <= int(choice) <= len(options): return str(int(choice))
+        if isinstance(options, dict) and choice in options: return choice
+        print("Invalid choice. Try again.")
+    print("Too many invalid attempts."); return None
 
-# --- HUD Display Function ---
-def display_hud(player, current_game_time_obj):
-    """Displays the Heads-Up Display with current player stats."""
-    # Import necessary function here if not already globally available in main.py
-    # from game.game_time import calculate_player_age # Not needed if main.py imports game.game_time.* or specific items
+def display_hud(player, gt_obj):
+    age = calculate_player_age(player.start_date, gt_obj, player.age)
+    loc = player.current_location.name if player.current_location else 'N/A'
+    poi = player.current_poi.name if player.current_poi else 'N/A'
+    hair = f"{get_hair_length_description(player.hair_length)} ({player.hair_length}/{player.MAX_HAIR_LENGTH})"
+    beard = f"{get_beard_length_description(player.beard_length)} ({player.beard_length}/{player.MAX_BEARD_LENGTH})"
+    date_str = get_current_time_str(date_only=True); time_str = f"{gt_obj.hour:02d}:{gt_obj.minute:02d}"
+    print("="*79 + f"\n| {player.name} | Age: {age} | Fame: {player.fame} | Money: ${player.money}\n" +
+          f"| Location: {loc} / {poi}\n| Hair: {hair} | Beard: {beard}\n" +
+          f"| Date: {date_str} | Time: {time_str}\n" + "="*79)
 
-    # Calculate current age
-    # The player.age attribute is the starting age. We calculate current age dynamically.
-    current_age = calculate_player_age(player.start_date, current_game_time_obj, player.age)
+def get_hair_length_description(val):
+    if val == 0: return "Bald"; elif val <= 2: return "Very Short"; elif val <= 4: return "Short";
+    elif val <= 6: return "Medium"; elif val <= 8: return "Long"; else: return "Very Long"
 
-    hud_lines = [
-        "===============================================================================",
-        f"| {player.name} | Age: {current_age} | Fame: {player.fame} | Money: ${player.money}",
-        f"| Location: {player.current_location.name if player.current_location else 'N/A'} / {player.current_poi.name if player.current_poi else 'N/A'}",
-        f"| Hair: {get_hair_length_description(player.hair_length)} ({player.hair_length}/{player.MAX_HAIR_LENGTH}) | Beard: {get_beard_length_description(player.beard_length)} ({player.beard_length}/{player.MAX_BEARD_LENGTH})",
-        f"| Date: {get_current_time_str(date_only=True)} | Time: {current_game_time_obj.hour:02d}:{current_game_time_obj.minute:02d}",
-        "==============================================================================="
-    ]
-    print("\n".join(hud_lines))
+def get_beard_length_description(val):
+    if val == 0: return "Clean-shaven"; elif val <= 2: return "Stubble"; elif val <= 4: return "Short Beard";
+    elif val <= 6: return "Medium Beard"; elif val <= 8: return "Long Beard"; else: return "Wizard Beard"
 
-# --- HUD Helper Functions for Appearance ---
-def get_hair_length_description(length_value: int) -> str:
-    """Converts numerical hair length to a descriptive string."""
-    if length_value == 0: return "Bald"
-    elif length_value <= 2: return "Very Short"
-    elif length_value <= 4: return "Short"
-    elif length_value <= 6: return "Medium"
-    elif length_value <= 8: return "Long"
-    else: return "Very Long" # Covers 9-10 and any potential overflow if MAX_HAIR_LENGTH changes
-
-def get_beard_length_description(length_value: int) -> str:
-    """Converts numerical beard length to a descriptive string."""
-    if length_value == 0: return "Clean-shaven"
-    elif length_value <= 2: return "Stubble"
-    elif length_value <= 4: return "Short Beard"
-    elif length_value <= 6: return "Medium Beard"
-    elif length_value <= 8: return "Long Beard"
-    else: return "Wizard Beard" # Covers 9-10 and potential overflow
-
-# --- Helper for NPC Interaction --- (Keep existing talk_to_npc_instance)
-def talk_to_npc_instance(player, npc_instance):
-    if not npc_instance:
-        print("No one specific to talk to here.")
-        return
-    print(f"\n--- Talking to {npc_instance.name} ---")
-    print(f"Type 'bye' to end the conversation.")
+def talk_to_npc_instance(player, npc):
+    if not npc: print("No one specific to talk to."); return
+    print(f"\n--- Talking to {npc.name} ---\nType 'bye' to end.")
+    talk_duration_minutes = 0
     while True:
-        player_input = input(f"{player.name}: ")
-        if player_input.lower() == 'bye':
-            print(f"{npc_instance.name} nods or waves goodbye.")
-            npc_instance.add_memory(f"Had a conversation with {player.name} that ended.")
-            advance_game_time(minutes=60)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 60) # Added needs processing
+        p_input = input(f"{player.name}: ")
+        talk_duration_minutes += 5
+        if p_input.lower() == 'bye':
+            print(f"{npc.name} nods."); npc.add_memory(f"Ended chat with {player.name}.")
             break
-        if not player_input.strip(): continue
-        npc_response = generate_npc_response(player_input, npc_instance, player_name=player.name)
-        print(f"{npc_instance.name}: {npc_response}")
-        if "LLM Error" in npc_response or "An unexpected error occurred" in npc_response:
-            npc_instance.add_memory(f"Had a communication problem while talking to {player.name}.")
-            advance_game_time(minutes=60)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 60) # Added needs processing
+        if not p_input.strip(): continue
+        response = generate_npc_response(p_input, npc, player_name=player.name)
+        print(f"{npc.name}: {response}")
+        if "LLM Error" in response or "unexpected error" in response:
+            npc.add_memory(f"LLM error with {player.name}.")
+            talk_duration_minutes = max(15, talk_duration_minutes)
             break
-        clarification_options = {"1": "Friendly", "2": "Neutral", "3": "Unfriendly", "0": "No specific impact / Continue" }
-        if not ("LLM Error" in npc_response or "An unexpected error occurred" in npc_response):
-            print(f"\nHow should {npc_instance.name} interpret your last statement?")
-            intent_choice = present_choices(clarification_options, title="Your intent:")
-            relationship_points = 0; memory_detail = ""
-            if intent_choice == "1": relationship_points = 5; memory_detail = f"Player ({player.name}) said something friendly: '{player_input}'"
-            elif intent_choice == "3": relationship_points = -5; memory_detail = f"Player ({player.name}) said something unfriendly: '{player_input}'"
-            if relationship_points != 0:
-                npc_instance.update_relationship(relationship_points)
-                npc_instance.add_memory(memory_detail)
-                print(f"(Relationship with {npc_instance.name} updated by {relationship_points})")
+        clar_opts = {"1": "Friendly", "2": "Neutral", "3": "Unfriendly", "0": "Continue"}
+        intent_choice = present_choices(clar_opts, "Your intent:")
+        pts = 0; mem_detail = ""
+        if intent_choice == "1": pts = 5; mem_detail = f"Player friendly: '{p_input}'"
+        elif intent_choice == "3": pts = -5; mem_detail = f"Player unfriendly: '{p_input}'"
+        if pts != 0: npc.update_relationship(pts); npc.add_memory(mem_detail); print(f"(Rel with {npc.name} by {pts})")
 
-            # --- Add Contact Logic ---
-            is_already_contact = any(contact['npc_id'] == npc_instance.npc_id for contact in player.contacts)
-            MIN_REL_TO_EXCHANGE = 30 # Configurable minimum relationship score
+        is_contact = any(c['npc_id'] == npc.npc_id for c in player.contacts)
+        if not is_contact and npc.relationship_score >= 30:
+            if present_choices({"1":"Continue","2":f"Ask {npc.name} for number"},"Deepen connection?")=="2":
+                agrees = (npc.relationship_score >= 70 and random.random()<0.95) or \
+                         (npc.relationship_score >= 50 and random.random()<0.75) or (random.random()<0.50)
+                if agrees:
+                    player.contacts.append({'npc_id':npc.npc_id, 'name':npc.name, 'notes':f"Met at {player.current_poi.name if player.current_poi else player.current_location.name}, {get_current_time_str(True)}. Rel: {npc.relationship_score}"})
+                    print(f"Exchanged numbers with {npc.name}!"); npc.add_memory(f"Exchanged numbers with {player.name}."); npc.update_relationship(10)
+                else: print(f"{npc.name} politely declines."); npc.add_memory(f"Declined number exchange with {player.name}."); npc.update_relationship(-2)
+                talk_duration_minutes += 5
 
-            if not is_already_contact and npc_instance.relationship_score >= MIN_REL_TO_EXCHANGE:
-                print(f"\n(You feel like you've made a connection with {npc_instance.name}.)")
-                exchange_options = {
-                    "1": "Continue conversation like normal",
-                    "2": f"Ask {npc_instance.name} if they'd like to exchange numbers"
-                }
-                # This present_choices is nested; ensure it doesn't break flow if player says 'bye' etc.
-                # The main loop of talk_to_npc_instance handles 'bye'.
-                contact_action_choice = present_choices(exchange_options, title="Deepen connection?")
+    final_talk_time = max(15, talk_duration_minutes)
+    advance_game_time(final_talk_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, final_talk_time)
 
-                if contact_action_choice == "2":
-                    npc_agrees_to_exchange = False
-                    # Simple agreement logic based on relationship score
-                    if npc_instance.relationship_score >= 70: npc_agrees_to_exchange = random.random() < 0.95 # Very likely
-                    elif npc_instance.relationship_score >= 50: npc_agrees_to_exchange = random.random() < 0.75 # Likely
-                    else: npc_agrees_to_exchange = random.random() < 0.50 # Fair chance
-
-                    if npc_agrees_to_exchange:
-                        player.contacts.append({
-                            'npc_id': npc_instance.npc_id,
-                            'name': npc_instance.name,
-                            'notes': f"Met at {player.current_poi.name if player.current_poi else player.current_location.name} on {get_current_time_str(date_only=True)}. Rel: {npc_instance.relationship_score}"
-                        })
-                        print(f"You exchanged numbers with {npc_instance.name}! They've been added to your phone contacts.")
-                        npc_instance.add_memory(f"Exchanged numbers with {player.name}.")
-                        npc_instance.update_relationship(10) # Bonus for successful exchange
-                    else:
-                        print(f"{npc_instance.name} politely declines to exchange numbers right now. Maybe another time.")
-                        npc_instance.add_memory(f"Politely declined to exchange numbers with {player.name}.")
-                        npc_instance.update_relationship(-2) # Small penalty for awkward ask
-
-                    # Time passes for this specific interaction attempt
-                    exchange_attempt_time = 5
-                    advance_game_time(minutes=exchange_attempt_time)
-                    update_npc_locations(current_game_time) # Update NPC locations after time passes
-                    process_time_based_player_needs(player, exchange_attempt_time) # Process player needs
-            # --- End Add Contact Logic ---
-
-# --- Phone Menu Handler ---
 def handle_phone_menu(player):
-    """Handles the player's phone interactions."""
     while True:
-        clear_screen_ish()
-        print(f"\n--- Phone --- ({player.name}) ---")
-        print(f"--- {get_current_time_str()} ---")
-
-        phone_options = {
-            "1": "Check Schedule",
-            "2": "Check Local News", # Placeholder for now
-            "3": "Contacts",         # Placeholder for now
-            "0": "Put Phone Away (Back to Main Menu)"
-        }
-        choice = present_choices(phone_options, title="Phone Options:")
-
-        if choice == "1": # Check Schedule
-            # --- Start of Moved View Schedule Logic ---
-            print("\n--- View Schedule ---")
-            schedule_view_options = {
-                "1": "Today's Schedule",
-                "2": "Tomorrow's Schedule",
-                "3": "This Week's Schedule",
-                "0": "Back to Phone Menu" # Changed from "Back"
-            }
-            view_choice = present_choices(schedule_view_options, "Select schedule view:")
-
-            if view_choice == "0":
-                # print("Returning to phone menu.") # No message needed, just loop
-                pass # Loop will continue in phone menu
-            elif view_choice in ["1", "2", "3"]:
-                from game.game_time import GameTime # Ensure GameTime is available
-
-                target_time = current_game_time.copy()
-                if view_choice == "2": # Tomorrow
-                    target_time.advance_time(minutes=24*60) # Advance by one day
-
-                scheduled_items = []
-                if view_choice == "1" or view_choice == "2": # Today or Tomorrow
-                    scheduled_items = player.schedule.get_events_for_day(target_time.year, target_time.month, target_time.day)
-                    day_str = "Today" if view_choice == "1" else "Tomorrow"
-                    print(f"\n--- {day_str}'s Schedule ({target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
-                elif view_choice == "3": # This Week
-                    scheduled_items = player.schedule.get_events_for_week(target_time.year, target_time.month, target_time.day)
-                    print(f"\n--- This Week's Schedule (Starting {target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
-
-                if not scheduled_items:
-                    print("Nothing scheduled.")
-                else:
-                    for item in scheduled_items:
-                        start_display = f"{item.start_time.hour:02d}:{item.start_time.minute:02d}" if hasattr(item.start_time, 'hour') else str(item.start_time)
-                        end_display = f"{item.end_time.hour:02d}:{item.end_time.minute:02d}" if hasattr(item.end_time, 'hour') else str(item.end_time)
-                        date_prefix = ""
-                        if view_choice == "3":
-                             date_prefix = f"{item.start_time.year}-{item.start_time.month:02d}-{item.start_time.day:02d} "
-                        print(f"{date_prefix}{start_display} - {end_display}: {item.description} ({item.category})")
-
-                advance_game_time(minutes=10)
-                update_npc_locations(current_game_time)
-                process_time_based_player_needs(player, 10)
-            else:
-                print("Invalid schedule view choice.")
-            # --- End of Moved View Schedule Logic ---
-        elif choice == "2":
-            # Placeholder for "Check Local News"
-            print("\n--- Local News ---")
-            print("(Feature coming soon! For now, just a quick glance at headlines...)")
-            advance_game_time(minutes=5)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 5)
-        elif choice == "3": # View Contacts
+        clear_screen_ish(); print(f"\n--- Phone --- ({player.name}) ---\n--- {get_current_time_str()} ---")
+        opts = {"1":"Check Schedule", "2":"Local News", "3":"Contacts", "0":"Put Phone Away"}
+        choice = present_choices(opts, "Phone Options:")
+        adv_time = 1
+        if choice == "1":
+            sched_opts = {"1":"Today", "2":"Tomorrow", "3":"This Week", "0":"Back"}
+            view_choice = present_choices(sched_opts, "Select schedule view:")
+            if view_choice == "0": continue
+            target_time = current_game_time.copy()
+            if view_choice == "2": target_time.advance_time(24*60)
+            items = []; title_str = ""
+            if view_choice in ["1","2"]: items=player.schedule.get_events_for_day(target_time.year,target_time.month,target_time.day); title_str=f"{sched_opts[view_choice]}'s Schedule"
+            elif view_choice == "3": items=player.schedule.get_events_for_week(target_time.year,target_time.month,target_time.day); title_str="This Week's Schedule"
+            print(f"\n--- {title_str} ({target_time.year}-{target_time.month:02d}-{target_time.day:02d}) ---")
+            if not items: print("Nothing scheduled.")
+            else: [print(item) for item in items]
+            adv_time = 10
+        elif choice == "2": print("\n--- Local News ---\n(Feature TBD)"); adv_time = 5
+        elif choice == "3":
             print("\n--- Contacts ---")
-            if not player.contacts:
-                print("Your contact list is empty.")
-                advance_game_time(minutes=1) # Time to check empty list
-                update_npc_locations(current_game_time)
-                process_time_based_player_needs(player, 1)
+            if not player.contacts: print("Contact list empty."); adv_time=1
             else:
-                contact_options = {}
-                for i, contact in enumerate(player.contacts):
-                    contact_options[str(i+1)] = f"{contact['name']} (Notes: {contact.get('notes', 'N/A')})"
-                contact_options["0"] = "Back to Phone Menu"
-
-                selected_contact_key = present_choices(contact_options, "Select a contact to view/call:")
-
-                if selected_contact_key == "0":
-                    pass # Just go back to phone menu loop
-                elif selected_contact_key in contact_options:
-                    selected_contact_index = int(selected_contact_key) - 1
-                    if 0 <= selected_contact_index < len(player.contacts):
-                        chosen_contact = player.contacts[selected_contact_index]
-
-                        print(f"\nCalling {chosen_contact['name']}...")
-                        # Simulate call attempt
-                        call_time_minutes = random.randint(2, 5)
-                        advance_game_time(minutes=call_time_minutes)
-                        update_npc_locations(current_game_time) # Update NPC locations as time passed
-
-                        # Basic outcome: NPC is busy or doesn't pick up.
-                        # More complex interactions can be added later.
-                        # For now, just a generic message.
-                        # Could check NPC schedule or relationship for varied simple responses later.
-
-                        # Find the actual NPC object to potentially use their current state or personality
-                        npc_object = NPC_REGISTRY.get(chosen_contact['npc_id'])
-
-                        possible_responses = [
-                            f"{chosen_contact['name']} doesn't pick up. You leave a voicemail.",
-                            f"The call goes straight to {chosen_contact['name']}'s voicemail.",
-                            f"{chosen_contact['name']} is busy right now. Try again later.",
-                            f"You hear a generic voicemail greeting from {chosen_contact['name']}.",
-                        ]
-                        if npc_object: # If we found the NPC in the registry
-                            npc_object.add_memory(f"Received a call attempt from {player.name} (went to voicemail/busy).")
-                            # Could potentially influence relationship slightly if desired, e.g., player.name spamming calls.
-
-                        print(random.choice(possible_responses))
-                        process_time_based_player_needs(player, call_time_minutes)
-                    else:
-                        print("Invalid contact selection.") # Should not happen with present_choices
-                else:
-                    print("Invalid choice.") # Should not happen
-        elif choice == "0":
-            print("Putting phone away.")
-            # Minimal time for just opening and closing phone if no action taken before this loop iteration
-            # This time might have already been spent if an option was chosen above.
-            # Consider if time should only be added if no sub-action was taken.
-            # For simplicity now, each action adds its own time. Closing adds minimal.
-            advance_game_time(minutes=1)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 1)
-            break # Exit phone menu loop
-        else:
-            print("Invalid option on phone.")
-            advance_game_time(minutes=1) # Time for fumbling
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 1)
-
-        # Allow player to perform multiple actions on phone before putting away
-        # or automatically exit after one action. For now, let's loop.
-        # If an action was taken, prompt to continue or put away.
-        if choice in ["1","2","3"]:
-            if present_choices({"1": "Continue using phone", "0": "Put phone away"}, "Finished with that app.") == "0":
-                print("Putting phone away.")
-                advance_game_time(minutes=1)
-                update_npc_locations(current_game_time)
-                process_time_based_player_needs(player, 1)
-                break
-    print("--------------------") # Separator after phone menu closes
-
-# --- Travel Menu Handler ---
-def handle_travel_menu(player):
-    """Handles the player's travel choices."""
-    while True:
-        clear_screen_ish()
-        current_city_name = player.current_location.name if player.current_location else "Unknown City"
-        print(f"\n--- Travel Options --- (Currently in {current_city_name})")
-        print(f"--- {get_current_time_str()} ---")
-
-        travel_submenu_options = {
-            "1": f"Travel within {current_city_name} (to another POI)",
-            "2": "Travel to another City (Inter-City)",
-            "0": "Back to Main Menu"
-        }
-        choice = present_choices(travel_submenu_options, title="Travel Where?")
-
-        if choice == "1": # Travel within current city
-            print(f"\n--- Travel within {player.current_location.name} ---")
-            if not player.current_poi:
-                print("You are not at a specific POI. Explore first to set your starting point for local travel.")
-                # advance_game_time(minutes=1); update_npc_locations(current_game_time); process_time_based_player_needs(player, 1)
-                # No time passes for this check, loop back to travel menu
-                continue # Loop back to travel menu choices
-
-            current_city_object = player.current_location
-            all_city_pois_and_venues = current_city_object.points_of_interest + current_city_object.venues
-            dest_poi_options = [poi_obj for poi_obj in all_city_pois_and_venues if poi_obj != player.current_poi]
-
-            if not dest_poi_options:
-                print("No other specific POIs to travel to in this city from your current POI.")
-            else:
-                dest_display_list = [f"{poi.name} ({poi.category if hasattr(poi,'category') else poi.venue_type})" for poi in dest_poi_options]
-                dest_choice_idx_str = present_choices(dest_display_list, "Choose destination POI:")
-                if dest_choice_idx_str and dest_choice_idx_str.isdigit():
-                    chosen_destination_poi = dest_poi_options[int(dest_choice_idx_str) - 1]
-                    origin_poi_id = player.current_poi.poi_id if hasattr(player.current_poi, 'poi_id') else getattr(player.current_poi, 'venue_id', None)
-                    dest_poi_id = chosen_destination_poi.poi_id if hasattr(chosen_destination_poi, 'poi_id') else getattr(chosen_destination_poi, 'venue_id', None)
-
-                    if not origin_poi_id or not dest_poi_id :
-                        print("Error determining travel route IDs.")
-                        continue # Loop back to travel menu
-
-                    connection_key = frozenset({origin_poi_id, dest_poi_id})
-                    travel_modes_data = current_city_object.intra_city_poi_connections.get(connection_key)
-
-                    if not travel_modes_data:
-                        print(f"No direct travel route defined between {player.current_poi.name} and {chosen_destination_poi.name}.")
-                    else:
-                        print(f"Travel modes to {chosen_destination_poi.name}:")
-                        available_modes_for_choice = {}; mode_map = {}; choice_num = 1
-                        if "walk" in travel_modes_data:
-                            mode_info = travel_modes_data["walk"]
-                            available_modes_for_choice[str(choice_num)] = f"Walk: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
-                            mode_map[str(choice_num)] = ("walk", mode_info); choice_num += 1
-                        if player.has_bike and "bike" in travel_modes_data: # Check if player has bike
-                            mode_info = travel_modes_data["bike"]
-                            available_modes_for_choice[str(choice_num)] = f"Bike: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
-                            mode_map[str(choice_num)] = ("bike", mode_info); choice_num += 1
-                        if "taxi" in travel_modes_data:
-                            mode_info = travel_modes_data["taxi"]
-                            available_modes_for_choice[str(choice_num)] = f"Taxi: {mode_info['time']} mins, Cost: ${mode_info['cost']}"
-                            mode_map[str(choice_num)] = ("taxi", mode_info); choice_num += 1
-
-                        if not available_modes_for_choice:
-                            print("No travel modes available for this route currently (e.g., bike required but not owned).")
-                            continue # Loop back to travel menu choices
-
-                        mode_choice_key = present_choices(available_modes_for_choice, "Choose travel mode:")
-                        if mode_choice_key and mode_choice_key in mode_map:
-                            chosen_mode_name, chosen_mode_details = mode_map[mode_choice_key]
-                            if chosen_mode_name == "taxi" and player.money < chosen_mode_details['cost']:
-                                print(f"Not enough money for a taxi."); continue
-                            # Check gear capacity against the chosen mode
-                            if player.get_current_gear_load() > player.get_current_gear_capacity(chosen_mode_name):
-                                print(f"Too much gear to travel by {chosen_mode_name}. Manage inventory or choose another mode."); continue
-
-                            if chosen_mode_name == "taxi":
-                                player.money -= chosen_mode_details['cost']
-                                print(f"Paid ${chosen_mode_details['cost']} for the taxi.")
-
-                            player.travel_within_city(chosen_destination_poi, chosen_mode_details['time']) # This only sets current_poi
-                            minutes_passed = chosen_mode_details['time']
-                            advance_game_time(minutes=minutes_passed)
-                            update_npc_locations(current_game_time)
-                            process_time_based_player_needs(player, minutes_passed)
-                            print("--------------------") # Separator after action
-                            break # Intra-city travel successful, exit travel sub-menu to main game loop
-            # If any condition above caused a 'continue', or if no choice made, we loop in travel menu.
-            # If travel occurs (break), we go back to main menu.
-
-        elif choice == "2": # Travel to another city
-            print("\n--- Inter-City Travel Information ---")
-            current_city = player.current_location
-            if not current_city:
-                print("Error: Player not in a valid location.")
-                continue # Loop back to travel menu
-
-            transport_hubs_in_city = [poi for poi in (current_city.points_of_interest + current_city.venues) if hasattr(poi, 'category') and poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]]
-
-            if not transport_hubs_in_city:
-                print(f"{current_city.name} doesn't seem to have any major bus stations or airports defined for inter-city travel.")
-            elif player.current_poi and player.current_poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
-                # Player is at a transport hub, directly use "Explore POI" to buy tickets
-                print(f"You are currently at {player.current_poi.name}, which is a transport hub.")
-                print("Use the 'Explore current POI/Area' option from the main menu to find departures and buy tickets.")
-                # This choice effectively ends here, player needs to go back to main menu and explore.
-                # No break here, let them choose "Back to Main Menu" from travel menu or another travel option.
-            else:
-                print(f"To travel to another city, you need to first go to a transport hub (bus station or airport) within {current_city.name}.")
-                if player.current_poi:
-                    print(f"You are currently at: {player.current_poi.name}.")
-                else: # Should not happen if intra-city travel requires a current_poi
-                    print(f"You are currently in the general area of {current_city.name}, not at a specific POI.")
-
-                print(f"\nAvailable transport hubs in {current_city.name}:")
-                if not transport_hubs_in_city: # Should be caught above, but defensive
-                     print("None found.")
-                else:
-                    hub_display_list = [f"{hub.name} ({hub.category})" for hub in transport_hubs_in_city]
-                    # We don't offer to travel to them from here directly, as that's an intra-city travel action.
-                    # This option is now purely informational if not at a hub.
-                    for hub_info in hub_display_list: print(f" - {hub_info}")
-                    print(f"\nUse 'Travel within {current_city.name}' to go to one of these hubs first.")
-            # No break here, this option is now more informational or directs to Explore POI.
-            # Player remains in travel sub-menu.
-
-        elif choice == "0":
-            print("Returning to main activities.")
-            # advance_game_time(minutes=1) # Minimal time for opening and closing menu - already handled if an action was taken
-            # update_npc_locations(current_game_time)
-            # process_time_based_player_needs(player, 1)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 1)
-            break # Exit travel menu loop
-        else:
-            print("Invalid travel option.")
-            advance_game_time(minutes=1)
-            update_npc_locations(current_game_time)
-            process_time_based_player_needs(player, 1)
-
-        # Decide if actions within travel menu should loop or exit to main menu
-        # For now, let's make them loop back to travel menu unless "Back" is chosen.
-        # Actual travel actions will likely break this loop and return to main game loop.
-        # So, if choice was 1 or 2, and they completed, they'd typically break.
-        # For this structural step, we are just showing the menu.
-        # The `break` statements commented out above would be used if an action was fully completed.
+                c_opts = {str(i+1):f"{c['name']} (Notes: {c.get('notes','N/A')})" for i,c in enumerate(player.contacts)}; c_opts["0"]="Back"
+                sel_c_key = present_choices(c_opts, "Select contact:")
+                if sel_c_key != "0" and sel_c_key in c_opts:
+                    contact = player.contacts[int(sel_c_key)-1]; print(f"\nCalling {contact['name']}...")
+                    call_mins = random.randint(2,5); adv_time += call_mins
+                    npc_obj = NPC_REGISTRY.get(contact['npc_id'])
+                    responses = [f"{contact['name']} doesn't pick up. Voicemail.", f"{contact['name']} is busy. Try later."]
+                    if npc_obj: npc_obj.add_memory(f"Call attempt from {player.name} (voicemail/busy).")
+                    print(random.choice(responses))
+        elif choice == "0": print("Putting phone away."); adv_time=1; break
+        else: print("Invalid phone option.")
+        if adv_time > 0: advance_game_time(adv_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time)
+        if choice in ["1","2","3"] and present_choices({"1":"Continue phone","0":"Put away"},"Done?")=="0": print("Putting phone away."); break
     print("--------------------")
 
+def handle_travel_menu(player):
+    while True:
+        clear_screen_ish(); city_name = player.current_location.name if player.current_location else 'N/A'
+        print(f"\n--- Travel Options --- (In {city_name})\n--- {get_current_time_str()} ---")
+        travel_opts = {"1":f"Travel within {city_name}", "2":"Travel to another City", "0":"Back"}
+        choice = present_choices(travel_opts, "Travel Where?")
+        adv_time_local = 1
+
+        if choice == "1":
+            if not player.current_poi: print("Not at a POI. Explore first."); continue
+            city_obj = player.current_location
+            all_city_targets = city_obj.points_of_interest + city_obj.venues
+            dest_opts_list = [t for t in all_city_targets if t != player.current_poi]
+            if not dest_opts_list: print("No other POIs here."); continue
+
+            dest_disp_dict = {str(i+1): f"{t.name} ({t.category if hasattr(t,'category') else t.venue_type})" for i, t in enumerate(dest_opts_list)}
+            dest_idx_key = present_choices(dest_disp_dict, "Choose destination POI:")
+
+            if dest_idx_key and dest_idx_key in dest_disp_dict:
+                chosen_dest_poi = dest_opts_list[int(dest_idx_key)-1]
+                orig_id = player.current_poi.poi_id if hasattr(player.current_poi,'poi_id') else getattr(player.current_poi,'venue_id',None)
+                dest_id = chosen_dest_poi.poi_id if hasattr(chosen_dest_poi,'poi_id') else getattr(chosen_dest_poi,'venue_id',None)
+                if not orig_id or not dest_id: print("Error with route IDs."); continue
+
+                conn_key = frozenset({orig_id, dest_id})
+                modes_data = city_obj.intra_city_poi_connections.get(conn_key)
+                if not modes_data: print(f"No direct route between {player.current_poi.name} and {chosen_dest_poi.name}."); continue
+
+                avail_modes_choice={}; mode_map={}; c_num=1
+                for mode_name, mode_info in modes_data.items():
+                    if mode_name=="bike" and not player.has_bike: continue
+                    avail_modes_choice[str(c_num)] = f"{mode_name.capitalize()}: {mode_info['time']} mins, ${mode_info['cost']}"
+                    mode_map[str(c_num)] = (mode_name, mode_info); c_num+=1
+
+                if not avail_modes_choice: print("No travel modes available."); continue
+                mode_key = present_choices(avail_modes_choice, "Choose travel mode:")
+                if mode_key and mode_key in mode_map:
+                    mode_n, mode_d = mode_map[mode_key]
+                    if player.money < mode_d['cost']: print("Not enough money."); continue
+                    if player.get_current_gear_load() > player.get_current_gear_capacity(mode_n): print(f"Too much gear for {mode_n}."); continue
+
+                    player.money -= mode_d['cost']; print(f"Paid ${mode_d['cost']} for {mode_n}.")
+                    player.travel_within_city(chosen_dest_poi, mode_d['time'])
+                    adv_time_local = mode_d['time']
+                    advance_game_time(adv_time_local); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time_local)
+                    print("--------------------"); return
+
+        elif choice == "2":
+            if not player.current_poi or player.current_poi.category not in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
+                print("Need to be at a Bus Station or Airport. Use 'Explore current POI/Area' at a hub to buy tickets."); continue
+            print("Use 'Explore current POI/Area' option from the main menu at the transport hub to find departures and buy tickets.")
+
+        elif choice == "0": break
+        else: print("Invalid travel option.")
+
+        if adv_time_local > 0 and choice != "1":
+             advance_game_time(adv_time_local); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time_local)
+    print("--------------------")
 
 def main():
-    if not setup_world(): # Call new setup_world and check for success
-        print("Failed to initialize the game world. Exiting.")
-        return
+    if not setup_world(): print("World setup failed. Exiting."); return
+    print("Welcome to Music-Life Sim!\nOllama for NPCs: ensure it's running & model pulled (e.g., llama3).")
+    player = Player(input("Enter character's name: "))
+    hometown_loc = WORLD_MAP.get("Your Hometown")
+    player_home_obj = get_poi_or_venue_by_id(PLAYER_HOME_POI_ID_GLOBAL) if PLAYER_HOME_POI_ID_GLOBAL else None
+    if hometown_loc and player_home_obj: player.current_location = hometown_loc; player.current_poi = player_home_obj
+    else: print("Error setting start home. Defaulting...");
+    update_npc_locations(current_game_time); process_time_based_player_needs(player,0)
+    if GEAR_CATALOG.get("worn_acoustic_guitar"): player.add_gear(GEAR_CATALOG["worn_acoustic_guitar"])
+    if GEAR_CATALOG.get("guitar_picks_assorted"): player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
+    print(f"\n--- {get_current_time_str()} ---"); print(player)
 
-    print("Welcome to the Text-Based Music Career Simulator!")
-    print("IMPORTANT: This game uses Ollama for NPC conversations.")
-    print("Please ensure Ollama is installed, running, and you have pulled the required model (e.g., `ollama pull llama3`).")
-
-    player_name = input("Enter your character's name: ")
-    player = Player(player_name)
-
-    # Set player's starting location and POI
-    # This needs to use the loaded world data
-    hometown_location_obj = WORLD_MAP.get("Your Hometown") # Assuming WORLD_MAP is keyed by name
-    player_home_poi_obj = None
-    if hometown_location_obj:
-        player_home_poi_obj = get_poi_or_venue_by_id(PLAYER_HOME_POI_ID_GLOBAL) # Use the global ID
-
-    if hometown_location_obj and player_home_poi_obj:
-        player.current_location = hometown_location_obj
-        player.current_poi = player_home_poi_obj
-    else:
-        print("Error: Could not set player's starting home. Defaulting to first available city/POI.")
-        if WORLD_MAP:
-            first_loc_name = list(WORLD_MAP.keys())[0]
-            player.current_location = WORLD_MAP[first_loc_name]
-            if player.current_location.points_of_interest:
-                player.current_poi = player.current_location.points_of_interest[0]
-            elif player.current_location.venues:
-                 player.current_poi = player.current_location.venues[0] # POI can be a venue
-        if not player.current_location:
-            print("FATAL: No locations loaded. Cannot start game.")
-            return
-
-
-    update_npc_locations(current_game_time)
-    process_time_based_player_needs(player, 0)
-
-    starting_guitar = GEAR_CATALOG.get("worn_acoustic_guitar")
-    if starting_guitar: player.add_gear(starting_guitar)
-    starting_picks = GEAR_CATALOG.get("guitar_picks_assorted")
-    if starting_picks: player.add_gear(starting_picks)
-
-    print(f"\n--- {get_current_time_str()} ---")
-    print(player)
-
-    # Game Loop (largely unchanged, but ensure it uses the new WORLD_MAP and NPC_REGISTRY correctly)
     while True:
-        # Display HUD first
-        display_hud(player, current_game_time) # Pass the global current_game_time object
-
-        # Then clear screen for menu, but HUD remains visible from this turn's print
-        # clear_screen_ish() # This might clear the HUD too soon. Let's test behavior.
-                           # If HUD should persist above a cleared section for menu,
-                           # clear_screen_ish might need to be called *after* HUD and *before* menu options.
-                           # For now, let's print HUD, then menu directly. clear_screen_ish can be called
-                           # at the start of action handlers if they produce a lot of text.
-                           # OR, the HUD is just the first thing printed, then other status lines, then menu.
-
-        # Standard status lines that were previously printed:
-        # These are now mostly covered by the HUD, but we can print a simplified version or context.
-        # For now, the HUD should cover these. We can refine if it feels redundant or lacking.
-
-        # clear_screen_ish() # Call clear_screen_ish *after* HUD if HUD is meant to be "sticky" at top before menu.
-                           # Let's try printing HUD, then the main menu title directly.
-                           # The current `clear_screen_ish` prints many newlines, so it will push the HUD up.
-                           # This is typical for text adventures.
-
-        # Main menu choices will appear below the HUD.
-        # The existing `clear_screen_ish()` called before action handling will clear the old menu AND old HUD.
-        # The new HUD will be printed at the top of the next loop. This is the standard way.
-
-        # The old status lines are now incorporated into display_hud.
-        # current_loc_name_display = player.current_location.name if player.current_location else "Unknown Location"
-        # print(f"--- Current Location: {current_loc_name_display} ---")
-        # print(f"--- {get_current_time_str()} ---")
-        # print(f"--- Player: {player.name} | Fame: {player.fame} | Money: ${player.money} | Energy: {player.energy}/100 | Stress: {player.stress}/100 ---")
-        # current_poi_name_display = player.current_poi.name if player.current_poi else current_loc_name_display
-        # print(f"--- Currently at: {current_poi_name_display} ---")
-
-
-        main_menu_options = {
-            "1": "Practice a skill",
-            "2": "Travel",  # New consolidated travel option
-            "3": "Explore current POI/Area", # Was 4
-            "4": "Check available gigs (at current City)", # Was 5
-            "5": "Prepare for a gig", # Was 6
-            "6": "Attempt a gig", # Was 7
-            "7": "View detailed player stats", # Was 8
-            "8": "Talk to someone (at current POI/Area)", # Was 9
-            "9": "Eat food from inventory", # Was 10
-            "10": "Use Phone", # Was 11
-        }
-        if player.has_manager or player.has_pr_manager: main_menu_options["11"] = "Staff Actions" # Was 12
-        main_menu_options["00"] = "Advance time by 1 hour (debug)"; main_menu_options["0"] = "Quit game"
-
-        choice = present_choices(main_menu_options, title=f"What would {player.name} like to do?")
+        display_hud(player, current_game_time)
+        main_menu_opts = {"1":"Practice skill", "2":"Travel", "3":"Explore POI/Area", "4":"Check Gigs (City)",
+                          "5":"Prep Gig", "6":"Attempt Gig", "7":"Player Stats", "8":"Talk", "9":"Eat Food", "10":"Phone"}
+        if player.has_manager or player.has_pr_manager: main_menu_opts["11"]="Staff Actions"
+        main_menu_opts["00"]="Adv Time (1hr)"; main_menu_opts["0"]="Quit"
+        choice = present_choices(main_menu_opts, f"What would {player.name} like to do?")
         if choice is None: continue
-
-        # Clear screen after getting main menu choice, before processing the action.
-        # This ensures the HUD and menu are cleared before action-specific output.
         clear_screen_ish()
+        adv_time_general = 0
 
-
-        # --- Action Handling (Most of this logic remains the same, but relies on WORLD_MAP and NPC_REGISTRY being populated from JSON) ---
-
-        # Choice 1: Practice
         if choice == "1":
-            print("--- Practice a Skill ---")
-            skill_to_practice = input("Which skill to practice (e.g., vocals, guitar, stage_presence)? ").lower()
-            try:
-                hours_to_practice = int(input(f"How many hours to practice {skill_to_practice}? "))
-                if hours_to_practice <= 0: print("Practice time must be positive."); continue
-                player.practice_skill(skill_to_practice, hours_to_practice)
-                minutes_passed = hours_to_practice*60
-                advance_game_time(minutes=minutes_passed); update_npc_locations(current_game_time); process_time_based_player_needs(player, minutes_passed)
-            except ValueError: print("Invalid number of hours.")
+            skill = input("Skill to practice (vocals, guitar, stage_presence, songwriting)? ").lower()
+            try: hrs = int(input(f"Hours for {skill}? ")); assert hrs > 0
+            except: print("Invalid hours."); continue
+            player.practice_skill(skill, hrs); adv_time_general = hrs*60
+        elif choice == "2": handle_travel_menu(player); continue
+        elif choice == "3":
+            poi = player.current_poi; loc = player.current_location
+            print(f"\n--- Exploring {poi.name if poi else loc.name} ---\nDesc: {poi.description if poi else loc.description}")
+            if poi:
+                interactions = list(poi.interaction_options)
+                if isinstance(poi, Venue) and any(e.is_active and (e.are_preparations_complete() or not e.preparation_tasks_required) and 16 <= current_game_time.hour <= 19 for e in poi.events_hosted):
+                    if "Hold Pre-Show Autograph Signing (1 hour)" not in interactions: interactions.append("Hold Pre-Show Autograph Signing (1 hour)")
+                if poi.category == "OFFICE_NEWS_AGENCY" and player.active_opportunities.get("interview_city_chronicle") == "pending_player_action":
+                    if "Attend Scheduled Interview" not in interactions: interactions.append("Attend Scheduled Interview")
+                if interactions:
+                    idx_choice_str = present_choices(interactions, f"Actions at {poi.name}:")
+                    if idx_choice_str and idx_choice_str.isdigit():
+                        chosen_text = interactions[int(idx_choice_str)-1]; print(f"Chose: {chosen_text}")
+                        action_taken_custom_time = False
 
-        # Choice 2: Travel (Calls handle_travel_menu)
-        elif choice == "2":
-            handle_travel_menu(player)
-            # Time advancement and further screen clearing are handled within handle_travel_menu
-            # or by the main loop's clear_screen_ish at the start of the next iteration / in action handlers.
-
-        # Choice 3: Explore current POI/Area (Was 4)
-        elif choice == "3": # Was 4
-            current_poi_for_explore = player.current_poi
-            current_location_for_explore = player.current_location
-            print(f"\n--- Exploring {current_poi_for_explore.name if current_poi_for_explore else current_location_for_explore.name} ---")
-
-            if current_poi_for_explore:
-                print(f"Description: {current_poi_for_explore.description}")
-                current_poi_interactions = list(current_poi_for_explore.interaction_options)
-                pre_gig_autograph_interaction_text = "Hold Pre-Show Autograph Signing (1 hour)"
-                if isinstance(current_poi_for_explore, Venue):
-                    venue = current_poi_for_explore
-                    can_do_pre_gig_signing = False
-                    for event in venue.events_hosted:
-                        if event.is_active and (event.are_preparations_complete() or not event.preparation_tasks_required):
-                            if 16 <= current_game_time.hour <= 19: can_do_pre_gig_signing = True; break
-                    if can_do_pre_gig_signing and pre_gig_autograph_interaction_text not in current_poi_interactions:
-                        current_poi_interactions.append(pre_gig_autograph_interaction_text)
-
-                interview_interaction_text = "Attend Scheduled Interview"
-                if current_poi_for_explore.category == "OFFICE_NEWS_AGENCY" and \
-                   player.active_opportunities.get("interview_city_chronicle") == "pending_player_action":
-                    if interview_interaction_text not in current_poi_interactions:
-                        current_poi_interactions.append(interview_interaction_text)
-
-                if current_poi_interactions:
-                    interaction_choice_key = present_choices(current_poi_interactions, title=f"Actions at {current_poi_for_explore.name}:")
-                    if interaction_choice_key:
-                        chosen_interaction_text = current_poi_interactions[int(interaction_choice_key) -1]
-                        print(f"You chose to: {chosen_interaction_text}")
-
-                        # --- PRE-GIG AUTOGRAPH ---
-                        if chosen_interaction_text == pre_gig_autograph_interaction_text:
+                        if chosen_text == "Hold Pre-Show Autograph Signing (1 hour)":
                             from game.interactions import handle_autograph_interaction
-                            print("\nYou decide to hold a pre-show autograph signing session..."); num_fans = random.randint(2,4); met_fans=0; sess_time=0
-                            for i in range(num_fans):
-                                if sess_time >= 50: print("Scheduled hour is nearly up."); break
-                                met_fans+=1; print(f"\nFan #{met_fans} approaches..."); tfan = NPC(f"pgfan_{i}",f"Fan #{met_fans}","adoring_fan")
-                                print(f"{tfan.name}: \"{random.choice(['Love your work!','So excited for tonight!'])}\"")
-                                outcome = handle_autograph_interaction(player,tfan,"pre_gig_signing"); sess_time+=outcome.get("minutes_passed",0)
-                                if sess_time>=60: print("Time's up for autographs!"); break
-                            print(f"\n--- Autograph Session Summary ---\nMet {met_fans} fan(s)."); player.stress=max(0,player.stress-(met_fans*2)); player.comfort=min(100,player.comfort+(met_fans*1))
-                            if met_fans > 0: print("Feeling good after connecting!"); sess_time = max(15, min(sess_time, 75))
-                            else: print("No fans for autographs today."); sess_time = 5
-                            if sess_time > 0: advance_game_time(sess_time); update_npc_locations(current_game_time); process_time_based_player_needs(player,sess_time)
-
-                        # --- SHOP MUSIC ---
-                        elif current_poi_for_explore.category == "SHOP_MUSIC" and chosen_interaction_text == "Browse items for sale":
-                            if current_poi_for_explore.shop_inventory_item_ids:
+                            outcome = handle_autograph_interaction(player, NPC(f"pgfan_temp","Generated Fan","adoring_fan"), "pre_gig_signing")
+                            adv_time_general = outcome.get("minutes_passed", 60); action_taken_custom_time = True
+                        elif poi.category == "SHOP_MUSIC" and chosen_text == "Browse items for sale":
+                            if poi.shop_inventory_item_ids:
                                 display = []; item_map = {}; idx=1
-                                for item_id in current_poi_for_explore.shop_inventory_item_ids:
+                                for item_id in poi.shop_inventory_item_ids:
                                     item=GEAR_CATALOG.get(item_id)
                                     if item: display.append(f"{item.name} - ${item.cost} (Size: {item.size})"); item_map[str(idx)]=item; idx+=1
-                                if not display: print("Out of stock.");
+                                if not display: print("Out of stock.")
                                 else:
-                                    buy_key = present_choices(display, f"Items at {current_poi_for_explore.name}: (0 to cancel)")
+                                    buy_key = present_choices(display, f"Items at {poi.name}: (0 to cancel)")
                                     if buy_key and buy_key!="0" and buy_key in item_map:
                                         sel_item=item_map[buy_key]
                                         if player.money>=sel_item.cost:
                                             if player.can_carry_gear(sel_item): player.money-=sel_item.cost; player.add_gear(sel_item); print(f"Money: ${player.money}")
                                             else: print(f"Can't carry {sel_item.name}.")
                                         else: print(f"Not enough money for {sel_item.name}.")
-                                    elif buy_key=="0": print("Cancelled.")
-                            else: print("Nothing for sale.")
-
-                        # --- INTER-CITY TRAVEL TICKETS ---
-                        elif current_poi_for_explore.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"] and chosen_interaction_text == "View Departures & Buy Tickets":
-                            connections = current_location_for_explore.travel_connections
-                            if not connections: print(f"No inter-city routes from {current_location_for_explore.name}.")
+                                    elif buy_key=="0": print("Cancelled purchase.")
+                            else: print("Nothing for sale currently.")
+                            adv_time_general = 15; action_taken_custom_time = True
+                        elif poi.category in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"] and chosen_text == "View Departures & Buy Tickets":
+                            connections = loc.travel_connections
+                            if not connections: print(f"No inter-city routes from {loc.name}.")
                             else:
-                                print(f"\n--- Departures from {current_poi_for_explore.name} ---"); dest_opts=[]; dest_map={}
-                                for i,(dest_name,details) in enumerate(connections.items()):
-                                    mode="Bus" if current_poi_for_explore.category=="TRANSPORT_BUS" else "Plane"
-                                    dest_opts.append(f"To {dest_name} by {mode} (Cost: ${details['cost']}, Time: {details['time_hours']}h)"); dest_map[str(i+1)]=(dest_name,details)
-                                if not dest_opts: print("No departures listed.");
-                                else:
-                                    dest_key = present_choices(dest_opts, "Select destination: (0 to cancel)")
-                                    if dest_key and dest_key!="0" and dest_key in dest_map:
-                                        chosen_dest_name,travel_details = dest_map[dest_key]
-                                        if input(f"Travel to {chosen_dest_name} for ${travel_details['cost']} ({travel_details['time_hours']}h)? (y/n) > ").lower()=='y':
-                                            if player.money >= travel_details['cost']:
-                                                player.money -= travel_details['cost']
-                                                dest_loc_obj = WORLD_MAP.get(chosen_dest_name)
-                                                if dest_loc_obj:
-                                                    travel_duration_hours = travel_details['time_hours']
-                                                    travel_duration_minutes = travel_duration_hours * 60
+                                dest_opts_dict = {}
+                                conn_map = {}
+                                for i, (dest_name, details) in enumerate(connections.items()):
+                                    mode = "Bus" if poi.category == "TRANSPORT_BUS" else "Plane"
+                                    dest_opts_dict[str(i+1)] = f"To {dest_name} by {mode} (Cost: ${details['cost']}, Time: {details['time_hours']}h)"
+                                    conn_map[str(i+1)] = (dest_name, details)
+                                dest_opts_dict["0"] = "Cancel"
 
-                                                    # Log travel to schedule BEFORE advancing global time
-                                                    travel_start_time = current_game_time.copy()
-                                                    travel_end_time = current_game_time.copy()
-                                                    travel_end_time.advance_time(minutes=travel_duration_minutes)
+                                dest_key = present_choices(dest_opts_dict, f"Departures from {poi.name}:")
+                                if dest_key and dest_key != "0" and dest_key in conn_map:
+                                    chosen_dest_name_from_menu, chosen_travel_details = conn_map[dest_key]
+                                    if input(f"Travel to {chosen_dest_name_from_menu} for ${chosen_travel_details['cost']} ({chosen_travel_details['time_hours']}h)? (y/n) > ").lower()=='y':
+                                        if player.money >= chosen_travel_details['cost']:
+                                            cost_of_travel = chosen_travel_details['cost'] # Store before modification
+                                            player.money -= cost_of_travel
 
-                                                    player.schedule.add_event(
-                                                        start_time=travel_start_time,
-                                                        end_time=travel_end_time,
-                                                        description=f"Travel: {current_location_for_explore.name} to {chosen_dest_name}",
-                                                        category="Travel",
-                                                        details={
-                                                            "from_city_id": current_location_for_explore.id if hasattr(current_location_for_explore, 'id') else current_location_for_explore.name,
-                                                            "to_city_id": dest_loc_obj.id if hasattr(dest_loc_obj, 'id') else dest_loc_obj.name,
-                                                            "transport_poi_id": current_poi_for_explore.poi_id
-                                                        }
-                                                    )
+                                            # --- Track Tour Expenses ---
+                                            if player.current_tour_id and player.current_tour_id in player.tour_ledgers:
+                                                tour_ledger = player.tour_ledgers[player.current_tour_id]
+                                                if tour_ledger["status"] == "ongoing":
+                                                    next_tour_gig_city = None
+                                                    for gig_detail_item in tour_ledger.get("gigs_details", []):
+                                                        if not gig_detail_item.get("performed", False):
+                                                            if gig_detail_item["city_name"] == chosen_dest_name_from_menu:
+                                                                next_tour_gig_city = gig_detail_item["city_name"]
+                                                                break
+                                                    if next_tour_gig_city:
+                                                        tour_ledger["expenses"] += cost_of_travel
+                                                        print(f"LOG: Travel cost ${cost_of_travel} for '{chosen_dest_name_from_menu}' added to expenses for tour '{tour_ledger['name']}'.")
+                                            # --- End Track Tour Expenses ---
 
-                                                    player.travel(dest_loc_obj, travel_duration_hours) # This updates player.current_location and stats
-                                                    advance_game_time(minutes=travel_duration_minutes)
-                                                    update_npc_locations(current_game_time)
-                                                    process_time_based_player_needs(player, travel_duration_minutes)
-                                                    print(f"Ticket bought. Travelled to {chosen_dest_name}.")
-                                                else:
-                                                    print(f"Error: Destination city '{chosen_dest_name}' not found in WORLD_MAP.")
-                                                    player.money += travel_details['cost'] # Refund
-                                            else:
-                                                print(f"Not enough money. Need ${travel_details['cost']}.")
-                                        else:
-                                            print("Travel cancelled.")
-                        # --- REST/SLEEP --- (HOME / ACCOMMODATION_CHEAP)
-                        elif (current_poi_for_explore.category == "HOME" and chosen_interaction_text == "Rest (8 hours)") or \
-                             (current_poi_for_explore.category == "ACCOMMODATION_CHEAP" and chosen_interaction_text.startswith("Sleep")):
+                                            dest_loc_obj = WORLD_MAP.get(chosen_dest_name_from_menu)
+                                            if dest_loc_obj:
+                                                travel_duration_hours = chosen_travel_details['time_hours']
+                                                travel_duration_minutes = travel_duration_hours * 60
+                                                travel_start_time = current_game_time.copy()
+                                                travel_end_time = current_game_time.copy(); travel_end_time.advance_time(travel_duration_minutes)
+                                                player.schedule.add_event(start_time=travel_start_time, end_time=travel_end_time, description=f"Travel: {loc.name} to {chosen_dest_name_from_menu}", category="Travel", details={"from_city_id": loc.id if hasattr(loc,'id') else loc.name, "to_city_id": dest_loc_obj.id if hasattr(dest_loc_obj,'id') else dest_loc_obj.name, "transport_poi_id": poi.poi_id})
+                                                player.travel(dest_loc_obj, travel_duration_hours)
+                                                adv_time_general = travel_duration_minutes; action_taken_custom_time = True
+                                                print(f"Ticket bought. Travelled to {chosen_dest_name_from_menu}.")
+                                            else: print(f"Error: Dest city '{chosen_dest_name_from_menu}' not found."); player.money += cost_of_travel
+                                        else: print(f"Not enough money. Need ${chosen_travel_details['cost']}.")
+                                    else: print("Travel cancelled.")
+                            adv_time_general = 20 if not action_taken_custom_time else adv_time_general; action_taken_custom_time=True
+                        elif (poi.category == "HOME" and chosen_text == "Rest (8 hours)") or \
+                             (poi.category == "ACCOMMODATION_CHEAP" and chosen_text.startswith("Sleep")):
                             hours_to_rest = 8; can_sleep_here = False
-                            if current_poi_for_explore.category == "HOME": can_sleep_here = True
-                            elif current_poi_for_explore.category == "ACCOMMODATION_CHEAP":
-                                if player.rented_accommodation_info and player.rented_accommodation_info["poi_id"] == current_poi_for_explore.poi_id: can_sleep_here = True
+                            if poi.category == "HOME": can_sleep_here = True
+                            elif poi.category == "ACCOMMODATION_CHEAP":
+                                if player.rented_accommodation_info and player.rented_accommodation_info["poi_id"] == poi.poi_id: can_sleep_here = True
                                 else: print("You haven't rented a room here or it expired.")
                             if can_sleep_here:
                                 comfort_eff=0; hunger_eff=0
                                 if player.comfort < 25: comfort_eff=-0.2; elif player.comfort < 50: comfort_eff=-0.1
                                 if player.hunger > 75: hunger_eff=-0.2; elif player.hunger > 50: hunger_eff=-0.1
-                                eff_rest_q = max(0.05, current_poi_for_explore.rest_quality + comfort_eff + hunger_eff)
-                                energy_g = int(hours_to_rest*10*eff_rest_q); stress_chg = int(hours_to_rest*current_poi_for_explore.stress_modifier_hourly)
-                                if current_poi_for_explore.category == "HOME": player.homesickness=max(0,player.homesickness-(hours_to_rest*10)); player.comfort=min(100,player.comfort+(hours_to_rest*2))
+                                eff_rest_q = max(0.05, poi.rest_quality + comfort_eff + hunger_eff)
+                                energy_g = int(hours_to_rest*10*eff_rest_q); stress_chg = int(hours_to_rest*poi.stress_modifier_hourly)
+                                if poi.category == "HOME": player.homesickness=max(0,player.homesickness-(hours_to_rest*10)); player.comfort=min(100,player.comfort+(hours_to_rest*2))
                                 player.energy=min(100,player.energy+energy_g); player.stress=max(0,player.stress+stress_chg)
-                                advance_game_time(hours_to_rest*60); update_npc_locations(current_game_time); process_time_based_player_needs(player,hours_to_rest*60)
                                 print(f"Rested for {hours_to_rest}h. Energy: {player.energy}, Stress: {player.stress}.")
-                                if current_poi_for_explore.category == "ACCOMMODATION_CHEAP": player.rented_accommodation_info = None
-                        # --- RENT ROOM ---
-                        elif current_poi_for_explore.category == "ACCOMMODATION_CHEAP" and chosen_interaction_text.startswith("Rent Room"):
+                                if poi.category == "ACCOMMODATION_CHEAP": player.rented_accommodation_info = None
+                                adv_time_general = hours_to_rest*60; action_taken_custom_time = True
+                        elif poi.category == "ACCOMMODATION_CHEAP" and chosen_text.startswith("Rent Room"):
                             try:
-                                rent_cost = int(chosen_interaction_text.split('$')[1].split('/')[0])
+                                rent_cost = int(chosen_text.split('$')[1].split('/')[0])
                                 if player.money>=rent_cost:
-                                    player.money-=rent_cost; from game.game_time import GameTime
-                                    co_time=GameTime(current_game_time.year,current_game_time.month,current_game_time.day,current_game_time.hour,current_game_time.minute); co_time.advance_time(24*60)
-                                    player.rented_accommodation_info = {"poi_id":current_poi_for_explore.poi_id, "checkout_time_obj":co_time}
+                                    player.money-=rent_cost;
+                                    co_time=current_game_time.copy(); co_time.advance_time(24*60)
+                                    player.rented_accommodation_info = {"poi_id":poi.poi_id, "checkout_time_obj":co_time}
                                     print(f"Rented room for ${rent_cost} until {co_time}. Money: ${player.money}.")
                                 else: print(f"Not enough money. Need ${rent_cost}.")
                             except: print("Error parsing rent cost.")
-                        # --- ORDER MERCH ---
-                        elif current_poi_for_explore.category == "HOME" and chosen_interaction_text == "Order Merchandise Stock":
-                            print("Order Merch logic here...") # Placeholder, use existing logic
-                            advance_game_time(60); update_npc_locations(current_game_time); process_time_based_player_needs(player,60)
-                        # --- WRITE SONG ---
-                        elif current_poi_for_explore.category == "HOME" and chosen_interaction_text == "Write a new song":
-                            print("Write Song logic here...") # Placeholder
-                            advance_game_time(120); update_npc_locations(current_game_time); process_time_based_player_needs(player,120)
-                        # --- BOOK RECORDING ---
-                        elif current_poi_for_explore.category == "STUDIO_RECORDING" and chosen_interaction_text == "Book recording session":
-                            print("Book Recording logic here...") # Placeholder
-                            advance_game_time(180); update_npc_locations(current_game_time); process_time_based_player_needs(player,180)
-                        # --- SUBMIT DEMO ---
-                        elif current_poi_for_explore.category == "OFFICE_RECORD_LABEL" and chosen_interaction_text.startswith("Submit Demo"):
-                             print("Submit Demo logic here...") # Placeholder
-                             advance_game_time(120); update_npc_locations(current_game_time); process_time_based_player_needs(player,120)
-                        # --- RELAX AT HOME ---
-                        elif current_poi_for_explore.category == "HOME" and chosen_interaction_text == "Relax at home (2 hours)":
-                            player.homesickness=max(0,player.homesickness-30); player.comfort=min(100,player.comfort+15); player.stress=max(0,player.stress-10); player.energy=max(0,player.energy-5)
-                            advance_game_time(120); update_npc_locations(current_game_time); process_time_based_player_needs(player,120)
-                            print(f"Relaxed. Comfort: {player.comfort}, Homesickness: {player.homesickness}, Stress: {player.stress}")
-                        # --- CAFE ---
-                        elif current_poi_for_explore.poi_id == "citycenter_dailygrind_cafe": # Example specific POI ID check
-                            if chosen_interaction_text=="Grab Coffee ($5)":
-                                if player.money>=5: player.money-=5; player.energy=min(100,player.energy+10); player.comfort=min(100,player.comfort+3); advance_game_time(20); update_npc_locations(current_game_time); process_time_based_player_needs(player,20); print(f"Grabbed coffee. Energy: {player.energy}")
-                                else: print("Not enough money.")
-                            elif chosen_interaction_text=="People Watch": player.stress=max(0,player.stress-5); player.comfort=min(100,player.comfort+2); advance_game_time(45); update_npc_locations(current_game_time); process_time_based_player_needs(player,45); print("People watched.")
-                            elif chosen_interaction_text=="Look for Local Flyers": advance_game_time(15); update_npc_locations(current_game_time); process_time_based_player_needs(player,15); print("Found some flyers.")
-                        # --- REHEARSAL STUDIO ---
-                        elif current_poi_for_explore.category == "REHEARSAL_STUDIO" and chosen_interaction_text.startswith("Book Rehearsal Slot"):
-                            print("Rehearsal logic here..."); advance_game_time(70); update_npc_locations(current_game_time); process_time_based_player_needs(player,70) # Placeholder
-                        # --- REPAIR GEAR ---
-                        elif current_poi_for_explore.category == "SHOP_MUSIC" and chosen_interaction_text == "Repair Gear":
-                            print("Repair Gear logic here..."); advance_game_time(45); update_npc_locations(current_game_time); process_time_based_player_needs(player,45) # Placeholder
-                        # --- BUY FOOD (GROCERY) ---
-                        elif current_poi_for_explore.category == "SHOP_FOOD" and chosen_interaction_text == "Buy Food Items":
-                            print("Buy Food (Grocery) logic here..."); advance_game_time(10); update_npc_locations(current_game_time); process_time_based_player_needs(player,10) # Placeholder
-                        # --- FAST FOOD ---
-                        elif current_poi_for_explore.category == "FOOD_FASTFOOD": # Already handled by dynamic menu items if interaction_options were empty
+                            adv_time_general = 10; action_taken_custom_time = True
+                        elif poi.category == "HOME" and chosen_text == "Write a new song": # Songwriting logic is here
+                            print("\n--- Write a New Song ---")
+                            song_title = input("Enter a title for your new song: ")
+                            if not song_title.strip():
+                                print("Songwriting cancelled. You need a title.")
+                            else:
+                                songwriting_skill = player.skills.get("songwriting", 0)
+                                base_min = 0.1; base_max = 0.7
+                                skill_bonus_range = min(0.25, (songwriting_skill / 10) * 0.05)
+                                final_min = min(base_min + skill_bonus_range, 0.8)
+                                final_max = min(base_max + skill_bonus_range, 1.0)
+
+                                originality = round(random.uniform(final_min, final_max), 2)
+                                catchiness = round(random.uniform(final_min, final_max), 2)
+                                lyrical_depth = round(random.uniform(final_min, final_max), 2)
+                                music_complexity = round(random.uniform(final_min, final_max), 2)
+
+                                available_genres = ["Indie", "Rock", "Pop", "Folk", "Blues", "Electronic"]
+                                genre_choices = {str(i+1): g for i, g in enumerate(available_genres)}
+                                genre_choices["0"] = "Cancel / Default to Indie"
+                                print("\nChoose a genre for your song:")
+                                genre_choice_key = present_choices(genre_choices, "Select Genre:")
+                                song_genre = "Indie"
+                                if genre_choice_key and genre_choice_key != "0" and genre_choice_key in genre_choices:
+                                    song_genre = genre_choices[genre_choice_key]
+                                elif genre_choice_key == "0": print("Defaulting genre to Indie.")
+                                else: print("Invalid genre choice, defaulting to Indie.")
+
+                                new_song = Song(title=song_title, author=player.name, genre=song_genre, originality=originality, catchiness=catchiness, lyrical_depth=lyrical_depth, music_complexity=music_complexity)
+                                player.songs_written.append(new_song)
+                                songwriting_time_minutes = random.randint(120, 300)
+                                skill_gain_factor = songwriting_time_minutes / 60.0
+                                player.skills["songwriting"] = round(player.skills.get("songwriting", 0) + (0.15 * skill_gain_factor) + (new_song.song_quality * 0.1), 2)
+                                player.energy = max(0, player.energy - random.randint(20, 40))
+                                player.stress = max(0, player.stress - random.randint(0,10) + int(5 * (1-new_song.song_quality)))
+                                player.comfort = min(100, player.comfort + random.randint(0,10))
+                                print(f"\nYou finished writing a new song:\n  {new_song}")
+                                print(f"It took you {songwriting_time_minutes // 60}h {songwriting_time_minutes % 60}m. Your songwriting skill is now {player.skills['songwriting']:.2f}.")
+                                print(f"Energy: {player.energy}, Stress: {player.stress}, Comfort: {player.comfort}")
+                                adv_time_general = songwriting_time_minutes # This action handles its own time
+                            action_taken_custom_time = True
+                        elif poi.category == "STUDIO_RECORDING" and chosen_text == "Book recording session":
+                            # ... (recording studio booking logic - it handles its own time) ...
+                            action_taken_custom_time = True
+                        elif poi.category == "REHEARSAL_STUDIO" and chosen_text.startswith("Book Rehearsal Slot"):
+                            # ... (rehearsal booking logic - it handles its own time) ...
+                            action_taken_custom_time = True
+                        elif poi.category == "SHOP_MUSIC" and chosen_text == "Repair Gear": print("Repair Gear logic TBD."); adv_time_general = 45; action_taken_custom_time = True
+                        elif poi.category == "SHOP_FOOD" and chosen_text == "Buy Food Items": print("Buy Food (Grocery) logic TBD."); adv_time_general = 10; action_taken_custom_time = True
+                        elif poi.category == "FOOD_FASTFOOD":
                             selected_menu_item_data=None
-                            for mi in current_poi_for_explore.menu_items:
-                                if mi["display_text"] == chosen_interaction_text: selected_menu_item_data=mi; break
+                            for mi in poi.menu_items:
+                                if mi["display_text"] == chosen_text: selected_menu_item_data=mi; break
                             if selected_menu_item_data:
                                 cost=selected_menu_item_data["cost"]; eff=selected_menu_item_data["effects"]
                                 if player.money>=cost:
                                     player.money-=cost; player.hunger=max(0,player.hunger+eff.get("hunger",0)); player.energy=min(100,player.energy+eff.get("energy",0)); player.comfort=min(100,max(0,player.comfort+eff.get("comfort",0)))
-                                    advance_game_time(20); update_npc_locations(current_game_time); process_time_based_player_needs(player,20)
                                     print(f"Consumed {GEAR_CATALOG.get(selected_menu_item_data['item_id']).name if GEAR_CATALOG.get(selected_menu_item_data['item_id']) else 'food'}. Stats updated.")
-                                else: print(f"Not enough money for {chosen_interaction_text}.")
-                            else: print(f"Action '{chosen_interaction_text}' unclear at fast food.") # Should not happen if menu drives options
-                        # --- NEWS AGENCY INTERVIEW ---
-                        elif current_poi_for_explore.category == "OFFICE_NEWS_AGENCY" and chosen_interaction_text == "Attend Scheduled Interview":
-                            interviewer_npc = NPC_REGISTRY.get(current_poi_for_explore.owner_npc_id.npc_id if hasattr(current_poi_for_explore.owner_npc_id, 'npc_id') else current_poi_for_explore.owner_npc_id) # Handle obj or id
-                            if not interviewer_npc or interviewer_npc.current_location != current_poi_for_explore: print("Interviewer not available.");
-                            else:
-                                print(f"Meeting with {interviewer_npc.name}..."); succ_score=0; turns=3; mins_per_turn=20; total_mins=0
-                                for i in range(turns):
-                                    q_prompt=f"Ask interview Q{i+1} to {player.name}."
-                                    if i==0: q_prompt=f"Welcome {player.name}. Let's start. {q_prompt}"
-                                    i_q = generate_npc_response(q_prompt,interviewer_npc,player.name)
-                                    print(f"\n{interviewer_npc.name}: {i_q}");
-                                    if "LLM Error" in i_q: print("Interview cut short by tech issue."); break
-                                    p_ans=input(f"{player.name} response: ")
-                                    if p_ans.strip(): succ_score+=1; _=generate_npc_response(p_ans,interviewer_npc,player.name)
-                                    else: print("You stumble for words.")
-                                    total_mins+=mins_per_turn
-                                print("\n--- Interview Concluded ---")
-                                if succ_score>=2: fg=random.randint(25,40); player.fame+=fg; player.stress=max(0,player.stress-10); print(f"Good press! (Fame +{fg}, Stress -10)")
-                                elif succ_score==1: fg=random.randint(10,20); player.fame+=fg; print(f"Okay interview. (Fame +{fg})")
-                                else: player.stress=min(100,player.stress+5); print("Didn't go smoothly. (Stress +5)")
-                                player.active_opportunities["interview_city_chronicle"]="completed"; total_mins=max(30,total_mins)
+                                else: print(f"Not enough money for {chosen_text}.")
+                            else: print(f"Action '{chosen_text}' unclear at fast food.")
+                            adv_time_general = 20; action_taken_custom_time = True
+                        elif poi.category == "OFFICE_NEWS_AGENCY" and chosen_text == "Attend Scheduled Interview": action_taken_custom_time = True
+                        elif poi.category == "OFFICE_PR_AGENCY" and chosen_text == "Inquire about PR representation": action_taken_custom_time = True
+                        elif poi.category == "SHOP_BARBER": action_taken_custom_time = True
 
-                                # Log interview to schedule
-                                interview_start_time = current_game_time.copy() # Time before advancing for the interview itself
-                                interview_end_time = interview_start_time.copy()
-                                interview_end_time.advance_time(minutes=total_mins)
-                                player.schedule.add_event(
-                                    start_time=interview_start_time,
-                                    end_time=interview_end_time,
-                                    description=f"Interview: {current_poi_for_explore.name} with {interviewer_npc.name}",
-                                    category="Interview",
-                                    details={"poi_id": current_poi_for_explore.poi_id, "interviewer_npc_id": interviewer_npc.npc_id}
-                                )
-
-                                advance_game_time(total_mins); update_npc_locations(current_game_time); process_time_based_player_needs(player,total_mins)
-                        # --- HIRE PR MANAGER ---
-                        elif current_poi_for_explore.category == "OFFICE_PR_AGENCY" and chosen_interaction_text == "Inquire about PR representation":
-                            pr_agent = NPC_REGISTRY.get(current_poi_for_explore.owner_npc_id.npc_id if hasattr(current_poi_for_explore.owner_npc_id, 'npc_id') else current_poi_for_explore.owner_npc_id)
-                            if not pr_agent or pr_agent.current_location != current_poi_for_explore: print("Agent not available."); advance_game_time(10)
-                            elif player.has_pr_manager: print(f"{pr_agent.name}: 'We're already working together!'"); advance_game_time(10)
-                            else:
-                                print(f"Meeting {pr_agent.name}..."); req_fame=player.pr_manager_fame_requirement_to_hire
-                                if player.fame>=req_fame:
-                                    print(f"{pr_agent.name}: '{player.name}, your fame ({player.fame}) is promising. We'd be interested.'")
-                                    if input("Hire Sharp PR? (y/n): ").lower()=='y':
-                                        player.has_pr_manager=True; print(f"Hired {pr_agent.name}!"); pr_agent.add_memory(f"Signed {player.name}."); pr_agent.update_relationship(20)
-                                    else: print(f"{pr_agent.name}: 'Perhaps another time.'"); pr_agent.add_memory(f"Declined by {player.name}.")
-                                else: print(f"{pr_agent.name}: '{player.name}, you need more buzz (Fame {player.fame}/{req_fame}). Come back later.'"); pr_agent.add_memory(f"Met {player.name}, not ready.")
-                                advance_game_time(60);update_npc_locations(current_game_time);process_time_based_player_needs(player,60)
-                        # --- OTHER/NOT IMPLEMENTED ---
-                        # SHOP_BARBER interactions
-                        elif current_poi_for_explore.category == "SHOP_BARBER":
-                            if chosen_interaction_text == "Get a haircut":
-                                print("\n--- Get a Haircut ---")
-                                print(f"Your current hair length: {player.hair_length}/{player.MAX_HAIR_LENGTH}")
-                                if player.hair_length == 0:
-                                    print("Your head is already shaved clean!")
-                                else:
-                                    haircut_options = {
-                                        "1": f"Buzz Cut (Set to 1/{player.MAX_HAIR_LENGTH}) - $15",
-                                        "2": f"Short Trim (Set to {max(1, player.hair_length - 2)}/{player.MAX_HAIR_LENGTH}) - $12", # Trim by 2 levels
-                                        "3": f"Standard Cut (Set to 3/{player.MAX_HAIR_LENGTH}) - $20",
-                                        "0": "Nevermind"
-                                    }
-                                    hair_choice = present_choices(haircut_options, "Choose a style:")
-                                    cost = 0
-                                    new_length = player.hair_length
-                                    valid_cut = False
-
-                                    if hair_choice == "1": cost, new_length, valid_cut = 15, 1, True
-                                    elif hair_choice == "2": cost, new_length, valid_cut = 12, max(1, player.hair_length - 2), True
-                                    elif hair_choice == "3": cost, new_length, valid_cut = 20, 3, True
-                                    elif hair_choice == "0": print("Decided against a haircut for now."); valid_cut = False # Handled
-                                    else: print("Invalid choice.")
-
-                                    if valid_cut and cost > 0:
-                                        if player.money >= cost:
-                                            player.money -= cost
-                                            player.hair_length = new_length
-                                            player.hair_growth_progress = 0.0
-                                            advance_game_time(minutes=30)
-                                            update_npc_locations(current_game_time)
-                                            process_time_based_player_needs(player, 30)
-                                            print(f"Got a haircut! New hair length: {player.hair_length}/{player.MAX_HAIR_LENGTH}. Paid ${cost}.")
-                                            print(f"Money: ${player.money}")
-                                        else:
-                                            print(f"Not enough money. You need ${cost}.")
-                                    elif valid_cut and cost == 0: # Should not happen with current options but good for future
-                                         print("No changes made to your hair.")
-
-
-                            elif chosen_interaction_text == "Shave or Trim beard":
-                                print("\n--- Beard Grooming ---")
-                                print(f"Your current beard length: {player.beard_length}/{player.MAX_BEARD_LENGTH}")
-
-                                beard_groom_options = {
-                                    "1": f"Clean Shave (Set to 0/{player.MAX_BEARD_LENGTH}) - $10",
-                                    "0": "Nevermind"
-                                }
-                                if player.beard_length > 0: # Only offer trim if there's a beard
-                                    beard_groom_options["2"] = f"Beard Trim (Set to {max(0, player.beard_length - 2)}/{player.MAX_BEARD_LENGTH}) - $8"
-                                    beard_groom_options["3"] = f"Style Beard (Set to 2/{player.MAX_BEARD_LENGTH}, if current > 2 else current) - $12"
-
-
-                                beard_choice = present_choices(beard_groom_options, "Choose an option:")
-                                cost = 0
-                                new_length = player.beard_length
-                                valid_groom = False
-
-                                if beard_choice == "1": cost, new_length, valid_groom = 10, 0, True
-                                elif beard_choice == "2" and player.beard_length > 0: cost, new_length, valid_groom = 8, max(0, player.beard_length - 2), True
-                                elif beard_choice == "3" and player.beard_length > 0: cost, new_length, valid_groom = 12, (2 if player.beard_length > 2 else player.beard_length) , True
-                                elif beard_choice == "0": print("Decided against beard grooming for now."); valid_groom = False
-                                else: print("Invalid choice.")
-
-                                if valid_groom and cost > 0 :
-                                    if player.money >= cost:
-                                        player.money -= cost
-                                        player.beard_length = new_length
-                                        player.beard_growth_progress = 0.0
-                                        advance_game_time(minutes=20)
-                                        update_npc_locations(current_game_time)
-                                        process_time_based_player_needs(player, 20)
-                                        print(f"Beard groomed! New beard length: {player.beard_length}/{player.MAX_BEARD_LENGTH}. Paid ${cost}.")
-                                        print(f"Money: ${player.money}")
-                                    else:
-                                        print(f"Not enough money. You need ${cost}.")
-                                elif valid_groom and cost == 0:
-                                    print("No changes made to your beard.")
-
-                            # "Talk to Barber Bill" or "Talk to Stylist Antoine" will be handled by the generic talk logic
-                            # if owner_npc_id is set on the POI and the NPC is present.
-                            elif "Talk to" in chosen_interaction_text:
-                                # This will be caught by the generic talk logic later if not handled here
-                                # For now, let it fall through or add specific barber talk if needed
-                                print(f"You chat with the barber/stylist for a bit.")
-                                advance_game_time(minutes=10)
-                                update_npc_locations(current_game_time)
-                                process_time_based_player_needs(player,10)
-                            else:
-                                print(f"(Action '{chosen_interaction_text}' at the barber shop is not fully implemented yet.)")
-                        else:
-                            print(f"(Action '{chosen_interaction_text}' not fully implemented yet.)")
-                else:
-                    if current_poi_for_explore and current_poi_for_explore.category == "OFFICE_NEWS_AGENCY" and \
-                       player.active_opportunities.get("interview_city_chronicle") == "pending_player_action" and \
-                       "Attend Scheduled Interview" not in current_poi_interactions :
-                        print("\n(You remember your PR Manager mentioned an interview opportunity here.)")
-                    else: print("There's not much to do here specifically.")
+                        if not action_taken_custom_time: adv_time_general = 15
+                else: print("Not much to do here specifically."); adv_time_general = 10
             else:
-                print(f"Description: {current_location_for_explore.description}")
-                if current_location_for_explore.venues: print("\nVenues:"); [print(f"  {i+1}. {v.name}") for i,v in enumerate(current_location_for_explore.venues)]
-                if current_location_for_explore.points_of_interest: print("\nPOIs:"); [print(f"  {i+1}. {p.name}") for i,p in enumerate(current_location_for_explore.points_of_interest)]
-
-            # Default time for just exploring an area/POI if no specific interaction took time above
-            # This needs to be conditional on whether an interaction already advanced time.
-            # For now, let's assume most interactions above will call advance_game_time.
-            # If no interaction_choice_key or if chosen_interaction_text was a "Talk to" that didn't advance time itself:
-            if not interaction_choice_key or (chosen_interaction_text and "Talk to" in chosen_interaction_text and not ("Interviewer" in chosen_interaction_text or "PR agent" in chosen_interaction_text)): # Crude check
-                 advance_game_time(minutes=15) # Reduced general exploring time
-                 update_npc_locations(current_game_time)
-                 process_time_based_player_needs(player, 15)
-            print("--------------------")
-
-        # Choice 4: Check available gigs (at current City) (Was 5)
-        elif choice == "4": # Was 5
-            print(f"\n--- Gigs available in {player.current_location.name} ---")
-            all_gigs = player.current_location.get_all_events_at_location()
-            active_gigs = [event for event in all_gigs if event.is_active]
-            if not active_gigs: print("No gigs available here at the moment.")
-            else:
-                for i, event in enumerate(active_gigs):
-                    venue_name = event.location.name if hasattr(event.location, 'venue_type') else player.current_location.name
-                    print(f"\n{i+1}. {event.name} ({event.event_type}) at {venue_name}\n   Desc: {event.description}\n   Reqs: {event.required_skills}\n   Fame: {event.fame_reward}, Payout: ${event.payout}")
-                    if event.preparation_tasks_required:
-                        pending = [task for task,done in event.preparation_tasks_required.items() if not done]
-                        print(f"   Preparation: {', '.join(pending) if pending else 'Complete!'}")
-                    else: print("   Preparation: Not Required.")
-            print("--------------------")
-
-        # Choice 5: Prepare for a gig (Was 6)
-        elif choice == "5": # Was 6
-            print(f"\n--- Prepare for a Gig ---")
-            all_gigs = player.current_location.get_all_events_at_location()
-            preparable = [e for e in all_gigs if e.is_active and e.preparation_tasks_required and not e.are_preparations_complete()]
+                if loc.venues: print("\nVenues:"); [print(f"  - {v.name}") for v in loc.venues]
+                if loc.points_of_interest: print("\nPOIs:"); [print(f"  - {p.name}") for p in loc.points_of_interest]
+                adv_time_general = 15
+        elif choice == "4":
+            print(f"\n--- Gigs in {player.current_location.name} ---")
+            gigs = [e for e in player.current_location.get_all_events_at_location() if e.is_active]
+            if not gigs: print("No gigs now.")
+            else: [print(f"\n{i+1}. {g.name} ({g.event_type}) at {g.location.name}\n   Desc: {g.description}\n   Reqs: {g.required_skills}\n   Fame: {g.fame_reward}, Payout: ${g.payout}" + (f"\n   Prep: {', '.join([t for t,d in g.preparation_tasks_required.items() if not d]) if any(not d for d in g.preparation_tasks_required.values()) else ' Prep Complete!'}" if g.preparation_tasks_required else "")) for i,g in enumerate(gigs)]
+            adv_time_general = 5
+        elif choice == "5":
+            all_gigs_prep = player.current_location.get_all_events_at_location()
+            preparable = [e for e in all_gigs_prep if e.is_active and e.preparation_tasks_required and not e.are_preparations_complete()]
             if not preparable: print("No gigs need prep or all preps done.")
             else:
-                opts={str(i+1):e for i,e in enumerate(preparable)}; display=[f"{e.name} (at {e.location.name if hasattr(e.location,'name') else 'Unknown'}) - Pending: {', '.join([t for t,d in e.preparation_tasks_required.items() if not d])}" for e in preparable]
-                gig_key = present_choices(display, "Prepare for which gig?")
-                if gig_key and gig_key in opts:
-                    event=opts[gig_key]; tasks_pending={str(i+1):task for i,(task,done) in enumerate(event.preparation_tasks_required.items()) if not done}
-                    if not tasks_pending: print(f"All preps for {event.name} done."); continue
-                    task_display = [name for name in tasks_pending.values()]
-                    task_key = present_choices(task_display, f"Task for {event.name}?")
-                    if task_key and task_key in tasks_pending:
-                        task_to_do = tasks_pending[task_key]; print(f"Completing: {task_to_do}..."); event.complete_preparation_task(task_to_do)
-                        advance_game_time(120); update_npc_locations(current_game_time); process_time_based_player_needs(player,120)
-            print("--------------------")
-
-        # Choice 6: Attempt a gig (Was 7)
-        elif choice == "6": # Was 7
-            print(f"\n--- Attempt a Gig ---")
-            all_gigs = player.current_location.get_all_events_at_location() # Use current_location consistently
-            performable = [e for e in all_gigs if e.is_active and (not e.preparation_tasks_required or e.are_preparations_complete())]
+                opts_prep={str(i+1):e for i,e in enumerate(preparable)}; disp_prep=[f"{e.name} (at {e.location.name}) - Pending: {', '.join([t for t,d in e.preparation_tasks_required.items() if not d])}" for e in preparable]
+                gig_key_prep = present_choices(disp_prep, "Prepare for which gig?")
+                if gig_key_prep and gig_key_prep in opts_prep:
+                    event_prep=opts_prep[gig_key_prep]; tasks_pending_prep={str(i+1):task for i,(task,done) in enumerate(event_prep.preparation_tasks_required.items()) if not done}
+                    if not tasks_pending_prep: print(f"All preps for {event_prep.name} done."); continue
+                    task_disp_prep = [name for name in tasks_pending_prep.values()]
+                    task_key_prep = present_choices(task_disp_prep, f"Task for {event_prep.name}?")
+                    if task_key_prep and task_key_prep in tasks_pending_prep:
+                        task_to_do_prep = tasks_pending_prep[task_key_prep]; print(f"Completing: {task_to_do_prep}..."); event_prep.complete_preparation_task(task_to_do_prep)
+                        adv_time_general = 120
+        elif choice == "6":
+            all_gigs_perform = player.current_location.get_all_events_at_location()
+            performable = [e for e in all_gigs_perform if e.is_active and (not e.preparation_tasks_required or e.are_preparations_complete())]
             if not performable: print("No gigs ready to perform here.")
             else:
-                opts={str(i+1):e for i,e in enumerate(performable)}; display=[f"{e.name} (at {e.location.name if hasattr(e.location,'name') else 'Unknown'})" for e in performable]
-                gig_key = present_choices(display, "Attempt which gig?")
-                if gig_key and gig_key in opts:
-                    event = opts[gig_key]; can_perf, msg = event.can_perform(player)
-                    if not can_perf: print(f"Cannot perform {event.name}: {msg}"); advance_game_time(60); update_npc_locations(current_game_time); process_time_based_player_needs(player,60)
-                    elif event.perform_event(player):
-                        gig_duration_minutes = 180
+                opts_gig={str(i+1):e for i,e in enumerate(performable)}; disp_gig=[f"{e.name} (at {e.location.name})" for e in performable]
+                gig_key_perform = present_choices(disp_gig, "Attempt which gig?")
+                if gig_key_perform and gig_key_perform in opts_gig:
+                    event_perform = opts_gig[gig_key_perform]
+                    can_perform_bool, message_str, _ = event_perform.can_perform(player)
+                    if not can_perform_bool: print(f"Cannot perform {event_perform.name}: {message_str}"); adv_time_general = 60
+                    else:
+                        print(f"\n--- Select Setlist for {event_perform.name} --- \nRequires {event_perform.songs_required_count} song(s).")
+                        if not player.songs_written or len(player.songs_written) < event_perform.songs_required_count:
+                            print("You don't have enough songs for this event!"); continue
 
-                        # Log to schedule before advancing global time
-                        gig_start_time = current_game_time.copy()
-                        gig_end_time = current_game_time.copy()
-                        gig_end_time.advance_time(minutes=gig_duration_minutes)
-                        event_name_for_schedule = event.name
-                        venue_name_for_schedule = event.location.name if hasattr(event.location, 'name') else "Unknown Venue"
-                        player.schedule.add_event(
-                            start_time=gig_start_time,
-                            end_time=gig_end_time,
-                            description=f"Gig: {event_name_for_schedule} at {venue_name_for_schedule}",
-                            category="Gig",
-                            details={"event_id": event.event_id if hasattr(event, "event_id") else event.name, "venue_id": venue.venue_id if hasattr(venue,"venue_id") else venue_name_for_schedule} # Assuming venue is event.location
-                        )
+                        songs_disp = [f"{s.title} (Q:{s.song_quality:.2f})" for s in player.songs_written]
+                        chosen_setlist = []
+                        for i in range(event_perform.songs_required_count):
+                            song_idx_str = present_choices(songs_disp, f"Choose song {i+1}/{event_perform.songs_required_count} (0 to cancel):")
+                            if not song_idx_str or song_idx_str == "0": chosen_setlist = []; break
+                            try:
+                                chosen_song_idx = int(song_idx_str)-1
+                                if 0 <= chosen_song_idx < len(player.songs_written): chosen_setlist.append(player.songs_written[chosen_song_idx])
+                                else: print("Invalid song."); chosen_setlist = []; break
+                            except ValueError: print("Invalid input."); chosen_setlist = []; break
 
-                        advance_game_time(gig_duration_minutes); update_npc_locations(current_game_time); process_time_based_player_needs(player,gig_duration_minutes)
-                        player.check_and_unlock_staff()
-                        venue_name = event.location.name if hasattr(event.location, 'name') else "the venue"
-                        post_gig_outcome = check_for_post_gig_random_event(player,event.event_type,venue_name=venue_name)
-                        if post_gig_outcome.get("event_triggered"):
-                            event_mins = post_gig_outcome.get("minutes_passed",15)
-                            if event_mins>0: advance_game_time(event_mins);update_npc_locations(current_game_time);process_time_based_player_needs(player,event_mins)
-                            player.check_and_unlock_staff()
-                        owner_id = getattr(event.location,'owner_npc_id',None)
-                        owner_id = owner_id.npc_id if hasattr(owner_id,'npc_id') else owner_id # Get ID if it's obj
-                        if owner_id and owner_id in NPC_REGISTRY:
-                            owner=NPC_REGISTRY[owner_id]; owner.update_relationship(15); owner.add_memory(f"{player.name} had successful gig '{event.name}'."); print(f"Rel with {owner.name} improved.")
-                        if not event.is_active: # e.g. one-time event
-                            if hasattr(event.location,'remove_event'): event.location.remove_event(event)
-                            # elif event in player.current_location.events_available: player.current_location.remove_location_event(event) # This attribute doesn't exist
-                    else: # Failed performance
-                        fail_mins=60; advance_game_time(fail_mins);update_npc_locations(current_game_time);process_time_based_player_needs(player,fail_mins)
-                        owner_id = getattr(event.location,'owner_npc_id',None)
-                        owner_id = owner_id.npc_id if hasattr(owner_id,'npc_id') else owner_id
-                        if owner_id and owner_id in NPC_REGISTRY:
-                            owner=NPC_REGISTRY[owner_id]; owner.update_relationship(-10); owner.add_memory(f"{player.name} failed gig '{event.name}'."); print(f"Rel with {owner.name} worsened.")
-            print("--------------------")
+                        if len(chosen_setlist) == event_perform.songs_required_count:
+                            print("\nSetlist finalized."); [print(f" {j+1}. {s.title}") for j,s in enumerate(chosen_setlist)]
+                            perform_success, tour_completed_after_gig = event_perform.perform_event(player, setlist=chosen_setlist)
+                            if perform_success:
+                                gig_dur_mins = 180
+                                venue_sched = event_perform.location; venue_name_sched = venue_sched.name if hasattr(venue_sched,'name') else "Venue"
+                                start_sched = current_game_time.copy(); end_sched = start_sched.copy(); end_sched.advance_time(gig_dur_mins)
+                                player.schedule.add_event(start_sched,end_sched,f"Gig: {event_perform.name} at {venue_name_sched}", "Gig", details={"event_id":event_perform.name, "venue_id": venue_sched.venue_id if hasattr(venue_sched,'venue_id') else venue_name_sched})
+                                adv_time_general = gig_dur_mins
+                                player.check_and_unlock_staff()
+                                post_gig_outcome = check_for_post_gig_random_event(player,event_perform.event_type,venue_name=venue_name_sched)
+                                if post_gig_outcome.get("event_triggered"):
+                                    ev_mins = post_gig_outcome.get("minutes_passed",15)
+                                    if ev_mins > 0: adv_time_general += ev_mins
+                                    player.check_and_unlock_staff()
+                                owner = getattr(event_perform.location,'owner_npc_id',None)
+                                if owner and isinstance(owner, NPC): owner.update_relationship(15); owner.add_memory(f"{player.name} had successful gig '{event_perform.name}'.")
+                                if not event_perform.is_active and hasattr(event_perform.location,'remove_event'): event_perform.location.remove_event(event_perform)
 
-        # Choice 7: View detailed player stats (Was 8)
-        elif choice == "7": # Was 8
-            print("\n--- Player Stats ---"); print(player); print(get_current_time_str()); print("--------------------")
-
-        # Choice 8: Talk to someone (at current POI/Area) (Was 9)
-        elif choice == "8": # Was 9
-            print("--- Talk to Someone ---")
-            target_area_name = player.current_poi.name if player.current_poi else player.current_location.name
-            available_npcs = []
-            if player.current_poi:
-                for npc in NPC_REGISTRY.values():
-                    if npc.current_location == player.current_poi: available_npcs.append(npc)
-            else: # Player at general city level
-                 for npc in NPC_REGISTRY.values():
-                    if npc.current_location == player.current_location: available_npcs.append(npc)
-
-            if not available_npcs:
-                print(f"No one specific to talk to at {target_area_name} right now.")
-                if not player.current_poi :
-                    print("A passerby notices you..."); temp_fan = NPC("temp_fan","Passerby","friendly_fan");
-                    print(f"{temp_fan.name}: \"Hey, aren't you {player.name}?\""); talk_to_npc_instance(player,temp_fan)
+                                if tour_completed_after_gig and player.current_tour_id:
+                                    tour_ledger = player.tour_ledgers.get(player.current_tour_id)
+                                    if tour_ledger:
+                                        net_profit = tour_ledger["income"] - tour_ledger["expenses"]
+                                        print(f"\n--- Tour '{tour_ledger['name']}' Concluded! ---")
+                                        print(f"Total Income: ${tour_ledger['income']}")
+                                        print(f"Total Expenses: ${tour_ledger['expenses']}")
+                                        print(f"Net Profit/Loss: ${net_profit}")
+                                        tour_ledger["status"] = "completed"
+                                        player.current_tour_id = None
+                                        player.tour_fatigue = max(0, player.tour_fatigue - 25)
+                                        print(f"You can finally rest a bit! Tour fatigue reduced to {player.tour_fatigue}.")
+                            else:
+                                adv_time_general = 60
+                                owner = getattr(event_perform.location,'owner_npc_id',None)
+                                if owner and isinstance(owner, NPC): owner.update_relationship(-10); owner.add_memory(f"{player.name} failed gig '{event_perform.name}'.")
+                        else: print("Gig cancelled due to setlist."); adv_time_general = 15
+        elif choice == "7": print("\n--- Player Stats ---"); print(player); print(get_current_time_str()); adv_time_general = 1
+        elif choice == "8":
+            npcs_here = [n for n in NPC_REGISTRY.values() if n.current_location == player.current_poi or n.current_location == player.current_location]
+            if not npcs_here: print("No one around.")
             else:
-                opts={str(i+1):npc for i,npc in enumerate(available_npcs)}; display=[npc.name for npc in available_npcs]
-                npc_key = present_choices(display, f"Who at {target_area_name}?")
-                if npc_key and npc_key in opts: talk_to_npc_instance(player, opts[npc_key])
-
-        # Choice 9: Eat food from inventory (Was 10)
-        elif choice == "9": # Was 10
-            print("\n--- Eat Food From Inventory ---")
+                npc_choices = {str(i+1):n for i,n in enumerate(npcs_here)}; npc_disp = [f"{n.name}" for n in npcs_here]
+                npc_key = present_choices(npc_disp, "Talk to whom?")
+                if npc_key and npc_key in npc_choices: talk_to_npc_instance(player, npc_choices[npc_key])
+        elif choice == "9":
             food_items = [item for item in player.gear_inventory if item.gear_type == "FOOD"]
             if not food_items: print("No food in inventory.")
             else:
-                opts={str(i+1):item for i,item in enumerate(food_items)}
-                display=[f"{item.name} (Hunger: -{item.hunger_reduction}, Energy: +{item.energy_boost})" + (f", Comfort: {item.get_property('comfort_effect'):+}" if item.get_property("comfort_effect") else "") for item in food_items]
-                food_key = present_choices(display, "Eat which item? (0 to cancel)")
-                if food_key and food_key!="0" and food_key in opts:
-                    item=opts[food_key]; player.hunger=max(0,player.hunger-item.hunger_reduction); player.energy=min(100,player.energy+item.energy_boost)
+                food_opts={str(i+1):item for i,item in enumerate(food_items)}
+                food_disp=[f"{item.name} (Hunger: -{item.hunger_reduction}, Energy: +{item.energy_boost})" + (f", Comfort: {item.get_property('comfort_effect'):+}" if item.get_property("comfort_effect") else "") for item in food_items]
+                food_key = present_choices(food_disp, "Eat which item? (0 to cancel)")
+                if food_key and food_key!="0" and food_key in food_opts:
+                    item=food_opts[food_key]; player.hunger=max(0,player.hunger-item.hunger_reduction); player.energy=min(100,player.energy+item.energy_boost)
                     player.comfort=min(100,max(0,player.comfort+(item.get_property("comfort_effect") or 0)))
-                    player.remove_gear(item); eat_mins=15; advance_game_time(eat_mins);update_npc_locations(current_game_time);process_time_based_player_needs(player,eat_mins)
+                    player.remove_gear(item); adv_time_general=15
                     print(f"Ate {item.name}. Hunger: {player.hunger}, Energy: {player.energy}, Comfort: {player.comfort}")
                 elif food_key=="0": print("Cancelled eating.")
-            print("--------------------")
-
-        # Choice 10: Use Phone (Was 11)
-        elif choice == "10": # Was 11
-            handle_phone_menu(player)
-            # Time advancement is handled within handle_phone_menu choices or when backing out.
-
-        # Choice 11: Staff Actions (Was 12)
-        elif choice == "11": # Was 12
+        elif choice == "10": handle_phone_menu(player)
+        elif choice == "11":
             if not (player.has_manager or player.has_pr_manager): print("No staff yet.")
             else:
-                print("\n--- Staff Actions ---"); staff_opts={}; current_opt_idx = 1
-                if player.has_manager: staff_opts[str(current_opt_idx)]="Talk to Artist Manager"; current_opt_idx+=1
-                if player.has_pr_manager: staff_opts[str(current_opt_idx)]="Check PR Opportunities"; current_opt_idx+=1
-                staff_opts["0"]="Back to Main Menu"
+                print("\n--- Staff Actions ---"); staff_opts = {}; idx = 1
+                if player.has_manager:
+                    staff_opts[str(idx)]="Talk to Artist Manager"; idx+=1
+                    staff_opts[str(idx)]="Discuss Tour Opportunities"; idx+=1
+                    staff_opts[str(idx)]="Review Past Tours"; idx+=1
+                if player.has_pr_manager: staff_opts[str(idx)]="Check PR Opportunities"; idx+=1
+                staff_opts["0"]="Back"
+                sub_choice = present_choices(staff_opts, "Staff action:")
+                action_text = staff_opts.get(sub_choice); adv_min_staff = 0
+                if action_text == "Talk to Artist Manager": print("Discussing strategy... (TBD)"); adv_min_staff=30
+                elif action_text == "Discuss Tour Opportunities":
+                    adv_min_staff = 0 # Handled within the nested logic
+                    if not player.has_manager: print("Need a manager first.")
+                    elif player.active_tour_offer:
+                        if input(f"Manager: \"We have the '{player.active_tour_offer['name']}' tour offer. Finalize it? (y/n)\"").lower() == 'y':
+                            adv_min_staff = 30; tour_package_gigs = player.active_tour_offer['gigs']; tour_id = player.active_tour_offer['tour_id']
+                            print("\nManager: \"Booking the tour...\""); scheduled_gigs_count=0
+                            player.current_tour_id = tour_id
+                            player.tour_ledgers[tour_id] = {"name": player.active_tour_offer['name'], "expenses":0, "income":0, "status":"ongoing", "gigs_details":[]}
 
-                sub_choice_key = present_choices({k:v for k,v in staff_opts.items()}, "Staff action:") # Pass dict
-                action_text = staff_opts.get(sub_choice_key)
+                            current_tour_gig_details_list = []
+                            for gig_data in tour_package_gigs:
+                                venue = get_poi_or_venue_by_id(gig_data['venue_id'])
+                                if not venue or not isinstance(venue, Venue): print(f"Skipping gig, bad venue: {gig_data['venue_id']}"); continue
+                                gig_event_type = gig_data['event_type']
+                                gig_skills = gig_data.get('required_skills_override', Event.EVENT_TYPES.get(gig_event_type,{}).get('required_skills', {"vocals":1,"guitar":1}))
+                                new_event = Event(name=f"Tour: {player.name} at {venue.name}", location=venue, event_type=gig_event_type, required_skills=gig_skills, description=f"Tour stop in {gig_data['city_name']}", specific_payout=gig_data['estimated_payout'], is_tour_gig=True)
 
-                if action_text == "Talk to Artist Manager":
-                    print("Met Artist Manager. (Interactions TBD)"); adv_min=30
+                                gig_start_time = current_game_time.copy()
+                                gig_start_time.advance_time(minutes=gig_data['days_offset'] * 24 * 60)
+                                gig_start_time.hour = 20; gig_start_time.minute = 0
+                                gig_end_time = gig_start_time.copy(); gig_end_time.advance_time(minutes=3*60)
+
+                                venue.add_event(new_event)
+                                player.schedule.add_event(gig_start_time, gig_end_time, new_event.name, "Tour Gig", details={"venue_id":venue.venue_id, "event_id":new_event.name, "tour_id": tour_id})
+                                current_tour_gig_details_list.append({"venue_id": venue.venue_id, "city_name": gig_data['city_name'], "scheduled_date_str": gig_start_time.get_time_string_for_schedule(), "event_name": new_event.name, "performed": False})
+                                print(f"Booked: {new_event.name} in {gig_data['city_name']} on {gig_start_time.get_time_string_for_schedule()}")
+                                scheduled_gigs_count+=1
+                            player.tour_ledgers[tour_id]["gigs_details"] = current_tour_gig_details_list
+                            if scheduled_gigs_count > 0: print(f"Manager: \"Tour '{player.tour_ledgers[tour_id]['name']}' booked!\"")
+                            else: print("Manager: \"Couldn't book any gigs for that tour.\""); del player.tour_ledgers[tour_id]; player.current_tour_id = None
+                            player.active_tour_offer = None
+                            if scheduled_gigs_count > 0 and tour_id not in player.completed_tour_ids : player.completed_tour_ids.append(tour_id)
+                        else: print("Manager: \"Okay, offer stands.\""); adv_min_staff=5
+                    else:
+                        print("Manager: \"Let me see what tours I can cook up...\""); adv_min_staff = 20
+                        try:
+                            with open("game_data/tours.json", 'r') as f: all_tour_templates = json.load(f)
+                        except Exception as e: print(f"Manager: \"Tour planner error: {e}\""); all_tour_templates = []
+                        eligible_tours = [t for t in all_tour_templates if t['min_fame'] <= player.fame <= t['max_fame'] and t['tour_id'] not in player.completed_tour_ids]
+                        if not eligible_tours: print("Manager: \"Nothing quite right for you now.\"")
+                        else:
+                            tour_template = random.choice(eligible_tours)
+                            print(f"\nManager: \"How about this: '{tour_template['name']}'. {tour_template['description']}\"")
+                            fleshed_gigs = []; possible_to_book = True; cumulative_day_offset_for_proposal = 0
+                            for leg, gig_tmpl in enumerate(tour_template['gig_templates']):
+                                city = random.choice(gig_tmpl['city_options'])
+                                venues_in_city = [v for v in WORLD_MAP[city].venues if v.venue_type in gig_tmpl['venue_type_options']] if WORLD_MAP.get(city) else []
+                                if not venues_in_city: possible_to_book = False; break
+                                venue = random.choice(venues_in_city)
+                                cumulative_day_offset_for_proposal += random.randint(gig_tmpl['days_offset_min'], gig_tmpl['days_offset_max'])
+                                fleshed_gigs.append({'venue_id': venue.venue_id, 'venue_name': venue.name, 'event_type': gig_tmpl['event_type'], 'days_offset': cumulative_day_offset_for_proposal, 'city_name': city, 'estimated_payout': gig_tmpl['base_payout_estimate'], 'required_skills_override': gig_tmpl.get('required_skills_override')})
+                            if possible_to_book and fleshed_gigs:
+                                print("Proposed Itinerary:")
+                                est_total_pay = sum(g['estimated_payout'] for g in fleshed_gigs)
+                                for i,g in enumerate(fleshed_gigs): print(f"  Gig {i+1}: {g['event_type']} at {g['venue_name']} in {g['city_name']} (~{g['days_offset']} days). Est. ${g['estimated_payout']}")
+                                print(f"Total est. payout: ${est_total_pay}. Expenses on you.")
+                                if present_choices({"1":"Accept offer","2":"Decline"},"Accept tour?") == "1":
+                                    player.active_tour_offer = {"tour_id":tour_template['tour_id'], "name":tour_template['name'], "gigs":fleshed_gigs}
+                                    print("Manager: \"Great! Confirm with me again to finalize bookings.\""); adv_min_staff+=10
+                                else: player.active_tour_offer=None; print("Manager: \"Okay, maybe next time.\""); adv_min_staff+=5
+                            else: print("Manager: \"Couldn't work out a solid itinerary for that one.\"")
+                elif action_text == "Review Past Tours":
+                    print("\n--- Past Tour Review ---")
+                    completed_tours = {tid: tdata for tid, tdata in player.tour_ledgers.items() if tdata.get("status") == "completed"}
+                    if not completed_tours:
+                        print("Manager: \"You haven't completed any tours for us to review yet.\"")
+                    else:
+                        tour_choices_dict = {str(i+1): tid for i, tid in enumerate(completed_tours.keys())}
+                        tour_display_list = [f"{completed_tours[tid]['name']} (ID: {tid})" for tid in tour_choices_dict.values()] # Order might not be guaranteed if iterating keys then values
+
+                        # Create display list based on the order of tour_choices_dict keys for consistency
+                        ordered_tour_display_list = [f"{completed_tours[tour_choices_dict[key]]['name']} (ID: {tour_choices_dict[key]})" for key in sorted(tour_choices_dict.keys(), key=int) if key != "0"]
+
+                        tour_key = present_choices(ordered_tour_display_list, "Which tour to review? (0 to cancel)")
+
+                        if tour_key and tour_key != "0" and tour_key in tour_choices_dict : # Check against original keys
+                            chosen_tour_id = tour_choices_dict[tour_key]
+                            ledger = player.tour_ledgers[chosen_tour_id]
+                            net_profit = ledger['income'] - ledger['expenses']
+                            print(f"\nSummary for Tour: '{ledger['name']}'")
+                            print(f"  Total Income: ${ledger['income']}")
+                            print(f"  Total Expenses: ${ledger['expenses']}")
+                            print(f"  Net Profit/Loss: ${net_profit}")
+                            print("  Gigs Performed:")
+                            for gig_d in ledger.get("gigs_details",[]):
+                                if gig_d.get("performed"):
+                                    print(f"    - {gig_d['event_name']} in {gig_d['city_name']}")
+                        elif tour_key == "0": print("Cancelled review.")
+                        else: print("Invalid selection for tour review.")
+                    adv_min_staff = 10
                 elif action_text == "Check PR Opportunities":
-                    print("Checking with PR Manager..."); adv_min=30
+                    print("Checking with PR Manager..."); adv_min_staff=30
                     chron_key="interview_city_chronicle"; chron_fame_req=player.OPPORTUNITY_FAME_THRESHOLDS.get(chron_key,float('inf'))
                     op_status=player.active_opportunities.get(chron_key)
                     if op_status=="completed": print("PR: 'Chronicle interview done!'")
                     elif op_status=="pending_player_action": print("PR: 'Chronicle interview ready when you are.'")
                     elif player.fame>=chron_fame_req: player.active_opportunities[chron_key]="pending_player_action"; print("PR: 'Good news! Chronicle interview lined up!'")
                     else: print(f"PR: 'Quiet on press front. Need ~{chron_fame_req} fame for Chronicle.'")
-                elif action_text == "Back to Main Menu": adv_min=0 # No time passed
-                else: print("Invalid staff action."); adv_min=0
-
-                if adv_min > 0: advance_game_time(adv_min);update_npc_locations(current_game_time);process_time_based_player_needs(player,adv_min)
-            print("--------------------")
-
-        # Choice 00: Debug Advance Time
-        elif choice == "00":
-            advance_game_time(minutes=60); update_npc_locations(current_game_time); process_time_based_player_needs(player, 60)
-
-        # Choice 0: Quit
+                elif action_text == "Back to Main Menu": adv_min_staff=0
+                else: print("Invalid staff action.")
+                if adv_min_staff > 0: adv_time_general = adv_min_staff
+        elif choice == "00": adv_time_general = 60
         elif choice == "0": print("Thanks for playing!"); break
-        else: print("Invalid choice. Please try again.")
+        else: print("Invalid choice.")
 
+        if adv_time_general > 0: advance_game_time(adv_time_general); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time_general)
         print(f"\n--- {get_current_time_str()} ---")
-
-        # General Random Event Check (if not an LLM error state from talk_to_npc_instance)
-        if choice in ["1", "2", "3", "4", "5", "6", "7", "10", "11", "00"]: # Most actions can trigger
-            # Avoid if last interaction was an LLM error, to prevent spamming events while LLM is down.
-            # This check is a bit broad; ideally, check a specific flag set by generate_npc_response if it errored.
-            # For now, assume 'npc_response' in locals() is a decent proxy if choice '9' was just run.
-            npc_response_check = locals().get('npc_response', '')
-            if not ("LLM Error" in npc_response_check or "An unexpected error occurred" in npc_response_check):
-                ctx_name = player.current_poi.name if player.current_poi else player.current_location.name
-                event_outcome = check_for_random_event(player, current_poi_name=ctx_name, chance=0.15) # Slightly lower chance
-                if event_outcome.get("event_triggered"):
-                    event_mins = event_outcome.get("minutes_passed", 15)
-                    if event_mins > 0: advance_game_time(event_mins);update_npc_locations(current_game_time);process_time_based_player_needs(player,event_mins)
-                    player.check_and_unlock_staff()
-
+        if choice in ["1","3","4","5","7","10","11","00"] and not ("LLM Error" in locals().get('npc_response','')):
+            event_outcome = check_for_random_event(player, player.current_poi.name if player.current_poi else player.current_location.name)
+            if event_outcome.get("event_triggered"):
+                ev_mins = event_outcome.get("minutes_passed",15)
+                if ev_mins > 0: advance_game_time(ev_mins); update_npc_locations(current_game_time); process_time_based_player_needs(player,ev_mins)
+                player.check_and_unlock_staff()
 
 if __name__ == "__main__":
     main()

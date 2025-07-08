@@ -59,6 +59,11 @@ class Player:
         self.hair_growth_progress = 0.0 # Accumulates points towards next length level
         self.beard_growth_progress = 0.0 # Accumulates points towards next length level
 
+        self.active_tour_offer = None # Stores details of a tour package offered by manager
+        self.completed_tour_ids = [] # List of tour_ids the player has completed
+        self.current_tour_id = None   # ID of the currently active tour
+        self.tour_ledgers = {}        # Dict to store financial details of tours: tour_id -> {"name": "Tour Name", "expenses": 0, "income": 0, "status": "ongoing/completed", "gigs_details": []}
+
         # Constants for growth mechanics (can be tuned)
         self.HAIR_POINTS_PER_LENGTH_LEVEL = 100.0 # How many progress points to gain one length level for hair
         self.BEARD_POINTS_PER_LENGTH_LEVEL = 80.0 # How many progress points to gain one length level for beard

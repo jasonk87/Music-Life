@@ -104,5 +104,5 @@
       "events_hosted_ids": []
     }
   ],
-  "intra_city_poi_connections": [] // Leaving empty for now, can be added later
+  "intra_city_poi_connections": []
 }

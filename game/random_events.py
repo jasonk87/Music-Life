@@ -206,5 +206,6 @@ def check_for_post_gig_random_event(player, performed_event_type, venue_name="th
 
 # Need to add 'adoring_fan' & 'grateful_fan' to dialogue personalities (in game/dialogue.py)
 def update_dialogue_personalities():
-# The 'adoring_fan' personality is now defined directly in game/dialogue.py.
-# No need for the dynamic update here anymore.
+    # The 'adoring_fan' personality is now defined directly in game/dialogue.py.
+    # No need for the dynamic update here anymore.
+    pass

@@ -8,12 +8,12 @@ class RelationshipStatus(Enum):
     ALLY = 2 # or FAN for certain types
 
 class NPC:
-    def __init__(self, npc_id, name, personality_key, home_location=None, schedule=None):
+    def __init__(self, npc_id, name, personality_key, home_location=None, current_location=None, schedule=None):
         self.npc_id = npc_id # Unique identifier for this NPC
         self.name = name
         self.personality_key = personality_key # Links to NPC_PERSONALITIES for LLM style
 
-        self.current_location = None # Will be a Location, Venue, or POI object
+        self.current_location = current_location # Will be a Location, Venue, or POI object
         self.home_location = home_location # Typically a Venue or POI where they work/live
 
         # Schedule: Dict mapping DayOfWeek_TimeSlot (e.g., "Monday_Morning") to location_name or activity

@@ -1,0 +1,115 @@
+[
+  {
+    "tour_id": "local_intro_tour",
+    "name": "Local Scene Introduction",
+    "min_fame": 0,
+    "max_fame": 75,
+    "num_gigs": 2,
+    "description": "A couple of small gigs to get your name out in the local area.",
+    "gig_templates": [
+      {
+        "leg_number": 1,
+        "city_options": ["Your Hometown"],
+        "venue_type_options": ["HALL", "BAR_GIG"],
+        "event_type": "OPEN_MIC",
+        "days_offset_min": 5,
+        "days_offset_max": 10,
+        "base_payout_estimate": 50
+      },
+      {
+        "leg_number": 2,
+        "city_options": ["Your Hometown", "City Center"],
+        "venue_type_options": ["CLUB"],
+        "event_type": "OPEN_MIC",
+        "days_offset_min": 7,
+        "days_offset_max": 12,
+        "base_payout_estimate": 70
+      }
+    ]
+  },
+  {
+    "tour_id": "regional_buzz_builder",
+    "name": "Regional Buzz Builder",
+    "min_fame": 50,
+    "max_fame": 200,
+    "num_gigs": 3,
+    "description": "Expand your reach to nearby cities and build a regional following.",
+    "gig_templates": [
+      {
+        "leg_number": 1,
+        "city_options": ["City Center"],
+        "venue_type_options": ["CLUB"],
+        "event_type": "CLUB_GIG",
+        "days_offset_min": 7,
+        "days_offset_max": 14,
+        "base_payout_estimate": 250,
+        "required_skills_override": {"vocals": 5, "guitar": 5, "stage_presence": 3}
+      },
+      {
+        "leg_number": 2,
+        "city_options": ["Austin, TX"],
+        "venue_type_options": ["BAR_GIG", "CLUB"],
+        "event_type": "CLUB_GIG",
+        "days_offset_min": 7,
+        "days_offset_max": 10,
+        "base_payout_estimate": 200
+      },
+      {
+        "leg_number": 3,
+        "city_options": ["Your Hometown", "City Center"],
+        "venue_type_options": ["CLUB", "HALL"],
+        "event_type": "CLUB_GIG",
+        "days_offset_min": 5,
+        "days_offset_max": 9,
+        "base_payout_estimate": 300
+      }
+    ]
+  },
+  {
+    "tour_id": "statewide_headliner_prep",
+    "name": "Statewide Headliner Prep",
+    "min_fame": 150,
+    "max_fame": 500,
+    "num_gigs": 4,
+    "description": "A more extensive tour hitting major spots, preparing you for bigger stages.",
+    "gig_templates": [
+      {
+        "leg_number": 1,
+        "city_options": ["Austin, TX"],
+        "venue_type_options": ["CLUB", "CONCERT_HALL"],
+        "event_type": "CONCERT",
+        "days_offset_min": 10,
+        "days_offset_max": 15,
+        "base_payout_estimate": 800,
+        "required_skills_override": {"vocals": 12, "guitar": 12, "stage_presence": 8, "songwriting": 7}
+      },
+      {
+        "leg_number": 2,
+        "city_options": ["City Center"],
+        "venue_type_options": ["CONCERT_HALL"],
+        "event_type": "CONCERT",
+        "days_offset_min": 7,
+        "days_offset_max": 10,
+        "base_payout_estimate": 1000
+      },
+      {
+        "leg_number": 3,
+        "city_options": ["Austin, TX"],
+        "venue_type_options": ["CLUB"],
+        "event_type": "CLUB_GIG",
+        "days_offset_min": 7,
+        "days_offset_max": 12,
+        "base_payout_estimate": 350
+      },
+      {
+        "leg_number": 4,
+        "city_options": ["Your Hometown"],
+        "venue_type_options": ["HALL", "CLUB"],
+        "event_type": "CLUB_GIG",
+        "days_offset_min": 5,
+        "days_offset_max": 10,
+        "base_payout_estimate": 200
+      }
+    ]
+  }
+]
