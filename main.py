@@ -277,7 +277,7 @@ def talk_to_npc_instance(player, npc):
 def handle_phone_menu(player):
     while True:
         clear_screen_ish(); print(f"\n--- Phone --- ({player.name}) ---\n--- {get_current_time_str()} ---")
-        opts = {"1":"Check Schedule", "2":"Local News", "3":"Contacts", "0":"Put Phone Away"}
+        opts = {"1":"Check Schedule", "2":"Local News", "3":"Contacts", "4":"Music Management", "0":"Put Phone Away"}
         choice = present_choices(opts, "Phone Options:")
         adv_time = 1
         if choice == "1":
@@ -307,10 +307,55 @@ def handle_phone_menu(player):
                     responses = [f"{contact['name']} doesn't pick up. Voicemail.", f"{contact['name']} is busy. Try later."]
                     if npc_obj: npc_obj.add_memory(f"Call attempt from {player.name} (voicemail/busy).")
                     print(random.choice(responses))
+        elif choice == "4": # Music Management
+            print("\n--- Music Management ---")
+            music_opts = {"1": "Self-Release Song", "2": "View Released Songs (TBD)", "0": "Back"}
+            music_choice = present_choices(music_opts, "Music Management Options:")
+            adv_time = 5 # Base time for accessing this menu
+
+            if music_choice == "1": # Self-Release Song
+                recorded_unreleased_songs = [s for s in player.songs_written if s.is_recorded and not s.is_released]
+                if not recorded_unreleased_songs:
+                    print("You have no recorded songs ready for release.")
+                else:
+                    print("Select a song to self-release:")
+                    song_select_map = {str(i+1): song for i, song in enumerate(recorded_unreleased_songs)}
+                    song_display_list = [str(song) for song in recorded_unreleased_songs] # Uses Song.__str__
+
+                    chosen_song_key = present_choices(song_display_list, "Choose song to release (0 to cancel):")
+
+                    if chosen_song_key and chosen_song_key != "0" and chosen_song_key in song_select_map:
+                        song_to_release = song_select_map[chosen_song_key]
+                        release_cost = 100 # Cost for self-distribution
+                        if player.money >= release_cost:
+                            if input(f"Self-release '{song_to_release.title}' for ${release_cost}? (y/n) > ").lower() == 'y':
+                                player.money -= release_cost
+                                if song_to_release.mark_as_released(current_game_time.copy()): # Pass a copy
+                                    print(f"Successfully self-released '{song_to_release.title}'. Money: ${player.money}")
+                                    # Future: Add to local chart processing queue, generate initial buzz, etc.
+                                    player.fame += 5 # Small fame boost for releasing
+                                    adv_time += 60 # Releasing takes some time
+                                else:
+                                    print(f"Failed to release '{song_to_release.title}'.") # Should already be handled by mark_as_released
+                                    player.money += release_cost # Refund if release failed internally
+                            else:
+                                print("Release cancelled.")
+                        else:
+                            print(f"Not enough money to release. Need ${release_cost}.")
+                    elif chosen_song_key == "0":
+                        print("Release process cancelled.")
+                    else:
+                        print("Invalid song selection for release.")
+            elif music_choice == "2":
+                print("Viewing released songs... (TBD)")
+                # Future: List released songs, their stats, chart positions etc.
+            # choice "0" (Back) is handled by falling through
+            adv_time = max(1, adv_time) # Ensure some time passes if only browsing menus
+
         elif choice == "0": print("Putting phone away."); adv_time=1; break
         else: print("Invalid phone option.")
         if adv_time > 0: advance_game_time(adv_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time)
-        if choice in ["1","2","3"] and present_choices({"1":"Continue phone","0":"Put away"},"Done?")=="0": print("Putting phone away."); break
+        if choice in ["1","2","3", "4"] and present_choices({"1":"Continue phone","0":"Put away"},"Done?")=="0": print("Putting phone away."); break
     print("--------------------")
 
 def handle_travel_menu(player):
@@ -456,7 +501,7 @@ def main():
                                     chosen_dest_name_from_menu, chosen_travel_details = conn_map[dest_key]
                                     if input(f"Travel to {chosen_dest_name_from_menu} for ${chosen_travel_details['cost']} ({chosen_travel_details['time_hours']}h)? (y/n) > ").lower()=='y':
                                         if player.money >= chosen_travel_details['cost']:
-                                            cost_of_travel = chosen_travel_details['cost'] # Store before modification
+                                            cost_of_travel = chosen_travel_details['cost']
                                             player.money -= cost_of_travel
 
                                             # --- Track Tour Expenses ---
@@ -517,11 +562,12 @@ def main():
                                 else: print(f"Not enough money. Need ${rent_cost}.")
                             except: print("Error parsing rent cost.")
                             adv_time_general = 10; action_taken_custom_time = True
-                        elif poi.category == "HOME" and chosen_text == "Write a new song": # Songwriting logic is here
+                        elif poi.category == "HOME" and chosen_text == "Write a new song":
                             print("\n--- Write a New Song ---")
                             song_title = input("Enter a title for your new song: ")
                             if not song_title.strip():
                                 print("Songwriting cancelled. You need a title.")
+                                adv_time_general = 5 # Small time for cancelling
                             else:
                                 songwriting_skill = player.skills.get("songwriting", 0)
                                 base_min = 0.1; base_max = 0.7
@@ -556,13 +602,101 @@ def main():
                                 print(f"\nYou finished writing a new song:\n  {new_song}")
                                 print(f"It took you {songwriting_time_minutes // 60}h {songwriting_time_minutes % 60}m. Your songwriting skill is now {player.skills['songwriting']:.2f}.")
                                 print(f"Energy: {player.energy}, Stress: {player.stress}, Comfort: {player.comfort}")
-                                adv_time_general = songwriting_time_minutes # This action handles its own time
+                                adv_time_general = songwriting_time_minutes
                             action_taken_custom_time = True
                         elif poi.category == "STUDIO_RECORDING" and chosen_text == "Book recording session":
-                            # ... (recording studio booking logic - it handles its own time) ...
+                            studio_hourly_rate = getattr(poi, 'hourly_rate', 50)
+                            studio_quality = getattr(poi, 'studio_quality', 0.5)
+                            unrecorded_songs = [s for s in player.songs_written if not s.is_recorded]
+                            if not unrecorded_songs:
+                                print("You have no unrecorded songs to work on!"); adv_time_general = 5
+                            else:
+                                print("Which song to record?"); song_to_record_choices = {str(i+1): s for i,s in enumerate(unrecorded_songs)}
+                                song_to_record_display = [f"{s.title} (Q: {s.song_quality:.2f})" for s in unrecorded_songs]
+                                song_key = present_choices(song_to_record_display, "Choose song (0 to cancel):")
+                                if song_key and song_key != "0" and song_key in song_to_record_choices:
+                                    song_to_record = song_to_record_choices[song_key]
+                                    try:
+                                        rec_hours_input = input(f"Hours for '{song_to_record.title}'? (${studio_hourly_rate}/hr, StudioQ: {studio_quality*100:.0f}%): ")
+                                        if not rec_hours_input.isdigit() or int(rec_hours_input) <=0: print("Invalid hours."); raise ValueError
+                                        rec_hours = int(rec_hours_input)
+                                        rec_cost = rec_hours * studio_hourly_rate
+                                        if player.money >= rec_cost:
+                                            player.money -= rec_cost; rec_mins = rec_hours*60
+                                            rec_start = current_game_time.copy(); rec_end = rec_start.copy(); rec_end.advance_time(rec_mins)
+                                            player.schedule.add_event(rec_start,rec_end,f"Recording '{song_to_record.title}' at {poi.name}","Recording",details={"poi_id":poi.poi_id,"song_id":song_to_record.song_id,"cost":rec_cost,"hours":rec_hours})
+
+                                            # Determine recording quality
+                                            base_rec_q = studio_quality * 0.6 # Studio is a major factor
+                                            # Skill factor - average of relevant skills (e.g. vocals, primary instrument for song's genre)
+                                            # This is simplified; a real system would check which instruments are on the song.
+                                            perf_skill_avg = (player.skills.get("vocals",0) + player.skills.get("guitar",0)) / 20.0 # Assuming skills 0-10, map to 0-0.5
+                                            base_rec_q += perf_skill_avg * 0.3 # Skills add up to 30% of quality
+                                            base_rec_q += random.uniform(-0.1, 0.1) # Randomness
+                                            final_rec_quality = round(max(0.1, min(1.0, base_rec_q + (song_to_record.song_quality * 0.1))), 2) # Song quality slight boost
+
+                                            song_to_record.mark_as_recorded(final_rec_quality)
+                                            print(f"Recorded '{song_to_record.title}' (RecQ: {final_rec_quality:.2f}). Cost ${rec_cost}. Money: ${player.money}")
+                                            adv_time_general = rec_mins
+                                        else: print(f"Not enough money. Need ${rec_cost}.")
+                                    except ValueError: print("Recording cancelled.")
+                                else: print("Recording cancelled.")
                             action_taken_custom_time = True
                         elif poi.category == "REHEARSAL_STUDIO" and chosen_text.startswith("Book Rehearsal Slot"):
-                            # ... (rehearsal booking logic - it handles its own time) ...
+                            action_taken_custom_time = True # Already handles its own time
+                        elif poi.category == "OFFICE_RECORD_LABEL" and chosen_text.startswith("Submit Demo"):
+                            print("\n--- Submit Demo to Record Label ---")
+                            adv_time_general = 10; action_taken_custom_time = True # Base time for interaction
+                            if player.fame < getattr(poi, 'min_fame_to_submit', 0):
+                                print(f"{poi.name} isn't interested in demos from artists at your current level of fame (Need {getattr(poi, 'min_fame_to_submit', 0)} fame).")
+                            elif not player.songs_written:
+                                print("You have no songs to create a demo from!")
+                            else:
+                                recorded_songs = [s for s in player.songs_written if s.is_recorded]
+                                if not recorded_songs:
+                                    print("You have songs, but none are recorded. A demo needs a recording.")
+                                else:
+                                    print("Select a recorded song for your demo:")
+                                    song_choices_dict = {str(i+1): song for i, song in enumerate(recorded_songs)}
+                                    song_display_list = [f"{s.title} (Genre: {s.genre}, CompQ: {s.song_quality:.2f}, RecQ: {s.recording_quality:.2f})" for s in recorded_songs]
+
+                                    chosen_song_key = present_choices(song_display_list, "Choose song for demo (0 to cancel):")
+
+                                    if chosen_song_key and chosen_song_key != "0": # present_choices returns 1-based string index
+                                        chosen_song_idx = int(chosen_song_key) -1
+                                        if 0 <= chosen_song_idx < len(recorded_songs):
+                                            chosen_song = recorded_songs[chosen_song_idx]
+                                            label_poi = poi
+
+                                            print(f"You submit your demo of '{chosen_song.title}' to {label_poi.name}.")
+                                            adv_time_general = 60
+
+                                            success_score = 0
+                                            success_score += chosen_song.song_quality * 35  # Max 35
+                                            success_score += chosen_song.recording_quality * 35 # Max 35
+                                            success_score += min(30, player.fame / 5) # Max 30 for fame up to 150
+
+                                            if label_poi.genres_preferred and chosen_song.genre in label_poi.genres_preferred: success_score += 20
+                                            elif not label_poi.genres_preferred: success_score += 5
+
+                                            outcome_roll = random.randint(0, 100)
+
+                                            print(f"(Debug: Demo Score: {success_score:.0f}, Label Roll: {outcome_roll})")
+
+                                            if success_score > outcome_roll + 50 :
+                                                print(f"{label_poi.name} is very impressed! \"This is great stuff, {player.name}! We need to talk. My office, tomorrow?\"")
+                                                player.fame += 25
+                                                # Future: schedule a meeting event, potential record deal
+                                            elif success_score > outcome_roll + 20:
+                                                print(f"{label_poi.name} likes what they hear. \"Interesting... we'll be in touch if something opens up.\"")
+                                                player.fame += 10
+                                            elif success_score > outcome_roll - 20:
+                                                 print(f"{label_poi.name} listens politely. \"Thanks for the submission. We'll keep it on file.\"")
+                                                 player.fame += 2
+                                            else:
+                                                print(f"{label_poi.name} doesn't seem too interested. \"Uh, yeah, thanks. We get a lot of these.\"")
+                                        else: print("Invalid song selection for demo.")
+                                    else: print("Demo submission cancelled.")
                             action_taken_custom_time = True
                         elif poi.category == "SHOP_MUSIC" and chosen_text == "Repair Gear": print("Repair Gear logic TBD."); adv_time_general = 45; action_taken_custom_time = True
                         elif poi.category == "SHOP_FOOD" and chosen_text == "Buy Food Items": print("Buy Food (Grocery) logic TBD."); adv_time_general = 10; action_taken_custom_time = True
@@ -625,7 +759,7 @@ def main():
                         if not player.songs_written or len(player.songs_written) < event_perform.songs_required_count:
                             print("You don't have enough songs for this event!"); continue
 
-                        songs_disp = [f"{s.title} (Q:{s.song_quality:.2f})" for s in player.songs_written]
+                        songs_disp = [str(s) for s in player.songs_written] # Use Song.__str__ for detailed display
                         chosen_setlist = []
                         for i in range(event_perform.songs_required_count):
                             song_idx_str = present_choices(songs_disp, f"Choose song {i+1}/{event_perform.songs_required_count} (0 to cancel):")
@@ -708,7 +842,7 @@ def main():
                 action_text = staff_opts.get(sub_choice); adv_min_staff = 0
                 if action_text == "Talk to Artist Manager": print("Discussing strategy... (TBD)"); adv_min_staff=30
                 elif action_text == "Discuss Tour Opportunities":
-                    adv_min_staff = 0 # Handled within the nested logic
+                    adv_min_staff = 0
                     if not player.has_manager: print("Need a manager first.")
                     elif player.active_tour_offer:
                         if input(f"Manager: \"We have the '{player.active_tour_offer['name']}' tour offer. Finalize it? (y/n)\"").lower() == 'y':
@@ -776,15 +910,19 @@ def main():
                         print("Manager: \"You haven't completed any tours for us to review yet.\"")
                     else:
                         tour_choices_dict = {str(i+1): tid for i, tid in enumerate(completed_tours.keys())}
-                        tour_display_list = [f"{completed_tours[tid]['name']} (ID: {tid})" for tid in tour_choices_dict.values()] # Order might not be guaranteed if iterating keys then values
+                        # Corrected display list generation
+                        ordered_tour_display_list = []
+                        for key_idx_str in sorted(tour_choices_dict.keys(), key=int): # Sort keys numerically
+                            tid_val = tour_choices_dict[key_idx_str]
+                            ordered_tour_display_list.append(f"{completed_tours[tid_val]['name']} (ID: {tid_val})")
 
-                        # Create display list based on the order of tour_choices_dict keys for consistency
-                        ordered_tour_display_list = [f"{completed_tours[tour_choices_dict[key]]['name']} (ID: {tour_choices_dict[key]})" for key in sorted(tour_choices_dict.keys(), key=int) if key != "0"]
+                        tour_key_display_idx = present_choices(ordered_tour_display_list, "Which tour to review? (0 to cancel)")
 
-                        tour_key = present_choices(ordered_tour_display_list, "Which tour to review? (0 to cancel)")
+                        if tour_key_display_idx and tour_key_display_idx != "0":
+                            # Convert display index back to actual tour_id from the sorted list of keys
+                            actual_tour_id_key = sorted(tour_choices_dict.keys(), key=int)[int(tour_key_display_idx)-1]
+                            chosen_tour_id = tour_choices_dict[actual_tour_id_key]
 
-                        if tour_key and tour_key != "0" and tour_key in tour_choices_dict : # Check against original keys
-                            chosen_tour_id = tour_choices_dict[tour_key]
                             ledger = player.tour_ledgers[chosen_tour_id]
                             net_profit = ledger['income'] - ledger['expenses']
                             print(f"\nSummary for Tour: '{ledger['name']}'")
@@ -795,7 +933,7 @@ def main():
                             for gig_d in ledger.get("gigs_details",[]):
                                 if gig_d.get("performed"):
                                     print(f"    - {gig_d['event_name']} in {gig_d['city_name']}")
-                        elif tour_key == "0": print("Cancelled review.")
+                        elif tour_key_display_idx == "0": print("Cancelled review.")
                         else: print("Invalid selection for tour review.")
                     adv_min_staff = 10
                 elif action_text == "Check PR Opportunities":
@@ -824,3 +962,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+[end of main.py]

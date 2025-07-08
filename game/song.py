@@ -24,6 +24,8 @@ class Song:
 
         self.is_recorded = False
         self.recording_quality = 0.0
+        self.is_released = False
+        self.release_date = None # Will be a GameTime object or string
 
     def __str__(self):
         details = [
@@ -38,12 +40,24 @@ class Song:
             status += f" (RecQ: {self.recording_quality:.2f})"
         else:
             status += " (Unrecorded)"
+
+        if self.is_released:
+            status += f" (Released: {self.release_date if isinstance(self.release_date, str) else self.release_date.get_time_string_for_schedule() if self.release_date else 'N/A'})"
         return status
 
     def mark_as_recorded(self, recording_quality):
         self.is_recorded = True
         self.recording_quality = round(max(0.0, min(1.0, recording_quality)), 2)
-        print(f"Song '{self.title}' marked as recorded with quality: {self.recording_quality:.2f}")
+        # print(f"Song '{self.title}' marked as recorded with quality: {self.recording_quality:.2f}") # Less verbose
+
+    def mark_as_released(self, release_date_obj):
+        if not self.is_recorded:
+            print(f"Error: Song '{self.title}' must be recorded before it can be released.")
+            return False
+        self.is_released = True
+        self.release_date = release_date_obj # Expects a GameTime object
+        print(f"Song '{self.title}' marked as released on {self.release_date.get_time_string_for_schedule()}.")
+        return True
 
 if __name__ == "__main__":
     # Test case 1: Override song_quality
@@ -84,5 +98,28 @@ if __name__ == "__main__":
     expected_q4 = round((0.9 + 0.5 + 0.5 + 0.7) / 4.0, 2) # catchiness and lyrical_depth default to 0.5
     assert song4.song_quality == expected_q4
     assert song4.catchiness == 0.5
+
+    # Test case 5: Release mechanics
+    song5 = Song(title="Release Me", author="Test Player", genre="Indie", originality=0.7, catchiness=0.8)
+    print(song5)
+    assert not song5.is_released
+    assert song5.release_date is None
+
+    # Try to release before recording (should fail)
+    # For testing mark_as_released directly, we need a mock GameTime object or to import the actual one.
+    # Let's assume a simple string for testing __str__ if GameTime is complex to mock here.
+    class MockGameTime:
+        def get_time_string_for_schedule(self):
+            return "2024-08-15 10:00"
+
+    mock_date = MockGameTime()
+    assert not song5.mark_as_released(mock_date)
+
+    song5.mark_as_recorded(0.75)
+    assert song5.is_recorded
+    assert song5.mark_as_released(mock_date)
+    assert song5.is_released
+    assert song5.release_date == mock_date
+    print(song5) # Should show release date
 
     print("\nSong class enhanced tests passed.")
