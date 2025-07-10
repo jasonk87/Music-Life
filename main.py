@@ -15,7 +15,7 @@ import json
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 from game.chart import Chart # Import the new Chart class
-from game.feedback_generator import generate_feedback_for_song # Import feedback generator
+from game.feedback_generator import generate_feedback_for_song, SOURCES # Import feedback generator and SOURCES
 
 WORLD_MAP = {}
 NPC_REGISTRY = {}
@@ -323,13 +323,28 @@ def handle_phone_menu(player):
         elif choice == "4": # Music Management
             print("\n--- Music Management ---")
             unread_feedback_count = sum(1 for f_item in player.feedback_received if not f_item.get("read", False))
+            pending_offers_count = sum(1 for offer in player.active_label_offers if offer.get("status") == "pending_player_decision")
+
             music_opts = {
                 "1": "Self-Release Song",
                 "2": f"Check Reviews/Fan Mail{' (NEW)' if unread_feedback_count > 0 else ''}",
                 "3": "View Charts",
-                "4": "View Released Songs (TBD)", # Moved this down
+                "4": f"View Label Offers{' (NEW)' if pending_offers_count > 0 else ''}",
+                "5": "View Released Songs", # Renamed from TBD
                 "0": "Back"
             }
+            # Reorder options to make more sense if View Released Songs was TBD
+            if music_opts["4"] == "View Released Songs (TBD)": # Simple check if it's the old text
+                music_opts = {
+                    "1": "Self-Release Song",
+                    "2": f"Check Reviews/Fan Mail{' (NEW)' if unread_feedback_count > 0 else ''}",
+                    "3": "View Charts",
+                    "4": f"View Label Offers{' (NEW)' if pending_offers_count > 0 else ''}",
+                    "5": "View Released Songs",
+                    "0": "Back"
+                }
+
+
             music_choice = present_choices(music_opts, "Music Management Options:")
             adv_time = 5 # Base time for accessing this menu
 
@@ -349,11 +364,35 @@ def handle_phone_menu(player):
                         release_cost = 100 # Cost for self-distribution
                         if player.money >= release_cost:
                             if input(f"Self-release '{song_to_release.title}' for ${release_cost}? (y/n) > ").lower() == 'y':
-                                player.money -= release_cost
-                                if song_to_release.mark_as_released(current_game_time.copy()): # Pass a copy
-                                    print(f"Successfully self-released '{song_to_release.title}'. Money: ${player.money}")
+                                player.money -= release_cost # Initial cost for self-release
+                                release_method_success = False
+                                released_via_label_id = None
 
-                                    # Generate initial buzz feedback
+                                if player.signed_label_deal and player.signed_label_deal.get('songs_remaining_on_contract', 0) > 0:
+                                    release_choice_opts = {
+                                        "1": f"Release via {player.signed_label_deal['label_name']} (No cost, uses contract slot)",
+                                        "2": "Self-Release Independently (Cost: ${release_cost})"
+                                    }
+                                    release_decision = present_choices(release_choice_opts, f"How to release '{song_to_release.title}'?")
+
+                                    if release_decision == "1": # Via Label
+                                        player.money += release_cost # Refund initial deduction, label covers it
+                                        release_cost = 0 # No cost for player
+                                        released_via_label_id = player.signed_label_deal['label_poi_id']
+                                        player.signed_label_deal['songs_remaining_on_contract'] -= 1
+                                        print(f"Releasing '{song_to_release.title}' via {player.signed_label_deal['label_name']}. Songs remaining on contract: {player.signed_label_deal['songs_remaining_on_contract']}.")
+                                        release_method_success = song_to_release.mark_as_released(current_game_time.copy(), released_by_label_id=released_via_label_id)
+                                    elif release_decision == "2": # Self-Release despite deal
+                                        print(f"Proceeding with self-release for ${release_cost}.")
+                                        release_method_success = song_to_release.mark_as_released(current_game_time.copy()) # released_by_label_id remains None
+                                    else: # Cancelled or invalid choice
+                                        player.money += release_cost # Refund if cancelled
+                                        print("Release decision cancelled.")
+                                else: # No signed deal or no songs left on contract
+                                    release_method_success = song_to_release.mark_as_released(current_game_time.copy())
+
+                                if release_method_success:
+                                    print(f"Successfully released '{song_to_release.title}'. Money: ${player.money}")
                                     buzz_feedback = generate_feedback_for_song(song_to_release, player, feedback_type="general_release")
                                     if buzz_feedback:
                                         player.feedback_received.append(buzz_feedback)
@@ -404,7 +443,79 @@ def handle_phone_menu(player):
                         print(chart_obj) # Relies on Chart.__str__
                 input("Press Enter to continue...") # Pause to read charts
                 adv_time += 5
-            elif music_choice == "4": # View Released Songs
+            elif music_choice == "4": # View Label Offers
+                print("\n--- Record Label Offers ---")
+                pending_offers = [offer for offer in player.active_label_offers if offer.get("status") == "pending_player_decision"]
+
+                # Also check for expired offers and update their status / notify
+                offers_to_remove = []
+                for offer in pending_offers[:]: # Iterate on a copy for safe removal
+                    if current_game_time >= offer["expiry_date_obj"]:
+                        offer["status"] = "expired"
+                        print(f"Offer from {offer['label_name']} has expired.")
+                        offers_to_remove.append(offer) # Or just update status and filter later
+
+                # Update pending_offers list after checking expiry
+                pending_offers = [offer for offer in player.active_label_offers if offer.get("status") == "pending_player_decision"]
+
+
+                if not pending_offers:
+                    print("No active label offers at the moment.")
+                else:
+                    offer_display_map = {}
+                    print("You have the following contract offers:")
+                    for i, offer in enumerate(pending_offers):
+                        offer_summary = (f"{i+1}. From: {offer['label_name']} ({offer['offer_type']})\n"
+                                         f"     Advance: ${offer['advance_payment']:,}, Royalty: {offer['royalty_rate_player']*100:.0f}%, Songs: {offer['songs_on_contract']}\n"
+                                         f"     Marketing Bonus: {offer['marketing_support_bonus']:.2f}x, Expires: {offer['expiry_date_obj'].get_time_string_for_schedule()}")
+                        print(offer_summary)
+                        offer_display_map[str(i+1)] = offer
+
+                    print("\nSelect an offer number to view details and respond, or 0 to go back.")
+                    offer_choice_key = input("> ")
+
+                    if offer_choice_key.isdigit() and offer_choice_key in offer_display_map:
+                        chosen_offer = offer_display_map[offer_choice_key]
+                        print(f"\n--- Offer Details: {chosen_offer['label_name']} ---")
+                        print(f"Type: {chosen_offer['offer_type']}")
+                        print(f"Advance: ${chosen_offer['advance_payment']:,}")
+                        print(f"Your Royalty: {chosen_offer['royalty_rate_player']*100:.0f}%")
+                        print(f"Marketing Support Multiplier: {chosen_offer['marketing_support_bonus']:.2f}x")
+                        print(f"Songs on Contract: {chosen_offer['songs_on_contract']}")
+                        print(f"Offered on: {chosen_offer['offer_date'].get_time_string_for_schedule()}")
+                        print(f"Expires on: {chosen_offer['expiry_date_obj'].get_time_string_for_schedule()}")
+
+                        response_options = {"1": "Accept Offer", "2": "Decline Offer", "0": "Decide Later"}
+                        response_key = present_choices(response_options, "Your decision?")
+
+                        if response_key == "1": # Accept
+                            player.signed_label_deal = chosen_offer.copy() # Store a copy
+                            player.money += chosen_offer['advance_payment']
+                            chosen_offer['status'] = "accepted" # Update status in player.active_label_offers
+                            # Optionally, void other pending offers
+                            for other_offer in player.active_label_offers:
+                                if other_offer['offer_id'] != chosen_offer['offer_id'] and other_offer['status'] == "pending_player_decision":
+                                    other_offer['status'] = "voided_by_player_signing"
+                            print(f"Congratulations! You've signed with {chosen_offer['label_name']}! You received an advance of ${chosen_offer['advance_payment']:,}.")
+                            print(f"Your current money: ${player.money}")
+                            adv_time += 30
+                        elif response_key == "2": # Decline
+                            chosen_offer['status'] = "declined_by_player"
+                            label_poi_ref = get_poi_or_venue_by_id(chosen_offer['label_poi_id'])
+                            if label_poi_ref and hasattr(label_poi_ref, 'player_interest_score'):
+                                label_poi_ref.player_interest_score = max(0, label_poi_ref.player_interest_score - 20) # Penalty for declining
+                                print(f"(Your relationship with {chosen_offer['label_name']} has cooled slightly.)")
+                            print(f"You have declined the offer from {chosen_offer['label_name']}.")
+                            adv_time += 15
+                        else: # Decide Later
+                            print("You decide to think it over.")
+                            adv_time += 5
+                    elif offer_choice_key == "0":
+                        print("Returning to Music Management menu.")
+                    else:
+                        print("Invalid selection.")
+                adv_time += 5
+            elif music_choice == "5": # View Released Songs (Corrected from 4 to 5 due to new option)
                 print("\n--- Your Released Music ---")
                 released_songs = [s for s in player.songs_written if s.is_released]
                 if not released_songs:
@@ -444,10 +555,9 @@ def update_all_charts(player_obj, current_game_time_obj):
     print("\n--- Weekly Chart Updates Processing ---")
     for chart in ACTIVE_CHARTS:
         feedback_events = chart.update_weekly( # update_weekly now returns feedback_events
-            all_player_songs=player_obj.songs_written,
-            player_name=player_obj.name,
-            player_fame=player_obj.fame,
-            current_game_time_obj=current_game_time_obj # Already a copy from main loop
+            all_player_songs=player_obj.songs_written, # Pass all songs
+            player_obj=player_obj,                   # Pass the full player object
+            current_game_time_obj=current_game_time_obj
         )
         # Process feedback events generated by this chart update
         if feedback_events:
@@ -470,10 +580,188 @@ def update_all_charts(player_obj, current_game_time_obj):
                         if chart_feedback.get("impact", {}).get("fame", 0) > 0: player_obj.fame += chart_feedback["impact"]["fame"]
                         if chart_feedback.get("impact", {}).get("stress", 0) != 0: player_obj.stress = max(0,min(100, player_obj.stress + chart_feedback["impact"]["stress"]))
                         print(f"Chart News ({chart.name}): {chart_feedback['source']} on '{song_for_feedback.title}': \"{chart_feedback['quote'][:50]}...\"")
+
+                        # Sub-step 2.3: Increase Label Interest from Positive Reviews
+                        if (chart_feedback['source'] in SOURCES["pro_critics"] and song_for_feedback.song_quality >= 0.7) or \
+                           (song_for_feedback.song_quality >= 0.85) : # From highly rated song or pro critic on good song
+                            review_interest_boost = 0.5 # Smaller, fixed boost for a good review
+                            if chart_feedback['source'] in SOURCES["pro_critics"]:
+                                review_interest_boost = 1.0 # Pro critics have more sway
+
+                            for location_obj_for_label in WORLD_MAP.values(): # Renamed to avoid conflict
+                                all_pois_in_loc = location_obj_for_label.points_of_interest + location_obj_for_label.venues
+                                for poi_label_candidate in all_pois_in_loc: # Renamed to avoid conflict
+                                    if hasattr(poi_label_candidate, 'category') and poi_label_candidate.category == "OFFICE_RECORD_LABEL":
+                                        # Apply genre preference for review impact too
+                                        current_boost = review_interest_boost
+                                        if poi_label_candidate.genres_preferred and song_for_feedback.genre in poi_label_candidate.genres_preferred:
+                                            current_boost *= 1.2
+                                        elif not poi_label_candidate.genres_preferred:
+                                            current_boost *= 1.05
+
+                                        poi_label_candidate.player_interest_score = min(100, poi_label_candidate.player_interest_score + current_boost)
+                                        # print(f"DEBUG: Label '{poi_label_candidate.name}' interest up by {current_boost:.2f} to {poi_label_candidate.player_interest_score:.2f} from review for '{song_for_feedback.title}'")
                 else:
                     print(f"Warning: Could not find song with ID {event_data.get('song_id')} for feedback generation.")
 
+    # After all charts updated, calculate and apply weekly music income
+    process_weekly_music_income(player_obj)
+
+    # After income, check for and generate label offers
+    check_and_generate_label_offers(player_obj, current_game_time_obj) # Pass current_game_time_obj
+
     print("--- Weekly Chart Updates Finished ---\n")
+
+def check_and_generate_label_offers(player_obj, current_time):
+    """Checks if any labels should make an offer to the player."""
+    if player_obj.signed_label_deal: # Already signed, no new offers for now
+        return
+
+    offer_threshold = 80 # Example: player_interest_score > 80
+    offer_cooldown_days = 90 # Min days before same label might offer again (if declined/expired)
+
+    for location in WORLD_MAP.values():
+        all_pois = location.points_of_interest + location.venues
+        for label_poi in all_pois:
+            if not (hasattr(label_poi, 'category') and label_poi.category == "OFFICE_RECORD_LABEL"):
+                continue
+
+            # Check if this label already has a pending offer for the player
+            has_pending_offer_from_this_label = any(
+                offer['label_poi_id'] == label_poi.poi_id and offer['status'] == "pending_player_decision"
+                for offer in player_obj.active_label_offers
+            )
+            if has_pending_offer_from_this_label:
+                continue # Don't make a new offer if one is already pending from them
+
+            # Check last offer date from this label if one was made and not pending (e.g. declined/expired)
+            # This simple check doesn't store detailed history of non-pending offers from a label.
+            # A more robust system might store 'last_offer_timestamp_from_label_X' on player or label.
+            # For now, if player_interest_score is high, we make an offer if no *active* one exists from this label.
+            # A true cooldown would require more state.
+
+            if getattr(label_poi, 'player_interest_score', 0) >= offer_threshold:
+                print(f"DEBUG: Label '{label_poi.name}' has high interest ({label_poi.player_interest_score:.1f}) in {player_obj.name}.")
+
+                # Define a basic offer structure (can be expanded)
+                # These terms could be influenced by label prestige, player fame etc. in future
+                advance = random.randint(500, 2500) + int(player_obj.fame * 5)
+                royalty = round(random.uniform(0.08, 0.15), 2) + round(getattr(label_poi, 'player_interest_score', 0)/2000,2) # Interest slightly boosts royalty
+                royalty = round(min(0.25, royalty),2) # Cap royalty
+
+                marketing_bonus = 1.1 + round(getattr(label_poi, 'player_interest_score', 0)/500,2) # e.g. 1.1 to 1.3
+                marketing_bonus = round(min(1.5, marketing_bonus),2)
+
+                songs_on_contract = random.randint(2,4)
+
+                offer_expiry_time = current_time.copy()
+                offer_expiry_time.advance_time(minutes=14 * 24 * 60) # 2 weeks to decide
+
+                new_offer = {
+                    "offer_id": str(random.randint(10000,99999)), # Simple unique ID for the offer
+                    "label_poi_id": label_poi.poi_id,
+                    "label_name": label_poi.name,
+                    "offer_type": "Basic Indie Deal", # Could be dynamic later
+                    "advance_payment": advance,
+                    "royalty_rate_player": royalty,
+                    "marketing_support_bonus": marketing_bonus,
+                    "songs_on_contract": songs_on_contract,
+                    "songs_remaining_on_contract": songs_on_contract, # Initially same as total
+                    "status": "pending_player_decision",
+                    "offer_date": current_time.copy(),
+                    "expiry_date_obj": offer_expiry_time
+                }
+                player_obj.active_label_offers.append(new_offer)
+                # Reset label's immediate interest slightly so they don't spam offers if player declines quickly
+                label_poi.player_interest_score *= 0.7
+                print(f"*** URGENT MESSAGE for {player_obj.name}! ***")
+                print(f"'{label_poi.name}' has sent you a contract offer! Check Phone > Music Management > View Label Offers.")
+                print(f"(Offer: ${advance} advance, {royalty*100:.0f}% royalty, {songs_on_contract} songs. Expires: {offer_expiry_time.get_time_string_for_schedule()})")
+
+
+def process_weekly_music_income(player_obj):
+    """Calculates weekly income from charted songs and general streaming, updates player."""
+    current_week_total_chart_income = 0
+    current_week_streaming_income = 0
+
+    player_charted_song_ids_this_week = set()
+
+    # Calculate income from charted songs & update label interest based on chart success
+    for chart in ACTIVE_CHARTS:
+        for entry in chart.entries:
+            if entry.get('artist_name') == player_obj.name and entry.get('song_obj'):
+                song = entry['song_obj']
+                player_charted_song_ids_this_week.add(song.song_id)
+
+                # --- Income Calculation ---
+                base_income_per_song = 10
+                position_factor = (chart.max_size - entry['current_position'] + 1)
+                quality_factor = song.song_quality * song.recording_quality
+                fame_factor = 1 + (player_obj.fame / 200.0)
+
+                # Income formula for a song on this chart
+                raw_song_income_on_chart = base_income_per_song * (position_factor / float(chart.max_size)) * quality_factor * fame_factor
+
+                # Apply royalty split if released via signed label
+                player_share_of_income = raw_song_income_on_chart
+                if song.released_by_label_id and player_obj.signed_label_deal and \
+                   player_obj.signed_label_deal['label_poi_id'] == song.released_by_label_id:
+                    player_share_of_income *= player_obj.signed_label_deal['royalty_rate_player']
+                    # print(f"DEBUG: Royalty split for '{song.title}': Player gets {player_obj.signed_label_deal['royalty_rate_player']*100}%, Earned: ${player_share_of_income:.2f}")
+
+                current_week_total_chart_income += player_share_of_income
+
+                # --- Update Label Interest based on this chart entry ---
+                # Iterate through all POIs to find record labels
+                for location in WORLD_MAP.values():
+                    all_pois_in_location = location.points_of_interest + location.venues
+                    for poi_candidate in all_pois_in_location:
+                        if hasattr(poi_candidate, 'category') and poi_candidate.category == "OFFICE_RECORD_LABEL":
+                            # Calculate interest points
+                            interest_gain = (song.song_quality * position_factor * 0.05) # Max around 0.5 for a #1 hit on a 10-pos chart
+                            # Genre matching bonus for interest
+                            if poi_candidate.genres_preferred and song.genre in poi_candidate.genres_preferred:
+                                interest_gain *= 1.5
+                            elif not poi_candidate.genres_preferred: # Label likes anything
+                                interest_gain *= 1.1
+
+                            poi_candidate.player_interest_score = min(100, poi_candidate.player_interest_score + interest_gain) # Cap interest at 100
+                            # print(f"DEBUG: Label '{poi_candidate.name}' interest in player now {poi_candidate.player_interest_score:.2f} due to '{song.title}' on '{chart.name}'")
+
+
+    # Calculate income from other released (uncharted) songs
+    streaming_base = 1 # Tuneable base for non-charting songs
+    for song in player_obj.songs_written:
+        if song.is_released and song.song_id not in player_charted_song_ids_this_week:
+            # Simpler income for general streaming of non-charting tracks
+            quality_factor = song.song_quality # Just song quality for base streaming
+            fame_factor = 1 + (player_obj.fame / 1000.0) # Lower fame impact for general streams
+            raw_streaming_income_for_song = streaming_base * quality_factor * fame_factor
+
+            player_share_streaming_income = raw_streaming_income_for_song
+            if song.released_by_label_id and player_obj.signed_label_deal and \
+               player_obj.signed_label_deal['label_poi_id'] == song.released_by_label_id:
+                player_share_streaming_income *= player_obj.signed_label_deal['royalty_rate_player']
+                # print(f"DEBUG: Royalty split for streaming '{song.title}': Player gets {player_obj.signed_label_deal['royalty_rate_player']*100}%, Earned: ${player_share_streaming_income:.2f}")
+
+            current_week_streaming_income += player_share_streaming_income
+
+    current_week_total_chart_income = round(current_week_total_chart_income)
+    current_week_streaming_income = round(current_week_streaming_income)
+    total_weekly_income = current_week_total_chart_income + current_week_streaming_income
+
+    player_obj.last_week_music_income = total_weekly_income
+    player_obj.money += total_weekly_income
+    player_obj.total_music_income_to_date += total_weekly_income
+
+    if total_weekly_income > 0:
+        print(f"\n--- Music Income Report ---")
+        print(f"Earnings from songs on charts: ${current_week_total_chart_income:.0f}")
+        print(f"Earnings from other released songs (streaming): ${current_week_streaming_income:.0f}")
+        print(f"Total music income this week: ${total_weekly_income:.0f}")
+        print(f"Your music has earned a total of ${player_obj.total_music_income_to_date:.0f} to date.")
+        print(f"Current Money: ${player_obj.money:.0f}")
+        print("---------------------------\n")
 
 
 def handle_travel_menu(player):
@@ -806,16 +1094,24 @@ def main():
                                             success_score += chosen_song.recording_quality * 35 # Max 35
                                             success_score += min(30, player.fame / 5) # Max 30 for fame up to 150
 
-                                            if label_poi.genres_preferred and chosen_song.genre in label_poi.genres_preferred: success_score += 20
-                                            elif not label_poi.genres_preferred: success_score += 5
+                                            # Add bonus from label's interest in the player
+                                            label_interest_bonus = getattr(label_poi, 'player_interest_score', 0.0) * 0.25 # e.g. full interest (100) adds 25 points
+                                            success_score += label_interest_bonus
+
+                                            genre_match_bonus = 0
+                                            if label_poi.genres_preferred and chosen_song.genre in label_poi.genres_preferred: genre_match_bonus = 20
+                                            elif not label_poi.genres_preferred: genre_match_bonus = 5
+                                            success_score += genre_match_bonus
 
                                             outcome_roll = random.randint(0, 100)
 
-                                            print(f"(Debug: Demo Score: {success_score:.0f}, Label Roll: {outcome_roll})")
+                                            print(f"(Debug: SongQual: {chosen_song.song_quality*35:.1f}, RecQual: {chosen_song.recording_quality*35:.1f}, FameBonus: {min(30, player.fame / 5):.1f}, LabelInterest: {label_interest_bonus:.1f}, GenreBonus: {genre_match_bonus:.1f} -> Total Score: {success_score:.1f}, Label Roll: {outcome_roll})")
 
                                             if success_score > outcome_roll + 50 :
                                                 print(f"{label_poi.name} is very impressed! \"This is great stuff, {player.name}! We need to talk. My office, tomorrow?\"")
                                                 player.fame += 25
+                                                if hasattr(label_poi, 'player_interest_score'): # Further increase interest after a very positive demo
+                                                    label_poi.player_interest_score = min(100, label_poi.player_interest_score + 10)
                                                 # Future: schedule a meeting event, potential record deal
                                             elif success_score > outcome_roll + 20:
                                                 print(f"{label_poi.name} likes what they hear. \"Interesting... we'll be in touch if something opens up.\"")

@@ -69,6 +69,14 @@ class Player:
 
         self.feedback_received = [] # List to store feedback/review dictionaries
 
+        # Music income tracking
+        self.last_week_music_income = 0
+        self.total_music_income_to_date = 0
+
+        # Label deal tracking
+        self.active_label_offers = [] # List of offer dictionaries
+        self.signed_label_deal = None # Stores details of the accepted contract
+
 
     def get_current_gear_capacity(self, travel_mode=None):
         """Calculates current gear capacity based on situation or travel mode."""

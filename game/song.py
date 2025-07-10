@@ -26,6 +26,7 @@ class Song:
         self.recording_quality = 0.0
         self.is_released = False
         self.release_date = None # Will be a GameTime object or string
+        self.released_by_label_id = None # Store POI ID of the label if released through one
 
     def __str__(self):
         details = [
@@ -42,7 +43,15 @@ class Song:
             status += " (Unrecorded)"
 
         if self.is_released:
-            status += f" (Released: {self.release_date if isinstance(self.release_date, str) else self.release_date.get_time_string_for_schedule() if self.release_date else 'N/A'})"
+            release_info = f"Released: {self.release_date.get_time_string_for_schedule() if self.release_date and hasattr(self.release_date, 'get_time_string_for_schedule') else 'N/A'}"
+            if self.released_by_label_id:
+                # This part is tricky as Song class doesn't know about WORLD_MAP to get label name.
+                # For now, just show the ID or a generic "via Label".
+                # A better way would be to pass label name when marking release or have a global lookup.
+                release_info += f" (Via Label ID: {self.released_by_label_id})"
+            else:
+                release_info += " (Self-Released)"
+            status += f" ({release_info})"
         return status
 
     def mark_as_recorded(self, recording_quality):
@@ -50,13 +59,16 @@ class Song:
         self.recording_quality = round(max(0.0, min(1.0, recording_quality)), 2)
         # print(f"Song '{self.title}' marked as recorded with quality: {self.recording_quality:.2f}") # Less verbose
 
-    def mark_as_released(self, release_date_obj):
+    def mark_as_released(self, release_date_obj, released_by_label_id=None):
         if not self.is_recorded:
             print(f"Error: Song '{self.title}' must be recorded before it can be released.")
             return False
         self.is_released = True
         self.release_date = release_date_obj # Expects a GameTime object
-        print(f"Song '{self.title}' marked as released on {self.release_date.get_time_string_for_schedule()}.")
+        self.released_by_label_id = released_by_label_id
+
+        release_method = f"via Label ID: {self.released_by_label_id}" if self.released_by_label_id else "self-released"
+        print(f"Song '{self.title}' marked as released on {self.release_date.get_time_string_for_schedule()} ({release_method}).")
         return True
 
 if __name__ == "__main__":

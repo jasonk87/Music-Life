@@ -46,30 +46,37 @@ class Chart:
     # - update_weekly()
     # - sort_and_trim_entries()
 
-    def calculate_song_chart_score(self, song_obj, player_fame):
+    def calculate_song_chart_score(self, song_obj, player_obj): # Now takes player_obj
         """
-        Calculates a score for a song based on its qualities and player's fame.
+        Calculates a score for a song based on its qualities, player's fame,
+        and potential label marketing bonus.
         This score determines its likelihood of charting and its position.
         """
-        # Base score from song & recording quality (e.g., out of 200 points)
-        # song_quality and recording_quality are 0.0 - 1.0
-        score = (song_obj.song_quality * 75) + (song_obj.recording_quality * 50) # Max 125 from quality
+        if not player_obj: # Should not happen in normal flow
+            return 0
 
-        # Fame contribution (e.g., up to 50 points)
-        # Player fame can be 0-1000. Let's scale it: max 50 points for 500+ fame.
-        fame_bonus = min(50, player_fame / 10)
+        # Base score from song & recording quality
+        score = (song_obj.song_quality * 75) + (song_obj.recording_quality * 50)
+
+        # Fame contribution
+        fame_bonus = min(50, player_obj.fame / 10)
         score += fame_bonus
 
-        # Genre preference bonus (e.g., up to 25 points)
+        # Genre preference bonus for this specific chart
         if self.chart_genre_preference:
             if song_obj.genre == self.chart_genre_preference:
                 score += 25
-            # Optional: minor bonus for related genres, or penalty for clashing ones (not implemented here)
 
-        # Randomness factor (e.g., +/- 10 points)
-        # score += random.uniform(-10, 10) # Requires import random
+        # Apply marketing bonus if song released via signed label
+        if song_obj.released_by_label_id and player_obj.signed_label_deal and \
+           player_obj.signed_label_deal['label_poi_id'] == song_obj.released_by_label_id:
+            marketing_multiplier = player_obj.signed_label_deal.get('marketing_support_bonus', 1.0)
+            score *= marketing_multiplier
+            # print(f"DEBUG: Applied marketing bonus {marketing_multiplier}x to '{song_obj.title}' for chart score.")
 
-        # Ensure score is not negative, though unlikely with current formula
+        # Randomness factor (e.g., +/- 5% of score) - kept small to not overshadow other factors too much
+        # score *= random.uniform(0.95, 1.05) # Requires import random at top of file
+
         return max(0, score)
 
     def _sort_and_trim_entries(self):
@@ -120,7 +127,7 @@ class Chart:
                 'chart_score': chart_score
             })
 
-    def update_weekly(self, all_player_songs, player_name, player_fame, current_game_time_obj):
+    def update_weekly(self, all_player_songs, player_obj, current_game_time_obj): # Changed signature
         """
         Main weekly update logic for the chart.
         - Decays scores of existing songs.
@@ -156,8 +163,13 @@ class Chart:
                 if is_on_chart or (days_since_release <= RECENCY_WINDOW_DAYS):
                     # If already on chart, its score was decayed. Re-calculate to see if it stays.
                     # If new and recent, calculate its initial score.
-                    current_chart_score = self.calculate_song_chart_score(song, player_fame)
-                    self._add_or_update_song_entry(song, current_chart_score, player_name)
+                    # This requires player_obj to be passed to update_weekly
+                    # For now, player_name and player_fame are passed, but not the full object.
+                    # This needs to be refactored: update_weekly should accept player_obj.
+                    # Let's assume player_obj is passed to update_weekly for now.
+                    # The actual change to method signature and call site in main.py will be next.
+                    current_chart_score = self.calculate_song_chart_score(song, player_obj) # player_obj instead of player_fame
+                    self._add_or_update_song_entry(song, current_chart_score, player_obj.name) # player_obj.name instead of player_name
 
 
         # Store pre-update state for feedback generation
