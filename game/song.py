@@ -27,6 +27,7 @@ class Song:
         self.is_released = False
         self.release_date = None # Will be a GameTime object or string
         self.released_by_label_id = None # Store POI ID of the label if released through one
+        self.buzz_score = 0.0 # Represents temporary promotional heat
 
     def __str__(self):
         details = [

@@ -67,6 +67,12 @@ class Chart:
             if song_obj.genre == self.chart_genre_preference:
                 score += 25
 
+        # Add current buzz score (e.g. from recent promotion)
+        # Buzz score could be a direct addition, or a multiplier. Let's add directly for now.
+        # Max buzz contribution could be capped, e.g. 30-50 points.
+        buzz_contribution = min(40, getattr(song_obj, 'buzz_score', 0.0))
+        score += buzz_contribution
+
         # Apply marketing bonus if song released via signed label
         if song_obj.released_by_label_id and player_obj.signed_label_deal and \
            player_obj.signed_label_deal['label_poi_id'] == song_obj.released_by_label_id:

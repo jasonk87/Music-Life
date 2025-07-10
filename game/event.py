@@ -2,18 +2,21 @@ import random # Needed for incident chance
 
 class Event:
     EVENT_TYPES = {
-        "OPEN_MIC": {"base_fame": 10, "base_payout": 50, "skill_multiplier": 1.0, "songs_required": 1},
-        "CLUB_GIG": {"base_fame": 50, "base_payout": 250, "skill_multiplier": 1.5, "songs_required": 3},
-        "CONCERT": {"base_fame": 200, "base_payout": 1000, "skill_multiplier": 2.0, "songs_required": 5},
-        "FESTIVAL_SLOT": {"base_fame": 500, "base_payout": 3000, "skill_multiplier": 2.5, "songs_required": 7}
+        "OPEN_MIC": {"base_fame": 10, "base_payout": 50, "skill_multiplier": 1.0, "songs_required": 1, "default_gear": ["INSTRUMENT_ACOUSTIC"]},
+        "CLUB_GIG": {"base_fame": 50, "base_payout": 250, "skill_multiplier": 1.5, "songs_required": 3, "default_gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"]},
+        "CONCERT": {"base_fame": 200, "base_payout": 1000, "skill_multiplier": 2.0, "songs_required": 5, "default_gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"]},
+        "FESTIVAL_SLOT": {"base_fame": 500, "base_payout": 3000, "skill_multiplier": 2.5, "songs_required": 7, "default_gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"]},
+        "PLAYER_BOOKED_GIG": {"base_fame": 5, "base_payout": 20, "skill_multiplier": 1.2, "songs_required": 3, "default_gear": ["INSTRUMENT_ACOUSTIC"]} # Base values, success heavily modified by promotion
     }
 
     def __init__(self, name, location, event_type="OPEN_MIC", required_skills=None,
                  required_gear_types=None,
-                 description="", specific_fame_reward=None, specific_payout=None, is_tour_gig=False): # Added is_tour_gig
+                 description="", specific_fame_reward=None, specific_payout=None,
+                 is_tour_gig=False, is_player_organized=False): # Added is_player_organized
         self.name = name
         self.location = location
         self.event_type = event_type
+        self.is_player_organized = is_player_organized
         self.required_gear_types = required_gear_types if required_gear_types else []
 
         type_details = Event.EVENT_TYPES.get(event_type, Event.EVENT_TYPES["OPEN_MIC"])
@@ -161,25 +164,69 @@ class Event:
         actual_payout = self.payout
         outcome_message = ""
 
-        if performance_score >= 90:
-            outcome_message = "Legendary performance! The crowd is ecstatic! Encore! Encore!"
-            actual_fame_reward = int(self.fame_reward * 2.0)
-            actual_payout = int(self.payout * 1.5)
-        elif performance_score >= 75:
-            outcome_message = "Fantastic show! You really connected with the audience."
-            actual_fame_reward = int(self.fame_reward * 1.5)
-            actual_payout = int(self.payout * 1.2)
-        elif performance_score >= 55:
-            outcome_message = "Good gig! The crowd seemed to enjoy it."
-            actual_fame_reward = int(self.fame_reward * 1.1)
-        elif performance_score >= 35:
-            outcome_message = "It was... a performance. Some claps, some confused looks."
-            actual_fame_reward = int(self.fame_reward * 0.8)
-            actual_payout = int(self.payout * 0.9)
-        else:
-            outcome_message = "Yikes. That didn't go well. Better luck next time."
-            actual_fame_reward = int(self.fame_reward * 0.25)
-            actual_payout = int(self.payout * 0.5)
+        # --- Player-Organized Gig Attendance & Payout Modification ---
+        if self.is_player_organized:
+            print(f"This is a player-organized gig at {self.location.name} (Capacity: {getattr(self.location, 'capacity', 100)}).")
+            # Calculate attendance score
+            attendance_score = player.fame / 10.0 # Base from fame (e.g., 100 fame = 10 points)
+            total_setlist_buzz = sum(getattr(s, 'buzz_score', 0.0) for s in setlist)
+            attendance_score += total_setlist_buzz / 5.0 # Buzz from songs (e.g. 50 total buzz = 10 points)
+            attendance_score += random.uniform(-5, 10) # Random factor for attendance
+
+            # Scale attendance to venue capacity (very crudely)
+            # Max attendance score could be, say, 50 for a full small venue
+            effective_attendance_percentage = min(1.0, attendance_score / 30.0) # Max 30 score = 100% full for this calculation
+
+            venue_capacity = getattr(self.location, 'capacity', 50) # Default capacity if not set
+            simulated_attendees = int(venue_capacity * effective_attendance_percentage)
+
+            # Payout for player-booked gigs: let's say $1-5 per attendee, modified by performance
+            base_payout_per_attendee = random.uniform(1, 5)
+            potential_payout = simulated_attendees * base_payout_per_attendee
+
+            # Modify base fame/payout based on performance score and attendance
+            # For player-booked gigs, the base payout/fame is low, so multipliers are more significant
+            if performance_score >= 75: # Good performance
+                actual_payout = int(potential_payout * 1.2)
+                actual_fame_reward = int( (simulated_attendees / 10.0) * 1.5 + self.fame_reward)
+                outcome_message = f"Fantastic show! You drew {simulated_attendees} people and they loved it!"
+            elif performance_score >= 55: # Decent
+                actual_payout = int(potential_payout)
+                actual_fame_reward = int( (simulated_attendees / 10.0) * 1.0 + self.fame_reward)
+                outcome_message = f"Good gig! {simulated_attendees} people showed up and seemed to enjoy it."
+            elif performance_score >= 35: # Mediocre
+                actual_payout = int(potential_payout * 0.7)
+                actual_fame_reward = int( (simulated_attendees / 15.0) * 0.8 + self.fame_reward)
+                outcome_message = f"It was... a performance. {simulated_attendees} attended. Some claps, some confused looks."
+            else: # Bad
+                actual_payout = int(potential_payout * 0.3)
+                actual_fame_reward = int( (simulated_attendees / 20.0) * 0.5 + self.fame_reward)
+                outcome_message = f"Yikes. Only {simulated_attendees} people came, and it didn't go well."
+
+            actual_fame_reward = max(0, actual_fame_reward) # Ensure no negative fame
+            actual_payout = max(0, actual_payout) # Ensure no negative payout
+            print(f"(Player-booked gig: Attendance Score: {attendance_score:.1f}, Simulated Attendees: {simulated_attendees})")
+
+        else: # Standard (non-player-organized) gig outcome
+            if performance_score >= 90:
+                outcome_message = "Legendary performance! The crowd is ecstatic! Encore! Encore!"
+                actual_fame_reward = int(self.fame_reward * 2.0)
+                actual_payout = int(self.payout * 1.5)
+            elif performance_score >= 75:
+                outcome_message = "Fantastic show! You really connected with the audience."
+                actual_fame_reward = int(self.fame_reward * 1.5)
+                actual_payout = int(self.payout * 1.2)
+            elif performance_score >= 55:
+                outcome_message = "Good gig! The crowd seemed to enjoy it."
+                actual_fame_reward = int(self.fame_reward * 1.1) # Standard payout/fame already set
+            elif performance_score >= 35:
+                outcome_message = "It was... a performance. Some claps, some confused looks."
+                actual_fame_reward = int(self.fame_reward * 0.8)
+                actual_payout = int(self.payout * 0.9)
+            else:
+                outcome_message = "Yikes. That didn't go well. Better luck next time."
+                actual_fame_reward = int(self.fame_reward * 0.25)
+                actual_payout = int(self.payout * 0.5)
 
         print(f"\nPerformance Score: {performance_score}/100")
         print(outcome_message)
