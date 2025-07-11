@@ -103,13 +103,24 @@ def setup_world():
             with open(poi_file_path, 'r') as f: city_def_data = json.load(f)
         except Exception as e: print(f"ERROR loading {poi_file_path}: {e}"); continue
         for poi_data in city_def_data.get("points_of_interest", []):
-            props = poi_data.get("properties", {})
+            props = poi_data.get("properties", {}).copy() # Use a copy to safely pop items
+
+            # Extract known properties that are not direct __init__ args but are handled post-init
+            shop_inventory_ids = props.pop("shop_inventory_item_ids", None)
+            menu_items_data = props.pop("menu_items", None)
+            owner_npc_id_temp = props.pop("owner_npc_id", None) # Pop owner_npc_id, store temporarily if needed for later assignment
+            # Any other similar properties from JSON that POI handles specially can be popped here.
+
+            # Now, props only contains arguments that PointOfInterest.__init__ expects
             poi = PointOfInterest(poi_id=poi_data["poi_id"], name=poi_data["name"], description=poi_data["description"],
                                   category=poi_data["category"], interaction_options=list(poi_data.get("interaction_options", [])),
                                   parent_location_id=location_obj.name, **props)
-            if "shop_inventory_item_ids" in props: poi.shop_inventory_item_ids = list(props["shop_inventory_item_ids"])
-            if "menu_items" in props:
-                poi.menu_items = list(props["menu_items"])
+
+            if shop_inventory_ids is not None: # Use the popped variable
+                poi.shop_inventory_item_ids = list(shop_inventory_ids)
+
+            if menu_items_data is not None: # Use the popped variable
+                poi.menu_items = list(menu_items_data)
                 if poi.category == "FOOD_FASTFOOD" and not poi.interaction_options: poi.interaction_options = [item["display_text"] for item in poi.menu_items]
             if poi.poi_id == "citycenter_indiehits_records":
                 poi.interaction_options = [
@@ -120,13 +131,22 @@ def setup_world():
                 ]
             location_obj.add_poi(poi)
         for venue_data in city_def_data.get("venues", []):
-            props = venue_data.get("properties", {})
+            props = venue_data.get("properties", {}).copy() # Use a copy to safely pop items
+
+            # Extract known properties that are not direct __init__ args but are handled post-init
+            # For Venues, 'owner_npc_id' is one such property if it exists in JSON.
+            # Other venue-specific JSON properties not in __init__ could be popped here too.
+            owner_npc_id_temp_venue = props.pop("owner_npc_id", None)
+            booking_fee_prop = props.pop("booking_fee", 50) # Pop booking_fee as it's handled separately
+            allows_player_booking_prop = props.pop("allows_player_booking", True) # Pop allows_player_booking
+
             venue = Venue(venue_id=venue_data["venue_id"], name=venue_data["name"], description=venue_data["description"],
                           venue_type=venue_data["venue_type"], category=venue_data["category"],
                           capacity=venue_data["capacity"], prestige=venue_data["prestige"],
-                          parent_location_id=location_obj.name, **props)
+                          parent_location_id=location_obj.name, **props) # Remaining props passed
+
             venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
-            venue.booking_fee = props.get("booking_fee", 50)
+            venue.booking_fee = booking_fee_prop
             venue.allows_player_booking = props.get("allows_player_booking", True)
             location_obj.add_venue(venue)
         for conn_data in city_def_data.get("intra_city_poi_connections", []):
@@ -249,12 +269,32 @@ def display_hud(player, gt_obj):
           f"| Date: {date_str} | Time: {time_str}\n" + "="*79)
 
 def get_hair_length_description(val):
-    if val == 0: return "Bald"; elif val <= 2: return "Very Short"; elif val <= 4: return "Short";
-    elif val <= 6: return "Medium"; elif val <= 8: return "Long"; else: return "Very Long"
+    if val == 0:
+        return "Bald"
+    elif val <= 2:
+        return "Very Short"
+    elif val <= 4:
+        return "Short"
+    elif val <= 6:
+        return "Medium"
+    elif val <= 8:
+        return "Long"
+    else:
+        return "Very Long"
 
 def get_beard_length_description(val):
-    if val == 0: return "Clean-shaven"; elif val <= 2: return "Stubble"; elif val <= 4: return "Short Beard";
-    elif val <= 6: return "Medium Beard"; elif val <= 8: return "Long Beard"; else: return "Wizard Beard"
+    if val == 0:
+        return "Clean-shaven"
+    elif val <= 2:
+        return "Stubble"
+    elif val <= 4:
+        return "Short Beard"
+    elif val <= 6:
+        return "Medium Beard"
+    elif val <= 8:
+        return "Long Beard"
+    else:
+        return "Wizard Beard"
 
 def talk_to_npc_instance(player, npc):
     if not npc: print("No one specific to talk to."); return
@@ -991,7 +1031,7 @@ def check_contract_expirations(player_obj, current_time_obj):
             deal["renewal_decision_made_this_term"] = "not_offered"
 
     elif is_contract_term_finished:
-        print(f"\n--- Contract with {deal['label_name']} Has Officially Ended ({contract_becomes_inactive_date.year}-{contract_becomes_inactive_date.month}-{contract_becomes_inactive_date.day}) ---")
+        print(f"\n--- Contract with {deal['label_name']} Has Officially Ended ({contract_becomes_inactive_date.year}-{contract_becomes_inactive_date.month:02d}-{contract_becomes_inactive_date.day:02d}) ---")
 
         ended_reason = "Contract Term Completed" # Default reason
         if deal.get("renewal_decision_made_this_term") == "player_declined_renewal":
@@ -1413,8 +1453,14 @@ def main():
                                 else: print("You haven't rented a room here or it expired.")
                             if can_sleep_here:
                                 comfort_eff=0; hunger_eff=0
-                                if player.comfort < 25: comfort_eff=-0.2; elif player.comfort < 50: comfort_eff=-0.1
-                                if player.hunger > 75: hunger_eff=-0.2; elif player.hunger > 50: hunger_eff=-0.1
+                                if player.comfort < 25:
+                                    comfort_eff=-0.2
+                                elif player.comfort < 50:
+                                    comfort_eff=-0.1
+                                if player.hunger > 75:
+                                    hunger_eff=-0.2
+                                elif player.hunger > 50:
+                                    hunger_eff=-0.1
                                 eff_rest_q = max(0.05, poi.rest_quality + comfort_eff + hunger_eff)
                                 energy_g = int(hours_to_rest*10*eff_rest_q); stress_chg = int(hours_to_rest*poi.stress_modifier_hourly)
                                 if poi.category == "HOME": player.homesickness=max(0,player.homesickness-(hours_to_rest*10)); player.comfort=min(100,player.comfort+(hours_to_rest*2))
@@ -2072,7 +2118,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-[end of main.py]
-
-[end of main.py]
