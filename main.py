@@ -111,7 +111,13 @@ def setup_world():
             if "menu_items" in props:
                 poi.menu_items = list(props["menu_items"])
                 if poi.category == "FOOD_FASTFOOD" and not poi.interaction_options: poi.interaction_options = [item["display_text"] for item in poi.menu_items]
-            if poi.poi_id == "citycenter_indiehits_records": poi.interaction_options = [f"Submit Demo (requires {poi.min_fame_to_submit} fame)", "Talk to A&R Rep (requires Manager)"]
+            if poi.poi_id == "citycenter_indiehits_records":
+                poi.interaction_options = [
+                    f"Submit Demo (requires {poi.min_fame_to_submit} fame)",
+                    "Talk to A&R Rep (requires Manager)"
+                    # "Meet with A&R Representative" will be added dynamically if signed
+                    # "Propose Album to Label" will be added dynamically if signed
+                ]
             location_obj.add_poi(poi)
         for venue_data in city_def_data.get("venues", []):
             props = venue_data.get("properties", {})
@@ -120,9 +126,8 @@ def setup_world():
                           capacity=venue_data["capacity"], prestige=venue_data["prestige"],
                           parent_location_id=location_obj.name, **props)
             venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
-            # Add a booking_fee attribute to venues for player-booked gigs, can be overridden in JSON later
-            venue.booking_fee = props.get("booking_fee", 50) # Default to 50 if not specified
-            venue.allows_player_booking = props.get("allows_player_booking", True) # Default to True
+            venue.booking_fee = props.get("booking_fee", 50)
+            venue.allows_player_booking = props.get("allows_player_booking", True)
             location_obj.add_venue(venue)
         for conn_data in city_def_data.get("intra_city_poi_connections", []):
             poi_ids_tuple = tuple(sorted(conn_data["pois"]))
@@ -335,11 +340,14 @@ def handle_phone_menu(player):
                 "5": "View Charts",
                 "6": f"View Label Offers{' (NEW)' if pending_offers_count > 0 else ''}",
                 "7": "View Released Songs",
-                "0": "Back"
             }
+            if player.signed_label_deal:
+                music_opts["8"] = "View Current Label Deal"
+            music_opts["0"] = "Back"
+
 
             music_choice = present_choices(music_opts, "Music Management Options:")
-            adv_time = 5 # Base time for accessing this menu
+            adv_time_music_mgmt = 5 # Base time for accessing this menu, can be overridden by actions
 
             if music_choice == "1": # Self-Release Song
                 recorded_unreleased_songs = [s for s in player.songs_written if s.is_recorded and not s.is_released]
@@ -393,7 +401,7 @@ def handle_phone_menu(player):
                                         if buzz_feedback.get("impact", {}).get("stress", 0) != 0: player.stress = max(0,min(100, player.stress + buzz_feedback["impact"]["stress"]))
                                         print(f"News: {buzz_feedback['source']} commented on '{song_to_release.title}'!")
                                     player.fame += 2
-                                    adv_time += 60
+                                    adv_time_music_mgmt += 60
                                 else:
                                     print(f"Failed to release '{song_to_release.title}'.")
                                     player.money += release_cost
@@ -423,7 +431,7 @@ def handle_phone_menu(player):
                         promo_action_opts = {
                             "1": "Run Social Media Campaign ($50, 2 hrs)",
                             "2": "Print Flyers/Posters Locally ($20, 4 hrs)",
-                            "3": "Contact Local Radio Stations (TBD - No cost/time yet)",
+                            "3": "Contact Local Radio Stations (TBD)",
                             "0": "Cancel Promotion"
                         }
                         promo_choice = present_choices(promo_action_opts, "Choose promotion type:")
@@ -439,7 +447,7 @@ def handle_phone_menu(player):
                             action_msg = "flyers/posters"
                         elif promo_choice == "3":
                             print("Contacting local radio stations... (Feature TBD - No effect yet)")
-                            adv_time += 60
+                            adv_time_music_mgmt += 60
                         elif promo_choice == "0":
                             print("Promotion cancelled.")
                         else:
@@ -448,7 +456,7 @@ def handle_phone_menu(player):
                         if cost > 0 :
                             if player.money >= cost:
                                 player.money -= cost
-                                adv_time += time_hrs * 60
+                                adv_time_music_mgmt += time_hrs * 60
                                 buzz_increase = round(random.uniform(buzz_gain_range[0], buzz_gain_range[1]), 1)
                                 song_to_promote.buzz_score = min(100, song_to_promote.buzz_score + buzz_increase)
                                 print(f"Launched {action_msg} for '{song_to_promote.title}'.")
@@ -460,12 +468,91 @@ def handle_phone_menu(player):
                         print("Song promotion cancelled.")
                     else:
                         print("Invalid song selection.")
-                adv_time += 5
+                adv_time_music_mgmt += 5
+            elif music_choice == "3": # Plan a Local Gig
+                print("\n--- Plan a Local Gig ---")
+                adv_time_gig_planning = 5
+                if not player.current_location or not hasattr(player.current_location, 'venues') or not player.current_location.venues:
+                    print("No venues available in your current location to plan a gig.")
+                else:
+                    suitable_venues = [
+                        v for v in player.current_location.venues
+                        if v.category in ["CLUB_SMALL", "CAFE", "VENUE_BAR", "COMMUNITY_HALL"]
+                           and getattr(v, 'allows_player_booking', True)
+                    ]
+                    if not suitable_venues:
+                        print(f"No suitable small/medium venues found in {player.current_location.name} that allow direct booking at your current level.")
+                    else:
+                        print("Select a venue to try and book:")
+                        venue_map = {str(i+1): v for i, v in enumerate(suitable_venues)}
+                        venue_display = [f"{v.name} (Type: {v.venue_type}, Prestige: {getattr(v, 'prestige', 'N/A')}, Fee: ${getattr(v, 'booking_fee', 50)})" for v in suitable_venues]
 
-            elif music_choice == "3": # Plan a Local Gig (NEW LOGIC TO BE INSERTED HERE)
-                print("DEBUG: Plan a Local Gig chosen") # Placeholder for now
-                # Full logic for Plan a Local Gig will be inserted here in the next step
-                adv_time += 10 # Placeholder time
+                        chosen_venue_key = present_choices(venue_display, "Choose venue (0 to cancel):")
+
+                        if chosen_venue_key and chosen_venue_key != "0" and chosen_venue_key in venue_map:
+                            selected_venue = venue_map[chosen_venue_key]
+                            booking_fee = getattr(selected_venue, 'booking_fee', 50)
+
+                            print(f"Attempting to book {selected_venue.name}. Booking fee: ${booking_fee}")
+                            if player.money < booking_fee:
+                                print(f"Not enough money. You need ${booking_fee} to book this venue.")
+                            else:
+                                try:
+                                    days_in_advance_str = input("How many days from now to book the gig (7-28)? > ")
+                                    days_in_advance = int(days_in_advance_str)
+                                    if not (7 <= days_in_advance <= 28):
+                                        raise ValueError("Gig must be booked between 7 and 28 days in advance.")
+
+                                    num_songs_str = input(f"How many songs for the setlist (1-7, you have {len(player.songs_written)})? > ")
+                                    num_songs = int(num_songs_str)
+                                    if not (1 <= num_songs <= 7):
+                                        raise ValueError("Setlist must be between 1 and 7 songs.")
+                                    if len(player.songs_written) < num_songs:
+                                        raise ValueError(f"Not enough songs written ({len(player.songs_written)}) for a {num_songs}-song setlist.")
+
+                                    player.money -= booking_fee
+                                    adv_time_gig_planning += 15
+
+                                    gig_date = current_game_time.copy()
+                                    gig_date.advance_time(minutes=days_in_advance * 24 * 60)
+                                    gig_date.hour = 20
+                                    gig_date.minute = 0
+
+                                    event_name = f"{player.name} Live at {selected_venue.name}"
+                                    req_skills = {"vocals": 1, "stage_presence": 1}
+                                    if any(g.gear_type.startswith("INSTRUMENT") and "guitar" in g.gear_type.lower() for g in player.gear_inventory if not g.is_broken) or "guitar" in player.skills:
+                                        req_skills["guitar"] = 1
+
+                                    new_gig_event = Event(
+                                        name=event_name, location=selected_venue, event_type="PLAYER_BOOKED_GIG",
+                                        required_skills=req_skills, description=f"A self-organized gig by {player.name}.",
+                                        is_player_organized=True, specific_payout=0, specific_fame_reward=0
+                                    )
+                                    new_gig_event.songs_required_count = num_songs
+
+                                    selected_venue.add_event(new_gig_event)
+
+                                    gig_end_time = gig_date.copy()
+                                    gig_end_time.advance_time(minutes=(num_songs * 10) + 30)
+                                    player.schedule.add_event(
+                                        start_time=gig_date, end_time=gig_end_time, description=event_name,
+                                        category="Gig (Self-Booked)", details={"venue_id": selected_venue.venue_id, "event_id": new_gig_event.name}
+                                    )
+                                    print(f"Successfully booked '{event_name}' at {selected_venue.name} for {gig_date.get_time_string_for_schedule()}!")
+                                    print(f"Paid ${booking_fee} booking fee. Remaining money: ${player.money}")
+                                    print("Remember to promote your gig to get people to show up!")
+
+                                except ValueError as e:
+                                    print(f"Booking cancelled: {e}")
+                                    if 'booking_fee' in locals() and player.money + booking_fee >= 0 : player.money += booking_fee
+                                except Exception as e:
+                                    print(f"An unexpected error occurred during booking: {e}")
+                                    if 'booking_fee' in locals() and player.money + booking_fee >= 0 : player.money += booking_fee
+                        elif chosen_venue_key == "0":
+                            print("Gig planning cancelled.")
+                        else:
+                            print("Invalid venue selection.")
+                adv_time = adv_time_gig_planning
 
             elif music_choice == "4": # Check Reviews/Fan Mail
                 print("\n--- Reviews & Fan Mail ---")
@@ -481,7 +568,7 @@ def handle_phone_menu(player):
                         if not fb_item.get('read'):
                             fb_item['read'] = True
                     input("Press Enter to continue...")
-                adv_time += 10
+                adv_time_music_mgmt += 10
 
             elif music_choice == "5": # View Charts
                 print("\n--- Current Music Charts ---")
@@ -492,7 +579,7 @@ def handle_phone_menu(player):
                         print(f"\n{i+1}. {chart_obj.name}")
                         print(chart_obj)
                 input("Press Enter to continue...")
-                adv_time += 5
+                adv_time_music_mgmt += 5
             elif music_choice == "6": # View Label Offers
                 print("\n--- Record Label Offers ---")
                 pending_offers = [offer for offer in player.active_label_offers if offer.get("status") == "pending_player_decision"]
@@ -511,8 +598,10 @@ def handle_phone_menu(player):
                     print("You have the following contract offers:")
                     for i, offer in enumerate(pending_offers):
                         offer_summary = (f"{i+1}. From: {offer['label_name']} ({offer['offer_type']})\n"
-                                         f"     Advance: ${offer['advance_payment']:,}, Royalty: {offer['royalty_rate_player']*100:.0f}%, Songs: {offer['songs_on_contract']}\n"
-                                         f"     Marketing Bonus: {offer['marketing_support_bonus']:.2f}x, Expires: {offer['expiry_date_obj'].get_time_string_for_schedule()}")
+                                         f"     Advance: ${offer['advance_payment']:,}, Royalty: {offer['royalty_rate_player']*100:.0f}%, "
+                                         f"Albums: {offer.get('album_commitment', 'N/A')}, Duration: {offer.get('contract_duration_years', 'N/A')} yrs\n"
+                                         f"     Creative Control: {offer.get('creative_control_level', 'N/A')}\n"
+                                         f"     Expires: {offer['expiry_date_obj'].get_time_string_for_schedule()}")
                         print(offer_summary)
                         offer_display_map[str(i+1)] = offer
 
@@ -526,7 +615,12 @@ def handle_phone_menu(player):
                         print(f"Advance: ${chosen_offer['advance_payment']:,}")
                         print(f"Your Royalty: {chosen_offer['royalty_rate_player']*100:.0f}%")
                         print(f"Marketing Support Multiplier: {chosen_offer['marketing_support_bonus']:.2f}x")
-                        print(f"Songs on Contract: {chosen_offer['songs_on_contract']}")
+                        # print(f"Songs on Contract: {chosen_offer['songs_on_contract']}") # Superseded by album commitment
+                        print(f"Album Commitment: {chosen_offer.get('album_commitment', 'N/A')} album(s)")
+                        print(f"Contract Duration: {chosen_offer.get('contract_duration_years', 'N/A')} year(s)")
+                        print(f"Creative Control: {chosen_offer.get('creative_control_level', 'N/A')}")
+                        print(f"Tour Support (Label Pays % of your tour costs): {chosen_offer.get('tour_support_budget_percentage', 0)*100:.0f}%")
+                        print(f"Music Video Budget (for one single): ${chosen_offer.get('music_video_budget_single', 0):,}")
                         print(f"Offered on: {chosen_offer['offer_date'].get_time_string_for_schedule()}")
                         print(f"Expires on: {chosen_offer['expiry_date_obj'].get_time_string_for_schedule()}")
 
@@ -534,31 +628,82 @@ def handle_phone_menu(player):
                         response_key = present_choices(response_options, "Your decision?")
 
                         if response_key == "1":
+                            # If accepting a renewal, the old deal in history needs to be closed out.
+                            if chosen_offer.get("offer_type") == "Contract Renewal" and player.signed_label_deal:
+                                old_deal_label_name = player.signed_label_deal.get("label_name")
+                                old_deal_start_date = player.signed_label_deal.get("contract_start_date_obj")
+                                for hist_item in player.label_history:
+                                    if hist_item.get("label_name") == old_deal_label_name and \
+                                       hist_item.get("status") == "active" and \
+                                       hist_item.get("signed_date") == old_deal_start_date: # Match specific contract period
+                                        hist_item["status"] = "ended"
+                                        hist_item["end_date"] = current_game_time.copy() # Ends now as new one starts
+                                        hist_item["reason_for_ending"] = "Superseded by Renewal"
+                                        print(f"DEBUG: Previous contract with {old_deal_label_name} marked as superseded in history.")
+                                        break
+
                             player.signed_label_deal = chosen_offer.copy()
+                            player.signed_label_deal['contract_start_date_obj'] = current_game_time.copy() # Set start date for the new/renewed deal
+
+                            # Generate and store initial objectives (also for renewals)
+                            initial_objectives = generate_initial_label_objectives(player, player.signed_label_deal, current_game_time)
+                            player.signed_label_deal['objectives'] = initial_objectives
+                            # Reset renewal processed flag for the new deal term
+                            player.signed_label_deal['renewal_processed_this_term_flag'] = False
+                            player.signed_label_deal['renewal_decision_made_this_term'] = None
+
                             player.money += chosen_offer['advance_payment']
-                            chosen_offer['status'] = "accepted"
+                            chosen_offer['status'] = "accepted" # Mark the offer in active_label_offers as accepted
+
+                            # Add the NEW active deal to history
+                            player.label_history.append({
+                                "label_name": player.signed_label_deal['label_name'], # Use from the newly signed deal
+                                "deal_type": player.signed_label_deal['offer_type'],
+                                "signed_date": player.signed_label_deal['contract_start_date_obj'],
+                                "status": "active",
+                                "end_date": None,
+                                "reason_for_ending": None
+                            })
+
+                            # Void other pending offers
                             for other_offer in player.active_label_offers:
                                 if other_offer['offer_id'] != chosen_offer['offer_id'] and other_offer['status'] == "pending_player_decision":
                                     other_offer['status'] = "voided_by_player_signing"
-                            print(f"Congratulations! You've signed with {chosen_offer['label_name']}! You received an advance of ${chosen_offer['advance_payment']:,}.")
+
+                            if chosen_offer.get("offer_type") == "Contract Renewal":
+                                print(f"Successfully renewed your contract with {chosen_offer['label_name']}!")
+                            else:
+                                print(f"Congratulations! You've signed with {chosen_offer['label_name']}!")
+                            print(f"You received an advance of ${chosen_offer['advance_payment']:,}. Your current money: ${player.money}")
                             print(f"Your current money: ${player.money}")
-                            adv_time += 30
-                        elif response_key == "2":
+                            adv_time_music_mgmt += 30
+                        elif response_key == "2": # Player declines offer
                             chosen_offer['status'] = "declined_by_player"
                             label_poi_ref = get_poi_or_venue_by_id(chosen_offer['label_poi_id'])
                             if label_poi_ref and hasattr(label_poi_ref, 'player_interest_score'):
                                 label_poi_ref.player_interest_score = max(0, label_poi_ref.player_interest_score - 20)
                                 print(f"(Your relationship with {chosen_offer['label_name']} has cooled slightly.)")
-                            print(f"You have declined the offer from {chosen_offer['label_name']}.")
-                            adv_time += 15
+
+                            if chosen_offer.get("offer_type") == "Contract Renewal":
+                                print(f"You have declined the renewal offer from {chosen_offer['label_name']}. Your current contract remains active until its expiry.")
+                                if player.signed_label_deal and player.signed_label_deal.get("label_poi_id") == chosen_offer.get("label_poi_id"):
+                                    player.signed_label_deal["renewal_offer_player_response"] = "declined"
+                                    # Also ensure renewal_processed_this_term_flag is set so another isn't immediately generated
+                                    player.signed_label_deal["renewal_processed_this_term_flag"] = True
+                                    player.signed_label_deal["renewal_decision_made_this_term"] = "player_declined_renewal"
+
+
+                            else:
+                                print(f"You have declined the offer from {chosen_offer['label_name']}.")
+                            adv_time_music_mgmt += 15
                         else:
                             print("You decide to think it over.")
-                            adv_time += 5
+                            adv_time_music_mgmt += 5
                     elif offer_choice_key == "0":
                         print("Returning to Music Management menu.")
                     else:
                         print("Invalid selection.")
-                adv_time += 5
+                adv_time_music_mgmt += 5
             elif music_choice == "7": # View Released Songs
                 print("\n--- Your Released Music ---")
                 released_songs = [s for s in player.songs_written if s.is_released]
@@ -579,14 +724,104 @@ def handle_phone_menu(player):
                         else:
                             print("  Not currently on any major charts.")
                 input("Press Enter to continue...")
-                adv_time += 10
-            adv_time = max(1, adv_time)
+                adv_time_music_mgmt += 10
+            elif music_choice == "8": # View Current Label Deal
+                if player.signed_label_deal:
+                    deal = player.signed_label_deal
+                    print(f"\n--- Current Deal with: {deal['label_name']} ---")
+                    print(f"Type: {deal['offer_type']}")
+                    print(f"Signed On: {deal['contract_start_date_obj'].get_time_string_for_schedule() if deal.get('contract_start_date_obj') else 'N/A'}")
+                    print(f"Duration: {deal.get('contract_duration_years', 'N/A')} year(s)")
+
+                    # Calculate contract end date if possible
+                    if deal.get('contract_start_date_obj') and deal.get('contract_duration_years'):
+                        end_date_calc = deal['contract_start_date_obj'].copy()
+                        # Simple year addition for now, might need more robust date math if months/days matter
+                        end_date_calc.year += deal['contract_duration_years']
+                        print(f"Expected End Date: {end_date_calc.year}-{end_date_calc.month:02d}-{end_date_calc.day:02d}")
+
+                    print(f"Advance Received: ${deal['advance_payment']:,}")
+                    print(f"Player Royalty: {deal['royalty_rate_player']*100:.0f}%")
+                    print(f"Album Commitment: {deal.get('album_commitment', 'N/A')} album(s)")
+                    print(f"Albums Remaining: {deal.get('albums_remaining_on_commitment', 'N/A')}")
+                    # print(f"Songs on Contract (Legacy): {deal.get('songs_on_contract', 'N/A')}") # Might be confusing with albums
+                    # print(f"Songs Remaining (Legacy): {deal.get('songs_remaining_on_contract', 'N/A')}")
+                    print(f"Creative Control: {deal.get('creative_control_level', 'N/A')}")
+                    print(f"Marketing Support Multiplier: {deal.get('marketing_support_bonus', 1.0):.2f}x")
+                    print(f"Tour Support (Label Covers %): {deal.get('tour_support_budget_percentage', 0)*100:.0f}%")
+                    print(f"Music Video Budget (per eligible single): ${deal.get('music_video_budget_single', 0):,}")
+                    print(f"Current Relationship with Label: {deal.get('label_relationship_score', 'N/A')}/100")
+
+                    if deal.get('objectives'):
+                        print("\nCurrent Label Objectives:")
+                        for i, obj_item in enumerate(deal['objectives']):
+                             # Assuming objective is a string for now. Could be a dict later.
+                            print(f"  {i+1}. {obj_item}")
+                    else:
+                        print("\nNo specific objectives assigned by label currently.")
+
+                    input("\nPress Enter to continue...")
+                    adv_time_music_mgmt += 10
+                else:
+                    print("You are not currently signed to a record label.")
+                adv_time_music_mgmt += 5
+
+            adv_time = adv_time_music_mgmt # Use the accumulated time from music management actions
 
         elif choice == "0": print("Putting phone away."); adv_time=1; break
         else: print("Invalid phone option.")
         if adv_time > 0: advance_game_time(adv_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time)
-        if choice in ["1","2","3", "4"] and present_choices({"1":"Continue phone","0":"Put away"},"Done?")=="0": print("Putting phone away."); break # This "4" also needs to be updated to "7" eventually
+        # Corrected the condition for continuing phone usage to include the new max option number "8"
+        if choice in ["1","2","3", "4", "5", "6", "7", "8"] and present_choices({"1":"Continue phone","0":"Put away"},"Done?")=="0": print("Putting phone away."); break
     print("--------------------")
+
+# --- Label Objectives Function ---
+def generate_initial_label_objectives(player_obj, deal_details, current_time):
+    """Generates a list of initial objectives for the player based on the signed deal."""
+    objectives = []
+    num_albums = deal_details.get('album_commitment', 1)
+    duration_years = deal_details.get('contract_duration_years', 1)
+
+    # Objective 1: Record songs for the first album
+    songs_for_first_album = random.randint(max(1, 8 - num_albums*2), 10) # Fewer songs if multiple albums
+    first_album_deadline_months = max(6, duration_years * 12 // (num_albums + 1) - random.randint(0,2)) # Spread out deadlines
+
+    deadline_date_album1 = current_time.copy()
+    deadline_date_album1.advance_time(minutes=first_album_deadline_months * 30 * 24 * 60) # Approximate months
+    objectives.append(
+        f"Record {songs_for_first_album} new songs for your first album with {deal_details['label_name']} by {deadline_date_album1.year}-{deadline_date_album1.month:02d}-{deadline_date_album1.day:02d}."
+    )
+
+    # Objective 2: Achieve some chart presence
+    # Find a local chart if possible
+    local_chart_name = "a local chart"
+    if ACTIVE_CHARTS:
+        local_chart_name = ACTIVE_CHARTS[0].name # Default to the first chart in the list
+        # Potentially pick one more relevant to the player's home or label's city later
+
+    chart_target_position = random.choice([10, 20, 30]) # Top 10, 20, or 30
+    chart_deadline_months = random.randint(3, 6)
+    deadline_date_chart = current_time.copy()
+    deadline_date_chart.advance_time(minutes=chart_deadline_months * 30 * 24 * 60)
+    objectives.append(
+        f"Achieve a Top {chart_target_position} single on the '{local_chart_name}' chart by {deadline_date_chart.year}-{deadline_date_chart.month:02d}-{deadline_date_chart.day:02d}."
+    )
+
+    # Objective 3: Maintain good relationship (implied, but can be stated)
+    objectives.append(f"Maintain a positive working relationship with {deal_details['label_name']}.")
+
+    # Objective 4 (Optional): Initial tour if tour support is decent
+    if deal_details.get('tour_support_budget_percentage', 0) >= 0.15 and player_obj.fame > 15:
+        tour_objective_deadline_months = random.randint(6,9)
+        deadline_date_tour = current_time.copy()
+        deadline_date_tour.advance_time(minutes=tour_objective_deadline_months * 30 * 24 * 60)
+        objectives.append(
+            f"Undertake a promotional tour (at least 3 dates) with support from {deal_details['label_name']} by {deadline_date_tour.year}-{deadline_date_tour.month:02d}-{deadline_date_tour.day:02d}."
+        )
+
+    print(f"DEBUG: Generated objectives for {player_obj.name} with {deal_details['label_name']}: {objectives}")
+    return objectives
+
 
 # --- Chart Update Function ---
 def update_all_charts(player_obj, current_game_time_obj):
@@ -595,13 +830,11 @@ def update_all_charts(player_obj, current_game_time_obj):
         print("Error: Player object is not correctly initialized for chart updates.")
         return
 
-    # Decay buzz scores weekly
     if hasattr(player_obj, 'songs_written'):
         for song_item in player_obj.songs_written:
             if hasattr(song_item, 'buzz_score'):
-                song_item.buzz_score = round(max(0, song_item.buzz_score * 0.7), 1) # Decay by 30%
+                song_item.buzz_score = round(max(0, song_item.buzz_score * 0.7), 1)
                 if song_item.buzz_score < 0.1 : song_item.buzz_score = 0.0
-
 
     print("\n--- Weekly Chart Updates Processing ---")
     for chart in ACTIVE_CHARTS:
@@ -651,15 +884,209 @@ def update_all_charts(player_obj, current_game_time_obj):
 
     process_weekly_music_income(player_obj)
     check_and_generate_label_offers(player_obj, current_game_time_obj)
+    check_contract_expirations(player_obj, current_game_time_obj) # New call
     print("--- Weekly Chart Updates Finished ---\n")
 
-def check_and_generate_label_offers(player_obj, current_time):
-    if player_obj.signed_label_deal:
+def check_contract_expirations(player_obj, current_time_obj):
+    """Checks if the player's current label contract is expiring and handles renewal/ending."""
+    if not player_obj.signed_label_deal:
         return
+
+    deal = player_obj.signed_label_deal
+    contract_start_time = deal.get('contract_start_date_obj')
+    contract_duration_years = deal.get('contract_duration_years')
+
+    if not contract_start_time or not contract_duration_years:
+        # This should not happen with a properly formed deal
+        return
+
+    # Calculate the actual date the contract becomes inactive
+    # e.g., if start is 2024-01-15 for 1 year, it ends EOD 2025-01-14.
+    # So, on 2025-01-15, it is finished.
+    contract_becomes_inactive_date = contract_start_time.copy()
+    contract_becomes_inactive_date.year += contract_duration_years
+
+    is_contract_term_finished = current_time_obj >= contract_becomes_inactive_date
+
+    # If renewal logic has already been processed for this contract term and it's not yet finished, skip.
+    if deal.get('renewal_processed_this_term_flag', False) and not is_contract_term_finished:
+        return
+
+    days_until_actual_end = -1 # Default to indicate past or error
+    if not is_contract_term_finished:
+        # Calculate days from current_time_obj up to (but not including) contract_becomes_inactive_date
+        # This is a bit complex with simplified date math. GameTime.days_difference is absolute.
+        # We need days *remaining*.
+        if contract_becomes_inactive_date > current_time_obj:
+            # Approximate remaining days
+            years_diff = contract_becomes_inactive_date.year - current_time_obj.year
+            months_diff = contract_becomes_inactive_date.month - current_time_obj.month
+            days_diff = contract_becomes_inactive_date.day - current_time_obj.day
+            days_until_actual_end = (years_diff * 360) + (months_diff * 30) + days_diff
+        else: # current_time_obj is on or after the inactive date, should be caught by is_contract_term_finished
+            days_until_actual_end = 0
+
+    RENEWAL_WINDOW_DAYS = 60 # Process renewal if within 60 days of contract_becomes_inactive_date
+
+    # Check if we are in the renewal window (but not yet finished)
+    if not is_contract_term_finished and days_until_actual_end >= 0 and days_until_actual_end <= RENEWAL_WINDOW_DAYS:
+        # Added check for days_until_actual_end >=0 to ensure it's not past due to approximation issues
+        if deal.get('renewal_processed_this_term_flag', False): # Double check flag
+             return
+
+        print(f"\n--- Contract Renewal Window with {deal['label_name']} (Expires in approx {days_until_actual_end} days) ---")
+        deal['renewal_processed_this_term_flag'] = True
+
+        renewal_score = deal.get('label_relationship_score', 50) + (player_obj.fame / 4)
+        albums_total_commitment = deal.get('album_commitment', 0)
+        albums_remaining = deal.get('albums_remaining_on_commitment', albums_total_commitment)
+        albums_completed = albums_total_commitment - albums_remaining
+
+        if albums_total_commitment > 0: renewal_score += (albums_completed / albums_total_commitment) * 30
+        else: renewal_score += 5
+
+        print(f"DEBUG: Renewal score for {deal['label_name']}: {renewal_score:.1f}")
+
+        if renewal_score >= 80:
+            print(f"{deal['label_name']} is very interested in renewing your contract!")
+            base_adv = deal.get('advance_payment',1000); base_roy = deal.get('royalty_rate_player',0.1)
+            factor = 1.0 + ( (renewal_score - 80) / 40.0 )
+
+            new_advance = base_adv * random.uniform(0.8, 1.2) * factor
+            new_royalty = base_roy * random.uniform(0.9, 1.1) * factor
+            new_royalty = round(min(0.35, max(0.05, new_royalty)), 2)
+            new_duration = random.randint(max(1,deal.get('contract_duration_years',1)-1), deal.get('contract_duration_years',1)+1)
+            new_albums = random.randint(max(1,deal.get('album_commitment',1)-1), deal.get('album_commitment',1)+1)
+            new_albums = min(new_albums, new_duration * 2)
+
+            renewal_offer_details = {
+                "offer_id": f"renewal_{deal['label_poi_id']}_{current_time_obj.year}{current_time_obj.month}{current_time_obj.day}",
+                "label_poi_id": deal['label_poi_id'], "label_name": deal['label_name'],
+                "offer_type": "Contract Renewal",
+                "advance_payment": int(new_advance), "royalty_rate_player": new_royalty,
+                "marketing_support_bonus": round(deal.get('marketing_support_bonus',1.0) * random.uniform(0.9, 1.1) * factor, 2),
+                "album_commitment": new_albums, "albums_remaining_on_commitment": new_albums,
+                "contract_duration_years": new_duration,
+                "creative_control_level": deal.get('creative_control_level', "Shared Control"),
+                "tour_support_budget_percentage": round(deal.get('tour_support_budget_percentage',0) * random.uniform(0.8,1.2) * factor, 2),
+                "music_video_budget_single": int(deal.get('music_video_budget_single',0) * random.uniform(0.7,1.3) * factor if random.random() < 0.7 else 0),
+                "music_video_produced_for_deal": False,
+                "label_relationship_score": deal.get('label_relationship_score', 50),
+                "objectives": [], "status": "pending_player_decision",
+                "offer_date": current_time_obj.copy(),
+                "expiry_date_obj": current_time_obj.copy()
+            }
+            renewal_offer_details["expiry_date_obj"].advance_time(minutes=21 * 24 * 60)
+
+            already_has_pending_renewal = any(
+                o.get("label_poi_id") == deal['label_poi_id'] and o.get("offer_type") == "Contract Renewal" and o.get("status") == "pending_player_decision"
+                for o in player_obj.active_label_offers)
+            if not already_has_pending_renewal:
+                player_obj.active_label_offers.append(renewal_offer_details)
+                print(f"They've sent you a renewal offer. Check phone.")
+                print(f"(Offer: ${renewal_offer_details['advance_payment']:,} adv, {renewal_offer_details['royalty_rate_player']*100:.0f}% royalty)")
+            else: print(f"{deal['label_name']} was considering a renewal, but one is already pending.")
+        else:
+            print(f"{deal['label_name']} has decided not to offer you a contract renewal. (Score: {renewal_score:.1f})")
+            deal["renewal_decision_made_this_term"] = "not_offered"
+
+    elif is_contract_term_finished:
+        print(f"\n--- Contract with {deal['label_name']} Has Officially Ended ({contract_becomes_inactive_date.year}-{contract_becomes_inactive_date.month}-{contract_becomes_inactive_date.day}) ---")
+
+        ended_reason = "Contract Term Completed" # Default reason
+        if deal.get("renewal_decision_made_this_term") == "player_declined_renewal":
+            ended_reason = "Ended - Player Declined Renewal Offer"
+        elif deal.get("renewal_decision_made_this_term") == "not_offered":
+            ended_reason = "Ended - Label Did Not Offer Renewal"
+
+        updated_history = False
+        for hist_deal in player_obj.label_history:
+            # Ensure contract_start_time (from the current deal being ended) is used for matching the history item's signed_date
+            if hist_deal.get("label_name") == deal["label_name"] and \
+               hist_deal.get("status") == "active" and \
+               hasattr(hist_deal.get("signed_date"), 'year') and \
+               hist_deal.get("signed_date").year == contract_start_time.year and \
+               hist_deal.get("signed_date").month == contract_start_time.month and \
+               hist_deal.get("signed_date").day == contract_start_time.day :
+                hist_deal["status"] = "ended"
+                hist_deal["end_date"] = contract_becomes_inactive_date.copy() # Correct variable name
+                hist_deal["reason_for_ending"] = ended_reason
+                updated_history = True
+                break
+
+        if not updated_history:
+            # Fallback: If exact start date match fails, try to find any active deal with the same label.
+            # This is less precise but can catch cases if start dates were slightly off or not perfectly matched.
+            for hist_deal in player_obj.label_history:
+                 if hist_deal.get("label_name") == deal["label_name"] and hist_deal.get("status") == "active":
+                    hist_deal["status"] = "ended"
+                    hist_deal["end_date"] = contract_becomes_inactive_date.copy()
+                    hist_deal["reason_for_ending"] = ended_reason
+                    updated_history = True
+                    print(f"DEBUG: Used fallback history update for ended contract with {deal['label_name']}.")
+                    break
+            if not updated_history:
+                 print(f"DEBUG: CRITICAL - Could not find matching active history entry for deal with {deal['label_name']} signed around {contract_start_time.get_time_string_for_schedule()} to mark as ended.")
+
+        player_obj.signed_label_deal = None
+        print(f"You are now an independent artist again.")
+        player_obj.stress = min(100, player_obj.stress + random.randint(10,20))
+        player_obj.fame = max(0, player_obj.fame - random.randint(2,8))
+
+        for offer in player_obj.active_label_offers[:]:
+            if offer.get("label_poi_id") == deal["label_poi_id"] and offer.get("offer_type") == "Contract Renewal":
+                if offer["status"] == "pending_player_decision":
+                    offer["status"] = "voided_contract_expired"
+                    print(f"Pending renewal from {deal['label_name']} voided.")
+
+def check_and_generate_label_offers(player_obj, current_time): # Parameter name is current_time
+    # Logic to prevent new offers if player is signed and not in a valid state for them
+    if player_obj.signed_label_deal:
+        current_deal = player_obj.signed_label_deal
+        # 1. Check for pending RENEWAL offer from the CURRENT label
+        has_pending_renewal_from_current = any(
+            offer.get("label_poi_id") == current_deal.get("label_poi_id") and \
+            offer.get("offer_type") == "Contract Renewal" and \
+            offer.get("status") == "pending_player_decision"
+            for offer in player_obj.active_label_offers
+        )
+        if has_pending_renewal_from_current:
+            # If player is considering a renewal from their current label, no other label should make an offer.
+            return
+
+        # 2. If not in renewal window with current label, no offers from other labels either.
+        contract_start = current_deal.get('contract_start_date_obj')
+        contract_years = current_deal.get('contract_duration_years')
+        if contract_start and contract_years:
+            contract_becomes_inactive_date = contract_start.copy()
+            contract_becomes_inactive_date.year += contract_years
+
+            if current_time < contract_becomes_inactive_date: # Contract is still active
+                days_remaining_approx = -1
+                # Calculate approximate days remaining until contract_becomes_inactive_date
+                if contract_becomes_inactive_date > current_time:
+                    years_diff = contract_becomes_inactive_date.year - current_time.year
+                    months_diff = contract_becomes_inactive_date.month - current_time.month
+                    day_diff = contract_becomes_inactive_date.day - current_time.day
+                    days_remaining_approx = (years_diff * 360) + (months_diff * 30) + day_diff
+
+                RENEWAL_WINDOW_DAYS = 60
+                # If days_remaining_approx is negative, it implies current_time is past or very close to expiry,
+                # which should be handled by check_contract_expirations setting signed_label_deal to None.
+                # So, if significantly more than RENEWAL_WINDOW_DAYS are left, block other offers.
+                if days_remaining_approx > RENEWAL_WINDOW_DAYS:
+                    return
+
+    # If player is NOT signed, OR IS in renewal window (and no pending renewal from current label), proceed.
     offer_threshold = 80
     for location in WORLD_MAP.values():
         all_pois = location.points_of_interest + location.venues
         for label_poi in all_pois:
+            # 3. Skip if this POI is the player's currently signed label for a "Basic Indie Deal"
+            # Renewal offers are generated by check_contract_expirations.
+            if player_obj.signed_label_deal and label_poi.poi_id == player_obj.signed_label_deal.get('label_poi_id'):
+                continue
+
             if not (hasattr(label_poi, 'category') and label_poi.category == "OFFICE_RECORD_LABEL"):
                 continue
             has_pending_offer_from_this_label = any(
@@ -675,9 +1102,18 @@ def check_and_generate_label_offers(player_obj, current_time):
                 royalty = round(min(0.25, royalty),2)
                 marketing_bonus = 1.1 + round(getattr(label_poi, 'player_interest_score', 0)/500,2)
                 marketing_bonus = round(min(1.5, marketing_bonus),2)
-                songs_on_contract = random.randint(2,4)
+                songs_on_contract = random.randint(2,4) # Potentially phase out or make secondary to album_commitment
                 offer_expiry_time = current_time.copy()
                 offer_expiry_time.advance_time(minutes=14 * 24 * 60)
+
+                # Phase 8: Expanded Deal Terms
+                album_commitment = random.randint(1, 2) # Number of albums
+                contract_duration_years = random.randint(1, 3) # Years
+                creative_control_options = ["Player Friendly", "Shared Control", "Label Priority"]
+                creative_control_level = random.choice(creative_control_options)
+                tour_support_budget_percentage = round(random.uniform(0.05, 0.25), 2) # e.g., 5% to 25% of tour costs
+                music_video_budget_single = random.choice([0, random.randint(500, 3000) if player_obj.fame > 30 else 0]) # Chance of a small video budget
+
                 new_offer = {
                     "offer_id": str(random.randint(10000,99999)),
                     "label_poi_id": label_poi.poi_id, "label_name": label_poi.name,
@@ -688,13 +1124,24 @@ def check_and_generate_label_offers(player_obj, current_time):
                     "songs_remaining_on_contract": songs_on_contract,
                     "status": "pending_player_decision",
                     "offer_date": current_time.copy(),
-                    "expiry_date_obj": offer_expiry_time
+                    "expiry_date_obj": offer_expiry_time,
+                    # New Terms (Phase 8)
+                    "album_commitment": album_commitment,
+                    "albums_remaining_on_commitment": album_commitment, # Initialize this
+                    "contract_duration_years": contract_duration_years,
+                    "contract_start_date_obj": None, # Will be set upon signing
+                    "creative_control_level": creative_control_level,
+                    "tour_support_budget_percentage": tour_support_budget_percentage,
+                    "music_video_budget_single": music_video_budget_single,
+                    "music_video_produced_for_deal": False, # New flag
+                    "label_relationship_score": 50, # Initial relationship score with the label
+                    "objectives": [] # To store label-given objectives
                 }
                 player_obj.active_label_offers.append(new_offer)
                 label_poi.player_interest_score *= 0.7
                 print(f"*** URGENT MESSAGE for {player_obj.name}! ***")
                 print(f"'{label_poi.name}' has sent you a contract offer! Check Phone > Music Management > View Label Offers.")
-                print(f"(Offer: ${advance} advance, {royalty*100:.0f}% royalty, {songs_on_contract} songs. Expires: {offer_expiry_time.get_time_string_for_schedule()})")
+                print(f"(Offer: ${advance:,} advance, {royalty*100:.0f}% royalty, {album_commitment} album(s) over {contract_duration_years} year(s). Expires: {offer_expiry_time.get_time_string_for_schedule()})")
 
 def process_weekly_music_income(player_obj):
     current_week_total_chart_income = 0
@@ -824,12 +1271,10 @@ def main():
     print(f"\n--- {get_current_time_str()} ---"); print(player)
 
     global LAST_CHART_UPDATE_DAY
-    LAST_CHART_UPDATE_DAY = current_game_time.day # Initialize to current day to prevent immediate update
+    LAST_CHART_UPDATE_DAY = current_game_time.day
 
     while True:
-        # Check for weekly chart update
         if (current_game_time.day % 7 == 1) and (current_game_time.day != LAST_CHART_UPDATE_DAY):
-            # Decay song buzz scores first
             if hasattr(player, 'songs_written'):
                 for song_item in player.songs_written:
                     if hasattr(song_item, 'buzz_score'):
@@ -862,8 +1307,28 @@ def main():
                 interactions = list(poi.interaction_options)
                 if isinstance(poi, Venue) and any(e.is_active and (e.are_preparations_complete() or not e.preparation_tasks_required) and 16 <= current_game_time.hour <= 19 for e in poi.events_hosted):
                     if "Hold Pre-Show Autograph Signing (1 hour)" not in interactions: interactions.append("Hold Pre-Show Autograph Signing (1 hour)")
+
                 if poi.category == "OFFICE_NEWS_AGENCY" and player.active_opportunities.get("interview_city_chronicle") == "pending_player_action":
                     if "Attend Scheduled Interview" not in interactions: interactions.append("Attend Scheduled Interview")
+
+                # Dynamic interactions for Record Label if signed
+                if player.signed_label_deal and hasattr(poi, 'poi_id') and player.signed_label_deal.get('label_poi_id') == poi.poi_id:
+                    deal = player.signed_label_deal # Define deal here for local scope
+                    if "Meet with A&R Representative" not in interactions:
+                        interactions.append("Meet with A&R Representative")
+                    # "Propose Album to Label" was removed as a static option earlier, it's fully dynamic now.
+                    # The "Discuss Album Release with Label" is the more appropriate term used below.
+
+                    # Show "Discuss Music Video Production" if budget available and not yet used in this deal
+                    if deal.get("music_video_budget_single", 0) > 0 and not deal.get("music_video_produced_for_deal", False):
+                        if "Discuss Music Video Production" not in interactions:
+                            interactions.append(f"Discuss Music Video Production (Budget: ${deal['music_video_budget_single']:,})")
+
+                    # Show "Discuss Album Release with Label" if albums are remaining on commitment
+                    if deal.get("albums_remaining_on_commitment", 0) > 0:
+                        if "Discuss Album Release with Label" not in interactions:
+                            interactions.append("Discuss Album Release with Label")
+
                 if interactions:
                     idx_choice_str = present_choices(interactions, f"Actions at {poi.name}:")
                     if idx_choice_str and idx_choice_str.isdigit():
@@ -1124,6 +1589,242 @@ def main():
                         elif poi.category == "OFFICE_NEWS_AGENCY" and chosen_text == "Attend Scheduled Interview": action_taken_custom_time = True
                         elif poi.category == "OFFICE_PR_AGENCY" and chosen_text == "Inquire about PR representation": action_taken_custom_time = True
                         elif poi.category == "SHOP_BARBER": action_taken_custom_time = True
+                        elif chosen_text == "Propose Album to Label": # Should only appear if at correct, signed label POI
+                            print("\n--- Propose Album to Label ---")
+                            if player.signed_label_deal and player.signed_label_deal.get('label_poi_id') == poi.poi_id:
+                                print(f"You discuss your upcoming album plans with {player.signed_label_deal['label_name']}.")
+                                # Basic placeholder feedback
+                                relationship_score = player.signed_label_deal.get('label_relationship_score', 50)
+                                if relationship_score > 70:
+                                    print("They seem enthusiastic and offer some minor positive suggestions.")
+                                elif relationship_score > 40:
+                                    print("They listen and nod, saying they'll consider your ideas for the album direction.")
+                                else:
+                                    print("They seem a bit skeptical but agree to review any material you submit.")
+                                print("(Detailed album proposal mechanics and song review to be implemented later.)")
+                                adv_time_general = 60
+                            else:
+                                print("You need to be signed to this label to propose an album.") # Should not happen due to dynamic menu
+                                adv_time_general = 5
+                            action_taken_custom_time = True
+                        elif chosen_text == "Meet with A&R Representative": # Should only appear if at correct, signed label POI
+                            print("\n--- Meet with A&R Representative ---")
+                            if player.signed_label_deal and player.signed_label_deal.get('label_poi_id') == poi.poi_id:
+                                deal = player.signed_label_deal
+                                print(f"You sit down with an A&R representative from {deal['label_name']}.")
+                                adv_time_general = 45
+                                action_taken_custom_time = True
+
+                                print("\nTopics of Discussion:")
+                                meeting_options = {
+                                    "1": "Discuss progress on current objectives",
+                                    "2": "Discuss general label relationship",
+                                    # "3": "Negotiate for more support (TBD)", # Future
+                                    "0": "End meeting"
+                                }
+
+                                while True:
+                                    meeting_choice = present_choices(meeting_options, "What to discuss?")
+                                    if meeting_choice == "0":
+                                        print("You conclude the meeting."); break
+
+                                    if meeting_choice == "1": # Discuss progress on objectives
+                                        print("\n--- Current Label Objectives ---")
+                                        if deal.get('objectives'):
+                                            for i, obj_item in enumerate(deal['objectives']):
+                                                print(f"  {i+1}. {obj_item}")
+                                            print("(Objective tracking and completion status TBD)")
+                                        else:
+                                            print("No specific objectives currently assigned.")
+                                        # Simulate some discussion impact
+                                        if deal['label_relationship_score'] < 40 :
+                                            print("The rep seems concerned about progress.")
+                                            deal['label_relationship_score'] = max(0, deal['label_relationship_score'] - 2)
+                                        elif deal['label_relationship_score'] > 70:
+                                            print("The rep is pleased with your proactive approach.")
+                                            deal['label_relationship_score'] = min(100, deal['label_relationship_score'] + 2)
+                                        else:
+                                            print("The rep nods and takes notes.")
+                                        adv_time_general += 15
+
+                                    elif meeting_choice == "2": # Discuss general label relationship
+                                        print("\n--- Label Relationship ---")
+                                        print(f"Your current standing with the label is: {deal['label_relationship_score']}/100.")
+                                        if deal['label_relationship_score'] > 80:
+                                            print("They praise your recent work and commitment. Things are excellent!")
+                                            deal['label_relationship_score'] = min(100, deal['label_relationship_score'] + 3)
+                                        elif deal['label_relationship_score'] > 60:
+                                            print("The relationship is positive. They appreciate your efforts.")
+                                            deal['label_relationship_score'] = min(100, deal['label_relationship_score'] + 1)
+                                        elif deal['label_relationship_score'] > 40:
+                                            print("Things are okay. They expect continued dedication.")
+                                        elif deal['label_relationship_score'] > 20:
+                                            print("There's some tension. They remind you of their expectations.")
+                                            deal['label_relationship_score'] = max(0, deal['label_relationship_score'] - 3)
+                                        else:
+                                            print("The relationship is strained. The rep expresses clear disappointment.")
+                                            deal['label_relationship_score'] = max(0, deal['label_relationship_score'] - 5)
+                                        print(f"New relationship score: {deal['label_relationship_score']}/100.")
+                                        adv_time_general += 15
+
+                                    # Add more topics later
+                                    if adv_time_general >= 120: # Cap meeting time
+                                        print("The A&R rep indicates the meeting needs to wrap up.")
+                                        break
+                            else:
+                                print("You need to be signed to this label for a formal meeting.") # Should not happen
+                                adv_time_general = 5
+                            action_taken_custom_time = True
+                        elif chosen_text.startswith("Discuss Music Video Production"):
+                            print("\n--- Music Video Production ---")
+                            if player.signed_label_deal and \
+                               player.signed_label_deal.get('label_poi_id') == poi.poi_id and \
+                               player.signed_label_deal.get("music_video_budget_single", 0) > 0 and \
+                               player.signed_label_deal.get("music_video_produced_for_deal", False) is False:
+
+                                deal = player.signed_label_deal
+                                budget = deal['music_video_budget_single']
+                                print(f"The label, {deal['label_name']}, is ready to fund a music video with a budget of ${budget:,}.")
+
+                                released_songs = [s for s in player.songs_written if s.is_released and not s.has_music_video]
+                                if not released_songs:
+                                    print("You have no released songs that don't already have a music video.")
+                                    adv_time_general = 10
+                                else:
+                                    print("Select a song for the music video:")
+                                    song_choices_dict = {str(i+1): song for i, song in enumerate(released_songs)}
+                                    song_display_list = [f"{s.title} (Quality: {s.song_quality:.2f}, Buzz: {s.buzz_score:.1f})" for s in released_songs]
+
+                                    chosen_song_key = present_choices(song_display_list, "Choose song (0 to cancel):")
+
+                                    if chosen_song_key and chosen_song_key != "0" and chosen_song_key in song_choices_dict:
+                                        selected_song = song_choices_dict[chosen_song_key]
+
+                                        if input(f"Produce music video for '{selected_song.title}' using the full budget of ${budget:,}? (This will take ~2 weeks) (y/n) > ").lower() == 'y':
+                                            adv_time_general = 14 * 24 * 60 # 2 weeks
+                                            action_taken_custom_time = True
+
+                                            # Calculate video quality
+                                            base_quality = 0.2
+                                            base_quality += (budget / 10000) * 0.3 # Max 0.3 from budget up to 10k
+                                            base_quality += (player.fame / 200) * 0.2 # Max 0.2 from fame up to 200
+                                            base_quality += selected_song.song_quality * 0.3 # Max 0.3 from song quality
+
+                                            video_quality = round(max(0.1, min(1.0, base_quality + random.uniform(-0.1, 0.1))), 2)
+
+                                            selected_song.has_music_video = True
+                                            selected_song.music_video_quality = video_quality
+
+                                            buzz_increase = video_quality * random.randint(30, 60) # Significant buzz
+                                            selected_song.buzz_score = min(100, selected_song.buzz_score + buzz_increase)
+
+                                            player.signed_label_deal["music_video_produced_for_deal"] = True
+                                            player.signed_label_deal["music_video_budget_single"] = 0 # Budget is used up
+
+                                            print(f"\nMusic video for '{selected_song.title}' is complete!")
+                                            print(f"  Video Quality: {video_quality*100:.0f}/100")
+                                            print(f"  Song Buzz increased by {buzz_increase:.1f} to {selected_song.buzz_score:.1f}!")
+                                            print(f"This project took significant time and effort.")
+                                            player.energy = max(0, player.energy - 30)
+                                            player.stress = min(100, player.stress + 15)
+                                            deal['label_relationship_score'] = min(100, deal['label_relationship_score'] + 5)
+                                            print(f"Your relationship with {deal['label_name']} improved slightly (+5).")
+
+                                        else:
+                                            print("Music video production cancelled.")
+                                            adv_time_general = 10
+                                    else:
+                                        print("No song selected or production cancelled.")
+                                        adv_time_general = 10
+                            else:
+                                print("Conditions not met for music video production discussion (e.g., no budget, already produced, or not at your label's office).")
+                                adv_time_general = 5
+                            action_taken_custom_time = True
+                        elif chosen_text == "Discuss Album Release with Label":
+                            print("\n--- Discuss Album Release ---")
+                            adv_time_general = 15 # Base time for discussion
+                            action_taken_custom_time = True
+                            if player.signed_label_deal and \
+                               player.signed_label_deal.get('label_poi_id') == poi.poi_id and \
+                               player.signed_label_deal.get("albums_remaining_on_commitment", 0) > 0:
+
+                                deal = player.signed_label_deal
+                                label_id = deal['label_poi_id']
+                                MIN_SONGS_FOR_ALBUM = random.randint(6,8) # Label might want 6-8 songs for a release
+
+                                eligible_songs_for_album = [
+                                    s for s in player.songs_written
+                                    if s.is_recorded and s.is_released and
+                                    (s.considered_for_album_with_label_id is None or s.considered_for_album_with_label_id != label_id)
+                                ]
+                                # Also consider songs released via this label specifically, even if not marked by considered_for_album_with_label_id yet
+                                # This logic might need refinement if a song can be on multiple indie albums then a label album
+
+                                if len(eligible_songs_for_album) < MIN_SONGS_FOR_ALBUM:
+                                    print(f"{deal['label_name']} feels you don't have enough new, unreleased (on an album with them) material. Need at least {MIN_SONGS_FOR_ALBUM} suitable songs. You have {len(eligible_songs_for_album)}.")
+                                else:
+                                    print(f"You propose releasing an album with {deal['label_name']}. You have {len(eligible_songs_for_album)} potentially suitable recorded songs.")
+                                    avg_quality = sum(s.song_quality for s in eligible_songs_for_album) / len(eligible_songs_for_album) if eligible_songs_for_album else 0
+                                    avg_rec_quality = sum(s.recording_quality for s in eligible_songs_for_album) / len(eligible_songs_for_album) if eligible_songs_for_album else 0
+
+                                    approval_chance = deal.get('label_relationship_score', 50)
+                                    approval_chance += (avg_quality * 50) # Max 50 from song quality
+                                    approval_chance += (avg_rec_quality * 25) # Max 25 from recording quality
+                                    approval_chance -= (MIN_SONGS_FOR_ALBUM - len(eligible_songs_for_album)) * 5 # Penalty if just at min
+
+                                    print(f"(Debug: Album Approval Score Base: {deal.get('label_relationship_score', 50)}, AvgSongQBonus: {avg_quality*50:.1f}, AvgRecQBonus: {avg_rec_quality*25:.1f} -> Total: {approval_chance:.1f})")
+
+                                    if approval_chance >= 65 : # Needs decent score and songs
+                                        print(f"{deal['label_name']} is excited! \"This sounds like a strong collection, {player.name}! Let's do it.\"")
+
+                                        album_songs_to_release = sorted(eligible_songs_for_album, key=lambda x: x.song_quality, reverse=True)[:random.randint(MIN_SONGS_FOR_ALBUM, MIN_SONGS_FOR_ALBUM + 2)] # Take best N songs
+
+                                        print("\nThe following songs will be featured on the album:")
+                                        for s_idx, s_obj in enumerate(album_songs_to_release):
+                                            print(f"  {s_idx+1}. {s_obj.title}")
+
+                                        if input(f"Proceed with releasing these {len(album_songs_to_release)} songs as an album? (This will take 4-8 weeks) (y/n) > ").lower() == 'y':
+                                            release_time_weeks = random.randint(4, 8)
+                                            adv_time_general += (release_time_weeks * 7 * 24 * 60) - 15 # Subtract base time already added
+
+                                            player.fame += random.randint(15, 30) + int(avg_quality * 10)
+                                            deal["albums_remaining_on_commitment"] = max(0, deal["albums_remaining_on_commitment"] - 1)
+
+                                            for song_item in album_songs_to_release:
+                                                song_item.considered_for_album_with_label_id = label_id
+                                                # Potentially boost buzz for album tracks
+                                                song_item.buzz_score = min(100, song_item.buzz_score + random.uniform(5,15) * song_item.song_quality)
+
+                                            print(f"\nYour new album has been released through {deal['label_name']}!")
+                                            print(f"Fame increased. Albums remaining on contract: {deal['albums_remaining_on_commitment']}.")
+                                            print("The critics and fans are starting to react...")
+
+                                            album_review = generate_feedback_for_album(player, album_songs_to_release, deal['label_name'], current_game_time)
+                                            if album_review:
+                                                player.feedback_received.append(album_review)
+                                                print(f"Review from {album_review['source']}: \"{album_review['quote'][:100]}...\"")
+                                                if 'fame' in album_review['impact']:
+                                                    player.fame = max(0, player.fame + album_review['impact']['fame'])
+                                                if 'stress' in album_review['impact']:
+                                                    player.stress = min(100, max(0, player.stress + album_review['impact']['stress']))
+                                                if 'label_relationship' in album_review['impact']:
+                                                    deal['label_relationship_score'] = min(100, max(0, deal['label_relationship_score'] + album_review['impact']['label_relationship']))
+                                                print(f"(Fame: {player.fame}, Stress: {player.stress}, Label Rel: {deal['label_relationship_score']})")
+
+                                            deal['label_relationship_score'] = min(100, max(0,deal['label_relationship_score'] + 10 + int(avg_quality*10))) # General boost for releasing
+                                            player.stress = max(0, player.stress - random.randint(5,15)) # Release is good
+                                            player.energy = max(0, player.energy - 20)
+                                        else:
+                                            print("Album release cancelled by player.")
+                                    elif approval_chance >= 40:
+                                        print(f"{deal['label_name']} is hesitant. \"Hmm, it's promising, but maybe not quite there yet. Work on a few more stronger tracks.\"")
+                                        deal['label_relationship_score'] = max(0, deal['label_relationship_score'] - 2)
+                                    else:
+                                        print(f"{deal['label_name']} doesn't think this collection is ready. \"This isn't what we're looking for right now, {player.name}.\"")
+                                        deal['label_relationship_score'] = max(0, deal['label_relationship_score'] - 5)
+                                        player.stress = min(100, player.stress + 5)
+                            else:
+                                print("Cannot discuss album release. Not signed, or no albums left on commitment with this label.")
 
                         if not action_taken_custom_time: adv_time_general = 15
                 else: print("Not much to do here specifically."); adv_time_general = 10

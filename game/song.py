@@ -28,6 +28,9 @@ class Song:
         self.release_date = None # Will be a GameTime object or string
         self.released_by_label_id = None # Store POI ID of the label if released through one
         self.buzz_score = 0.0 # Represents temporary promotional heat
+        self.has_music_video = False
+        self.music_video_quality = 0.0
+        self.considered_for_album_with_label_id = None # Store label_poi_id if part of their album discussion/release
 
     def __str__(self):
         details = [
@@ -53,6 +56,10 @@ class Song:
             else:
                 release_info += " (Self-Released)"
             status += f" ({release_info})"
+
+        if self.has_music_video:
+            status += f" (VideoQ: {self.music_video_quality:.2f})"
+
         return status
 
     def mark_as_recorded(self, recording_quality):

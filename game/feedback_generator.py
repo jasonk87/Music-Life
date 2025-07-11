@@ -148,6 +148,104 @@ def generate_feedback_for_song(song_obj, player_obj, chart_entry_details=None, f
     print(f"DEBUG FeedbackGen: Generated for '{song_obj.title}': {feedback_item['quote']} (Source: {feedback_item['source']})")
     return feedback_item
 
+
+def generate_feedback_for_album(player_obj, album_songs, label_name, current_time_obj):
+    """
+    Generates a piece of feedback for an album release.
+    album_songs: A list of Song objects included in the album.
+    label_name: Name of the label releasing the album.
+    """
+    if not player_obj or not album_songs:
+        return None
+
+    num_songs = len(album_songs)
+    avg_song_quality = sum(s.song_quality for s in album_songs) / num_songs if num_songs > 0 else 0
+    avg_rec_quality = sum(s.recording_quality for s in album_songs) / num_songs if num_songs > 0 else 0
+
+    # Determine source - album reviews are usually more formal
+    source_type_rand = random.random()
+    if player_obj.fame < 100 :
+        source = random.choice(SOURCES["local_media"])
+    elif source_type_rand < 0.6 or player_obj.fame < 300: # 60% local media if not super famous
+        source = random.choice(SOURCES["local_media"] + SOURCES["pro_critics"][:1]) # Mix in some lower-tier pro critics
+    else: # Higher fame, more chance of pro critics
+        source = random.choice(SOURCES["pro_critics"])
+
+    quote_parts = []
+
+    # 1. Overall impression based on average song quality
+    album_tone_comment = ""
+    if avg_song_quality < 0.3: album_tone_comment = f"The new album from {player_obj.name} on {label_name} is, frankly, a disappointment."
+    elif avg_song_quality < 0.5: album_tone_comment = f"{player_obj.name}'s latest offering on {label_name} shows some glimmers but ultimately falls short."
+    elif avg_song_quality < 0.7: album_tone_comment = f"A solid, if somewhat unremarkable, album from {player_obj.name} via {label_name}."
+    elif avg_song_quality < 0.85: album_tone_comment = f"{player_obj.name} delivers a strong collection of songs on their new {label_name} release."
+    else: album_tone_comment = f"Absolutely stellar! {player_obj.name}'s new album on {label_name} is a triumph and a must-listen."
+    quote_parts.append(album_tone_comment)
+
+    # 2. Comment on coherence/variety (simple genre check for now)
+    genres_on_album = set(s.genre for s in album_songs)
+    if len(genres_on_album) == 1:
+        quote_parts.append(f"The album is very focused, sticking to its {list(genres_on_album)[0]} roots throughout.")
+    elif len(genres_on_album) <= 3:
+        quote_parts.append(f"There's a nice variety of sounds, blending {', '.join(list(genres_on_album)[:2])} elements effectively.")
+    else:
+        quote_parts.append(f"It's an eclectic mix, perhaps trying to cover too much ground with genres like {', '.join(list(genres_on_album))} all present.")
+
+    # 3. Comment on production based on average recording quality
+    if avg_rec_quality > 0.75:
+        quote_parts.append("The production quality across the album is consistently excellent.")
+    elif avg_rec_quality < 0.4:
+        quote_parts.append("Unfortunately, the overall recording quality doesn't do the songs justice.")
+
+    # 4. Pick one or two standout/weakest tracks (simplified)
+    if num_songs > 0:
+        sorted_songs = sorted(album_songs, key=lambda s: s.song_quality)
+        if avg_song_quality > 0.6 and sorted_songs[-1].song_quality > avg_song_quality + 0.1 : # Good album with a clear standout
+            quote_parts.append(f"Tracks like '{sorted_songs[-1].title}' really shine.")
+        elif avg_song_quality < 0.5 and sorted_songs[0].song_quality < avg_song_quality - 0.1: # Weak album with a clear laggard
+             quote_parts.append(f"However, '{sorted_songs[0].title}' feels like a bit of a letdown.")
+
+
+    final_quote = " ".join(quote_parts)
+
+    feedback_item = {
+        "source": source,
+        "quote": final_quote,
+        "album_title_suggestion": f"{player_obj.name} - Self-Titled Album (via {label_name})", # Or generate one
+        "song_id": None, # Not for a single song
+        "song_title": "Album Review", # For display grouping
+        "date_generated": current_time_obj.copy(),
+        "read": False,
+        "impact": {}
+    }
+
+    # Album review impact
+    fame_impact = 0
+    stress_impact = 0
+    label_rel_impact = 0
+
+    if avg_song_quality >= 0.8: # Excellent album
+        fame_impact = random.randint(5, 10)
+        stress_impact = random.randint(-10, -5)
+        label_rel_impact = random.randint(5,10)
+    elif avg_song_quality >= 0.6: # Good album
+        fame_impact = random.randint(2, 5)
+        stress_impact = random.randint(-5, 0)
+        label_rel_impact = random.randint(2,5)
+    elif avg_song_quality <= 0.3: # Poor album
+        fame_impact = random.randint(-5, -1)
+        stress_impact = random.randint(5, 10)
+        label_rel_impact = random.randint(-10, -5)
+    elif avg_song_quality <= 0.5: # Mediocre
+        stress_impact = random.randint(0,5)
+        label_rel_impact = random.randint(-5, 0)
+
+    feedback_item["impact"] = {"fame": fame_impact, "stress": stress_impact, "label_relationship": label_rel_impact}
+
+    print(f"DEBUG FeedbackGen: Generated for ALBUM by {player_obj.name}: {feedback_item['quote']} (Source: {feedback_item['source']})")
+    return feedback_item
+
+
 if __name__ == '__main__':
     # Requires Song and Player mock objects or actual classes if run directly
     class MockSong:

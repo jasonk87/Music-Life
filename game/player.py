@@ -76,6 +76,7 @@ class Player:
         # Label deal tracking
         self.active_label_offers = [] # List of offer dictionaries
         self.signed_label_deal = None # Stores details of the accepted contract
+        self.label_history = [] # List to store past (fulfilled, breached, dropped) contracts
 
 
     def get_current_gear_capacity(self, travel_mode=None):
