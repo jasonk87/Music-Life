@@ -11,11 +11,15 @@ from game.song import Song
 from game.gear import GearItem
 import random
 import json
+import os # Added for path joining
 
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 from game.chart import Chart # Import the new Chart class
-from game.feedback_generator import generate_feedback_for_song, SOURCES # Import feedback generator and SOURCES
+from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
+
+# Determine the absolute path of the directory containing the script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 WORLD_MAP = {}
 NPC_REGISTRY = {}
@@ -88,74 +92,82 @@ def get_poi_or_venue_by_id(target_id):
 def setup_world():
     global WORLD_MAP, NPC_REGISTRY, PLAYER_HOME_POI_ID_GLOBAL
     WORLD_MAP.clear(); NPC_REGISTRY.clear(); _POI_VENUE_ID_MAP.clear()
+
+    locations_json_path = os.path.join(SCRIPT_DIR, "game_data", "world", "locations.json")
+    npcs_json_path = os.path.join(SCRIPT_DIR, "game_data", "world", "npcs.json")
+
     try:
-        with open("game_data/world/locations.json", 'r') as f: locations_data = json.load(f)
-    except Exception as e: print(f"FATAL ERROR loading locations.json: {e}"); return False
+        with open(locations_json_path, 'r') as f: locations_data = json.load(f)
+    except Exception as e: print(f"FATAL ERROR loading {locations_json_path}: {e}"); return False
+
     temp_location_id_map = {}
     for loc_data in locations_data:
         location = Location(loc_data["name"], loc_data["description"]); location.id = loc_data["id"]
         WORLD_MAP[location.name] = location; temp_location_id_map[location.id] = location
+
     for loc_id_from_json, location_obj in temp_location_id_map.items():
         poi_file_name = next((ld["poi_definition_file"] for ld in locations_data if ld["id"] == loc_id_from_json), None)
         if not poi_file_name: print(f"Warning: No POI file for {location_obj.name}."); continue
-        poi_file_path = f"game_data/world/city_definitions/{poi_file_name}"
-        try:
-            with open(poi_file_path, 'r') as f: city_def_data = json.load(f)
-        except Exception as e: print(f"ERROR loading {poi_file_path}: {e}"); continue
-        for poi_data in city_def_data.get("points_of_interest", []):
-            props = poi_data.get("properties", {}).copy() # Use a copy to safely pop items
 
-            # Extract known properties that are not direct __init__ args but are handled post-init
+        city_def_json_path = os.path.join(SCRIPT_DIR, "game_data", "world", "city_definitions", poi_file_name)
+        try:
+            with open(city_def_json_path, 'r') as f: city_def_data = json.load(f)
+        except Exception as e: print(f"ERROR loading {city_def_json_path}: {e}"); continue
+
+        for poi_data in city_def_data.get("points_of_interest", []):
+            props = poi_data.get("properties", {}).copy()
+
             shop_inventory_ids = props.pop("shop_inventory_item_ids", None)
             menu_items_data = props.pop("menu_items", None)
-            owner_npc_id_temp = props.pop("owner_npc_id", None) # Pop owner_npc_id, store temporarily if needed for later assignment
-            # Any other similar properties from JSON that POI handles specially can be popped here.
+            owner_npc_id_temp = props.pop("owner_npc_id", None)
 
-            # Now, props only contains arguments that PointOfInterest.__init__ expects
             poi = PointOfInterest(poi_id=poi_data["poi_id"], name=poi_data["name"], description=poi_data["description"],
                                   category=poi_data["category"], interaction_options=list(poi_data.get("interaction_options", [])),
                                   parent_location_id=location_obj.name, **props)
 
-            if shop_inventory_ids is not None: # Use the popped variable
+            if shop_inventory_ids is not None:
                 poi.shop_inventory_item_ids = list(shop_inventory_ids)
-
-            if menu_items_data is not None: # Use the popped variable
+            if menu_items_data is not None:
                 poi.menu_items = list(menu_items_data)
                 if poi.category == "FOOD_FASTFOOD" and not poi.interaction_options: poi.interaction_options = [item["display_text"] for item in poi.menu_items]
+            if owner_npc_id_temp:
+                 poi.owner_npc_id = owner_npc_id_temp
+
             if poi.poi_id == "citycenter_indiehits_records":
                 poi.interaction_options = [
                     f"Submit Demo (requires {poi.min_fame_to_submit} fame)",
                     "Talk to A&R Rep (requires Manager)"
-                    # "Meet with A&R Representative" will be added dynamically if signed
-                    # "Propose Album to Label" will be added dynamically if signed
                 ]
             location_obj.add_poi(poi)
-        for venue_data in city_def_data.get("venues", []):
-            props = venue_data.get("properties", {}).copy() # Use a copy to safely pop items
 
-            # Extract known properties that are not direct __init__ args but are handled post-init
-            # For Venues, 'owner_npc_id' is one such property if it exists in JSON.
-            # Other venue-specific JSON properties not in __init__ could be popped here too.
+        for venue_data in city_def_data.get("venues", []):
+            props = venue_data.get("properties", {}).copy()
             owner_npc_id_temp_venue = props.pop("owner_npc_id", None)
-            booking_fee_prop = props.pop("booking_fee", 50) # Pop booking_fee as it's handled separately
-            allows_player_booking_prop = props.pop("allows_player_booking", True) # Pop allows_player_booking
+            booking_fee_prop = props.pop("booking_fee", 50)
+            allows_player_booking_prop = props.pop("allows_player_booking", True)
 
             venue = Venue(venue_id=venue_data["venue_id"], name=venue_data["name"], description=venue_data["description"],
                           venue_type=venue_data["venue_type"], category=venue_data["category"],
                           capacity=venue_data["capacity"], prestige=venue_data["prestige"],
-                          parent_location_id=location_obj.name, **props) # Remaining props passed
+                          parent_location_id=location_obj.name, **props)
 
+            if owner_npc_id_temp_venue:
+                venue.owner_npc_id = owner_npc_id_temp_venue
             venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
             venue.booking_fee = booking_fee_prop
-            venue.allows_player_booking = props.get("allows_player_booking", True)
+            venue.allows_player_booking = allows_player_booking_prop # Corrected to use popped value
             location_obj.add_venue(venue)
+
         for conn_data in city_def_data.get("intra_city_poi_connections", []):
             poi_ids_tuple = tuple(sorted(conn_data["pois"]))
             if len(poi_ids_tuple) == 2: location_obj.intra_city_poi_connections[frozenset(poi_ids_tuple)] = {k: v for k, v in conn_data.items() if k != "pois"}
+
     _build_poi_venue_id_map()
+
     try:
-        with open("game_data/world/npcs.json", 'r') as f: npcs_data = json.load(f)
-    except Exception as e: print(f"ERROR loading npcs.json: {e}"); return False
+        with open(npcs_json_path, 'r') as f: npcs_data = json.load(f)
+    except Exception as e: print(f"ERROR loading {npcs_json_path}: {e}"); return False
+
     for npc_data in npcs_data:
         home_loc_obj = get_poi_or_venue_by_id(npc_data.get("home_location_poi_id")) or WORLD_MAP.get(npc_data.get("home_location_location_id"))
         current_loc_obj = get_poi_or_venue_by_id(npc_data.get("initial_current_location_poi_id")) or WORLD_MAP.get(npc_data.get("initial_current_location_location_id"))
@@ -169,13 +181,15 @@ def setup_world():
             if scheduled_loc_obj: npc.schedule[time_slot] = scheduled_loc_obj
             else: print(f"Warning: Scheduled POI/Venue ID '{loc_id_str}' not found for {npc.name}'s schedule.")
         NPC_REGISTRY[npc.npc_id] = npc
+
     for loc in WORLD_MAP.values():
         for item_list in [loc.points_of_interest, loc.venues]:
             for item in item_list:
                 if hasattr(item, 'owner_npc_id') and isinstance(item.owner_npc_id, str):
                     owner_npc = NPC_REGISTRY.get(item.owner_npc_id)
                     if owner_npc: item.owner_npc_id = owner_npc
-                    else: print(f"Warning: Owner NPC ID '{item.owner_npc_id}' not found for '{item.name}'."); item.owner_npc_id = None
+                    else: print(f"Warning: Owner NPC ID '{item.owner_npc_id}' not found for POI/Venue '{item.name}'."); item.owner_npc_id = None
+
     for loc_data in locations_data:
         curr_loc_obj = temp_location_id_map.get(loc_data["id"])
         if not curr_loc_obj: continue
@@ -183,6 +197,7 @@ def setup_world():
             target_loc_obj = temp_location_id_map.get(conn_data["to_location_id"])
             if target_loc_obj: curr_loc_obj.add_travel_connection(target_loc_obj.name, cost=conn_data["cost"], time_hours=conn_data["time_hours"])
             else: print(f"Warning: Target location ID '{conn_data['to_location_id']}' for travel from '{curr_loc_obj.name}' not found.")
+
     event_defs = [
         {"id": "open_mic_hometown_hall", "venue_id": "hometown_community_hall", "name": "Open Mic Night", "type": "OPEN_MIC", "skills": {"vocals": 1, "guitar": 1}, "gear": ["INSTRUMENT_ACOUSTIC"], "desc": "A chance to show your skills..."},
         {"id": "debut_rusty_mug", "venue_id": "citycenter_rustymug", "name": "Debut at 'The Rusty Mug'", "type": "CLUB_GIG", "skills": {"vocals": 5, "guitar": 5, "stage_presence": 3}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"], "desc": "Your first real club gig!", "prep_tasks": {"Write Setlist (3 songs)": False, "Rehearse Set (2 hours)": False, "Promote Gig Locally": False}},
@@ -196,6 +211,7 @@ def setup_world():
             if "prep_tasks" in ed: evt.preparation_tasks_required = ed["prep_tasks"]
             vo.add_event(evt)
         else: print(f"Warning: Venue ID '{ed['venue_id']}' for event '{ed['name']}' not found or not a Venue.")
+
     player_home_obj = get_poi_or_venue_by_id("hometown_player_home")
     if player_home_obj: PLAYER_HOME_POI_ID_GLOBAL = player_home_obj.poi_id
     else: print("CRITICAL ERROR: Player home POI 'hometown_player_home' not found.")
@@ -1057,16 +1073,16 @@ def check_contract_expirations(player_obj, current_time_obj):
         if not updated_history:
             # Fallback: If exact start date match fails, try to find any active deal with the same label.
             # This is less precise but can catch cases if start dates were slightly off or not perfectly matched.
-            for hist_deal in player_obj.label_history:
-                 if hist_deal.get("label_name") == deal["label_name"] and hist_deal.get("status") == "active":
-                    hist_deal["status"] = "ended"
-                    hist_deal["end_date"] = contract_becomes_inactive_date.copy()
-                    hist_deal["reason_for_ending"] = ended_reason
+            for hist_deal_fallback in player_obj.label_history: # Use a different loop variable to avoid confusion
+                 if hist_deal_fallback.get("label_name") == deal["label_name"] and hist_deal_fallback.get("status") == "active":
+                    hist_deal_fallback["status"] = "ended"
+                    hist_deal_fallback["end_date"] = contract_becomes_inactive_date.copy()
+                    hist_deal_fallback["reason_for_ending"] = ended_reason
                     updated_history = True
                     print(f"DEBUG: Used fallback history update for ended contract with {deal['label_name']}.")
                     break
             if not updated_history:
-                 print(f"DEBUG: CRITICAL - Could not find matching active history entry for deal with {deal['label_name']} signed around {contract_start_time.get_time_string_for_schedule()} to mark as ended.")
+                 print(f"DEBUG: CRITICAL - Could not find matching active history entry for deal with {deal['label_name']} signed around {contract_start_time.get_time_string_for_schedule() if contract_start_time else 'UNKNOWN START'} to mark as ended.")
 
         player_obj.signed_label_deal = None
         print(f"You are now an independent artist again.")
@@ -1803,8 +1819,6 @@ def main():
                                     if s.is_recorded and s.is_released and
                                     (s.considered_for_album_with_label_id is None or s.considered_for_album_with_label_id != label_id)
                                 ]
-                                # Also consider songs released via this label specifically, even if not marked by considered_for_album_with_label_id yet
-                                # This logic might need refinement if a song can be on multiple indie albums then a label album
 
                                 if len(eligible_songs_for_album) < MIN_SONGS_FOR_ALBUM:
                                     print(f"{deal['label_name']} feels you don't have enough new, unreleased (on an album with them) material. Need at least {MIN_SONGS_FOR_ALBUM} suitable songs. You have {len(eligible_songs_for_album)}.")
@@ -1814,16 +1828,16 @@ def main():
                                     avg_rec_quality = sum(s.recording_quality for s in eligible_songs_for_album) / len(eligible_songs_for_album) if eligible_songs_for_album else 0
 
                                     approval_chance = deal.get('label_relationship_score', 50)
-                                    approval_chance += (avg_quality * 50) # Max 50 from song quality
-                                    approval_chance += (avg_rec_quality * 25) # Max 25 from recording quality
-                                    approval_chance -= (MIN_SONGS_FOR_ALBUM - len(eligible_songs_for_album)) * 5 # Penalty if just at min
+                                    approval_chance += (avg_quality * 50)
+                                    approval_chance += (avg_rec_quality * 25)
+                                    approval_chance -= (MIN_SONGS_FOR_ALBUM - len(eligible_songs_for_album)) * 5
 
                                     print(f"(Debug: Album Approval Score Base: {deal.get('label_relationship_score', 50)}, AvgSongQBonus: {avg_quality*50:.1f}, AvgRecQBonus: {avg_rec_quality*25:.1f} -> Total: {approval_chance:.1f})")
 
-                                    if approval_chance >= 65 : # Needs decent score and songs
+                                    if approval_chance >= 65 :
                                         print(f"{deal['label_name']} is excited! \"This sounds like a strong collection, {player.name}! Let's do it.\"")
 
-                                        album_songs_to_release = sorted(eligible_songs_for_album, key=lambda x: x.song_quality, reverse=True)[:random.randint(MIN_SONGS_FOR_ALBUM, MIN_SONGS_FOR_ALBUM + 2)] # Take best N songs
+                                        album_songs_to_release = sorted(eligible_songs_for_album, key=lambda x: x.song_quality, reverse=True)[:random.randint(MIN_SONGS_FOR_ALBUM, MIN_SONGS_FOR_ALBUM + 2)]
 
                                         print("\nThe following songs will be featured on the album:")
                                         for s_idx, s_obj in enumerate(album_songs_to_release):
@@ -1831,14 +1845,13 @@ def main():
 
                                         if input(f"Proceed with releasing these {len(album_songs_to_release)} songs as an album? (This will take 4-8 weeks) (y/n) > ").lower() == 'y':
                                             release_time_weeks = random.randint(4, 8)
-                                            adv_time_general += (release_time_weeks * 7 * 24 * 60) - 15 # Subtract base time already added
+                                            adv_time_general += (release_time_weeks * 7 * 24 * 60) - 15
 
                                             player.fame += random.randint(15, 30) + int(avg_quality * 10)
                                             deal["albums_remaining_on_commitment"] = max(0, deal["albums_remaining_on_commitment"] - 1)
 
                                             for song_item in album_songs_to_release:
                                                 song_item.considered_for_album_with_label_id = label_id
-                                                # Potentially boost buzz for album tracks
                                                 song_item.buzz_score = min(100, song_item.buzz_score + random.uniform(5,15) * song_item.song_quality)
 
                                             print(f"\nYour new album has been released through {deal['label_name']}!")
@@ -1857,8 +1870,8 @@ def main():
                                                     deal['label_relationship_score'] = min(100, max(0, deal['label_relationship_score'] + album_review['impact']['label_relationship']))
                                                 print(f"(Fame: {player.fame}, Stress: {player.stress}, Label Rel: {deal['label_relationship_score']})")
 
-                                            deal['label_relationship_score'] = min(100, max(0,deal['label_relationship_score'] + 10 + int(avg_quality*10))) # General boost for releasing
-                                            player.stress = max(0, player.stress - random.randint(5,15)) # Release is good
+                                            deal['label_relationship_score'] = min(100, max(0,deal['label_relationship_score'] + 10 + int(avg_quality*10)))
+                                            player.stress = max(0, player.stress - random.randint(5,15))
                                             player.energy = max(0, player.energy - 20)
                                         else:
                                             print("Album release cancelled by player.")
@@ -2033,9 +2046,13 @@ def main():
                         else: print("Manager: \"Okay, offer stands.\""); adv_min_staff=5
                     else:
                         print("Manager: \"Let me see what tours I can cook up...\""); adv_min_staff = 20
+                        tours_json_path_local = os.path.join(SCRIPT_DIR, "game_data", "tours.json")
                         try:
-                            with open("game_data/tours.json", 'r') as f: all_tour_templates = json.load(f)
-                        except Exception as e: print(f"Manager: \"Tour planner error: {e}\""); all_tour_templates = []
+                            with open(tours_json_path_local, 'r') as f:
+                                all_tour_templates = json.load(f)
+                        except Exception as e:
+                            print(f"Manager: \"Tour planner error: {e}\"")
+                            all_tour_templates = []
                         eligible_tours = [t for t in all_tour_templates if t['min_fame'] <= player.fame <= t['max_fame'] and t['tour_id'] not in player.completed_tour_ids]
                         if not eligible_tours: print("Manager: \"Nothing quite right for you now.\"")
                         else:
