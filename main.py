@@ -266,14 +266,18 @@ def present_choices(options, title="Choose an option:"): # Old, for non-Curses o
     return None # Should not be relied upon in Curses flow
 
 def present_choices_curses(window, options, title="Choose an option:"):
-    window.clear(); window.box()
+    window.clear()
+    window.box()
     max_h, max_w = window.getmaxyx()
     title_x = max(2, (max_w - len(title)) // 2)
     window.addstr(1, title_x, title, curses.A_BOLD)
 
-    options_list = list(options.items()) if isinstance(options, dict) else [(str(i+1), opt) for i, opt in enumerate(options)]
+    options_list = list(options.items()) if isinstance(options, dict) else [(str(i + 1), opt) for i, opt in enumerate(options)]
     if not options_list:
-        window.addstr(3,2,"Error: No options for menu."); window.refresh(); window.getch(); return None
+        window.addstr(3, 2, "Error: No options for menu.")
+        window.refresh()
+        window.getch()
+        return None
 
     selected_idx = 0
     option_display_y_start = 3
@@ -284,36 +288,50 @@ def present_choices_curses(window, options, title="Choose an option:"):
         for i in range(max_items_on_screen):
             actual_option_idx = current_scroll_top_idx + i
             display_y = option_display_y_start + i
-            if display_y >= max_h -1: break # Ensure we don't write outside window (e.g. on border)
+            if display_y >= max_h - 1:
+                break
 
             if actual_option_idx < len(options_list):
                 key, text = options_list[actual_option_idx]
-                display_text = f"{key}. {text}"[:max_w-6]
+                display_text = f"{text}"[:max_w - 6]
                 attr = curses.A_REVERSE if actual_option_idx == selected_idx else curses.A_NORMAL
                 window.addstr(display_y, 3, display_text, attr)
             else:
-                window.move(display_y, 3); window.clrtoeol()
+                window.move(display_y, 3)
+                window.clrtoeol()
 
         if len(options_list) > max_items_on_screen:
-            if current_scroll_top_idx > 0: window.addstr(option_display_y_start, max_w - 4, "^")
-            else: window.addstr(option_display_y_start, max_w - 4, " ")
-            if current_scroll_top_idx + max_items_on_screen < len(options_list): window.addstr(option_display_y_start + max_items_on_screen -1 , max_w - 4, "v")
-            else: window.addstr(option_display_y_start + max_items_on_screen -1 , max_w - 4, " ")
+            if current_scroll_top_idx > 0:
+                window.addstr(option_display_y_start, max_w - 4, "^")
+            else:
+                window.addstr(option_display_y_start, max_w - 4, " ")
+            if current_scroll_top_idx + max_items_on_screen < len(options_list):
+                window.addstr(option_display_y_start + max_items_on_screen - 1, max_w - 4, "v")
+            else:
+                window.addstr(option_display_y_start + max_items_on_screen - 1, max_w - 4, " ")
 
         window.refresh()
         key_press = window.getch()
 
         if key_press == curses.KEY_UP:
             selected_idx = (selected_idx - 1 + len(options_list)) % len(options_list)
-            if selected_idx < current_scroll_top_idx: current_scroll_top_idx = selected_idx
-            elif selected_idx >= current_scroll_top_idx + max_items_on_screen : current_scroll_top_idx = selected_idx - max_items_on_screen + 1
-            window.clear(); window.box(); window.addstr(1, title_x, title, curses.A_BOLD) # Redraw fully on scroll
+            if selected_idx < current_scroll_top_idx:
+                current_scroll_top_idx = selected_idx
+            elif selected_idx >= current_scroll_top_idx + max_items_on_screen:
+                current_scroll_top_idx = selected_idx - max_items_on_screen + 1
+            window.clear()
+            window.box()
+            window.addstr(1, title_x, title, curses.A_BOLD)
 
         elif key_press == curses.KEY_DOWN:
             selected_idx = (selected_idx + 1) % len(options_list)
-            if selected_idx >= current_scroll_top_idx + max_items_on_screen: current_scroll_top_idx = selected_idx - max_items_on_screen + 1
-            elif selected_idx < current_scroll_top_idx : current_scroll_top_idx = selected_idx
-            window.clear(); window.box(); window.addstr(1, title_x, title, curses.A_BOLD) # Redraw fully on scroll
+            if selected_idx >= current_scroll_top_idx + max_items_on_screen:
+                current_scroll_top_idx = selected_idx - max_items_on_screen + 1
+            elif selected_idx < current_scroll_top_idx:
+                current_scroll_top_idx = selected_idx
+            window.clear()
+            window.box()
+            window.addstr(1, title_x, title, curses.A_BOLD)
 
         elif key_press == curses.KEY_ENTER or key_press == ord('\n') or key_press == ord('\r'):
             return options_list[selected_idx][0]
@@ -321,7 +339,8 @@ def present_choices_curses(window, options, title="Choose an option:"):
         elif 32 <= key_press <= 126:
             pressed_key_str = chr(key_press)
             for i, (opt_key, _) in enumerate(options_list):
-                if opt_key == pressed_key_str: return opt_key
+                if opt_key == pressed_key_str:
+                    return opt_key
 
 
 def get_string_curses(window, r, c, prompt_string, max_len=30):
@@ -627,7 +646,7 @@ def handle_phone_menu(player, main_window):
                     main_window.getch()
                 adv_time = adv_time_music_mgmt
 
-            elif music_choice == "4": # Check Reviews/Fan Mail
+            if music_choice == "4": # Check Reviews/Fan Mail
                 main_window.addstr(1,2, "--- Reviews & Fan Mail ---", curses.A_BOLD)
                 if not player.feedback_received:
                     main_window.addstr(3,2, "No feedback received yet.")
@@ -657,7 +676,7 @@ def handle_phone_menu(player, main_window):
                 main_window.refresh(); main_window.getch()
                 adv_time_music_mgmt += 10
 
-            elif music_choice == "5": # View Charts
+            if music_choice == "5": # View Charts
                 main_window.addstr(1,2, "--- Current Music Charts ---", curses.A_BOLD)
                 if not ACTIVE_CHARTS: main_window.addstr(3,2, "No music charts available.")
                 else:
@@ -1676,6 +1695,4 @@ def main(): # Old main, effectively deprecated for Curses UI
 if __name__ == "__main__":
     curses.wrapper(curses_main)
 
-[end of main.py]
 
-[end of main.py]
