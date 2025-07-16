@@ -1,0 +1,91 @@
+import pygame
+import sys
+
+# --- Constants ---
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
+FPS = 60
+
+# Colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREY = (128, 128, 128)
+LIGHT_GREY = (200, 200, 200)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+
+# Fonts
+pygame.font.init()
+FONT_DEFAULT = pygame.font.Font(None, 32)
+FONT_TITLE = pygame.font.Font(None, 48)
+FONT_LOG = pygame.font.Font(None, 24)
+
+class PygameUI:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Music-Life Sim")
+        self.clock = pygame.time.Clock()
+        self.log_messages = []
+
+    def clear_screen(self):
+        self.screen.fill(BLACK)
+
+    def update_display(self):
+        pygame.display.flip()
+        self.clock.tick(FPS)
+
+    def draw_text(self, text, font, color, x, y, centered=False):
+        text_surface = font.render(text, True, color)
+        text_rect = text_surface.get_rect()
+        if centered:
+            text_rect.center = (x, y)
+        else:
+            text_rect.topleft = (x, y)
+        self.screen.blit(text_surface, text_rect)
+
+    def draw_hud(self, date_str, money_str, hair_length, beard_length):
+        # Top-left: Date and Money
+        self.draw_text(f"Date: {date_str}", FONT_DEFAULT, WHITE, 20, 20)
+        self.draw_text(f"Money: ${money_str}", FONT_DEFAULT, WHITE, 20, 50)
+
+        # Top-right: Portrait and indicators
+        portrait_rect = pygame.Rect(SCREEN_WIDTH - 220, 20, 200, 200)
+        pygame.draw.rect(self.screen, WHITE, portrait_rect, 2)
+        self.draw_text("Portrait", FONT_DEFAULT, WHITE, portrait_rect.centerx, portrait_rect.centery, centered=True)
+        self.draw_text(f"Hair: {hair_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 220, 230)
+        self.draw_text(f"Beard: {beard_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 220, 260)
+
+    def add_log_message(self, message):
+        self.log_messages.insert(0, message)
+        if len(self.log_messages) > 5:
+            self.log_messages.pop()
+
+    def draw_log(self):
+        log_y_start = SCREEN_HEIGHT - 120
+        for i, msg in enumerate(self.log_messages):
+            self.draw_text(msg, FONT_LOG, LIGHT_GREY, 20, log_y_start + (i * 20))
+
+    def present_choices(self, options, title):
+        selected_index = 0
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        selected_index = (selected_index - 1) % len(options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_index = (selected_index + 1) % len(options)
+                    elif event.key == pygame.K_RETURN:
+                        return list(options.keys())[selected_index]
+
+            self.clear_screen()
+            self.draw_text(title, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 100, centered=True)
+
+            for i, (key, text) in enumerate(options.items()):
+                color = WHITE if i == selected_index else GREY
+                self.draw_text(text, FONT_DEFAULT, color, SCREEN_WIDTH // 2, 200 + i * 40, centered=True)
+
+            self.update_display()
