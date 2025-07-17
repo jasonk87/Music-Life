@@ -444,342 +444,50 @@ def talk_to_npc_instance(player, npc, main_window):
     final_talk_time = max(15, talk_duration_minutes)
     advance_game_time(final_talk_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, final_talk_time)
 
-def handle_phone_menu(player, main_window):
+def handle_phone_menu(player, ui):
+    phone_menu_opts = {
+        "1": "Schedule",
+        "2": "Music",
+        "3": "Contacts",
+        "0": "Back"
+    }
+
     while True:
-        main_window.clear(); main_window.box()
-        opts = {"1":"Check Schedule", "2":"Local News", "3":"Contacts", "4":"Music Management", "0":"Put Phone Away"}
-        choice = present_choices_curses(main_window, opts, f"Phone Options ({player.name} - {get_current_time_str()})")
-        adv_time = 1
-        main_window.clear(); main_window.box()
-
-        if choice == "1": # Check Schedule
-            sched_opts = {"1":"Today", "2":"Tomorrow", "3":"This Week", "0":"Back"}
-            view_choice = present_choices_curses(main_window, sched_opts, "Select schedule view:")
-            main_window.clear(); main_window.box()
-            if view_choice == "0": continue
-            target_time = current_game_time.copy()
-            if view_choice == "2": target_time.advance_time(24*60)
-            items, title_str = [], ""
-            if view_choice in ["1","2"]:
-                items=player.schedule.get_events_for_day(target_time.year,target_time.month,target_time.day)
-                title_str=f"{sched_opts[view_choice]}'s Schedule ({target_time.year}-{target_time.month:02d}-{target_time.day:02d})"
-            elif view_choice == "3":
-                items=player.schedule.get_events_for_week(target_time.year,target_time.month,target_time.day)
-                title_str=f"This Week's Schedule (Start: {target_time.year}-{target_time.month:02d}-{target_time.day:02d})"
-            main_window.addstr(1, 2, title_str, curses.A_BOLD)
-            if not items: main_window.addstr(3, 2, "Nothing scheduled.")
-            else:
-                for i, item_obj in enumerate(items):
-                    main_window.addstr(i + 3, 2, str(item_obj)[:main_window.getmaxyx()[1]-4])
-            main_window.addstr(main_window.getmaxyx()[0] - 2, 2, "Press any key..."); main_window.refresh(); main_window.getch()
-            adv_time = 10
-
+        choice = ui.present_choices(phone_menu_opts, "Phone")
+        if choice == "0":
+            break
+        elif choice == "1":
+            # Show schedule
+            pass
         elif choice == "2":
-            main_window.addstr(1,2, "--- Local News ---"); main_window.addstr(3,2, "(Feature TBD)")
-            main_window.addstr(main_window.getmaxyx()[0] - 2, 2, "Press any key..."); main_window.refresh(); main_window.getch()
-            adv_time = 5
+            handle_music_menu(player, ui)
+        elif choice == "3":
+            handle_contacts_menu(player, ui)
 
-        elif choice == "3": # Contacts
-            main_window.addstr(1,2, "--- Contacts ---", curses.A_BOLD)
-            if not player.contacts: main_window.addstr(3,2, "Contact list empty."); adv_time=1
-            else:
-                contact_map = {str(i+1): c for i, c in enumerate(player.contacts)}
-                contact_opts_curses = {k : f"{v['name']} (Notes: {v.get('notes','N/A')})" for k,v in contact_map.items()}
-                contact_opts_curses["0"] = "Back"
-                sel_c_key = present_choices_curses(main_window, contact_opts_curses, "Select contact to call:")
-                main_window.clear(); main_window.box()
-                if sel_c_key != "0" and sel_c_key in contact_map:
-                    contact_to_call = contact_map[sel_c_key]
-                    main_window.addstr(1,2, f"Calling {contact_to_call['name']}...", curses.A_BOLD); main_window.refresh(); curses.napms(1000)
-                    call_mins = random.randint(2,5); adv_time += call_mins
-                    npc_obj = NPC_REGISTRY.get(contact_to_call['npc_id'])
-                    responses = [f"{contact_to_call['name']} doesn't pick up.", f"{contact_to_call['name']} is busy."]
-                    chosen_response = random.choice(responses)
-                    if npc_obj: npc_obj.add_memory(f"Call from {player.name} ({chosen_response}).")
-                    main_window.addstr(3,2, chosen_response); GAME_LOG.add_message(f"Call to {contact_to_call['name']}: {chosen_response}")
-                elif sel_c_key == "0": main_window.addstr(1,2, "Call cancelled."); GAME_LOG.add_message("Contact call cancelled.")
-                else: main_window.addstr(1,2, "Invalid contact."); GAME_LOG.add_message("Invalid contact selection.")
-            main_window.addstr(main_window.getmaxyx()[0] - 2, 2, "Press any key..."); main_window.refresh(); main_window.getch()
+def handle_music_menu(player, ui):
+    music_menu_opts = {
+        "1": "Write Song",
+        "2": "Record Song",
+        "3": "Release Song",
+        "0": "Back"
+    }
+    while True:
+        choice = ui.present_choices(music_menu_opts, "Music")
+        if choice == "0":
+            break
+        # Handle other choices
 
-        elif choice == "4": # Music Management
-            adv_time_music_mgmt = 5
-            music_management_active = True
-            while music_management_active:
-                main_window.clear(); main_window.box()
-                unread_feedback_count = sum(1 for f_item in player.feedback_received if not f_item.get("read", False))
-                pending_offers_count = sum(1 for offer in player.active_label_offers if offer.get("status") == "pending_player_decision")
-                music_opts_curses = {
-                    "1": "Self-Release Song", "2": "Promote Released Song", "3": "Plan a Local Gig",
-                    "4": f"Reviews/Fan Mail{' (NEW)' if unread_feedback_count > 0 else ''}",
-                    "5": "View Charts", "6": f"Label Offers{' (NEW)' if pending_offers_count > 0 else ''}",
-                    "7": "View Released Songs"}
-                if player.signed_label_deal: music_opts_curses["8"] = "View Current Label Deal"
-                music_opts_curses["0"] = "Back to Phone Menu"
-                music_choice = present_choices_curses(main_window, music_opts_curses, "Music Management")
-                main_window.clear(); main_window.box()
+def handle_contacts_menu(player, ui):
+    contacts_menu_opts = {}
+    for i, contact in enumerate(player.contacts):
+        contacts_menu_opts[str(i+1)] = contact['name']
+    contacts_menu_opts["0"] = "Back"
 
-                if music_choice == "1": # Self-Release Song
-                    main_window.addstr(1,2, "--- Self-Release Song ---", curses.A_BOLD)
-                    recorded_unreleased = [s for s in player.songs_written if s.is_recorded and not s.is_released]
-                    if not recorded_unreleased:
-                        main_window.addstr(3,2, "No recorded songs ready for release.")
-                        GAME_LOG.add_message("Self-Release: No recorded, unreleased songs.")
-                    else:
-                        song_map = {str(i+1): s for i, s in enumerate(recorded_unreleased)}
-                        song_disp = {k: f"{v.title} (Q:{v.song_quality:.2f} RecQ:{v.recording_quality:.2f})" for k,v in song_map.items()}
-                        song_disp["0"] = "Cancel"
-                        chosen_song_key = present_choices_curses(main_window, song_disp, "Choose song to release:")
-                        main_window.clear(); main_window.box()
-                        if chosen_song_key and chosen_song_key != "0" and chosen_song_key in song_map:
-                            song_to_release = song_map[chosen_song_key]; release_cost = 100
-                            main_window.addstr(1,2, f"Release '{song_to_release.title}' for ${release_cost}?", curses.A_BOLD)
-                            confirm_key = present_choices_curses(main_window, {"1":"Yes", "0":"No"}, "Confirm Release:")
-                            main_window.clear(); main_window.box()
-                            if confirm_key == "1":
-                                if player.money >= release_cost:
-                                    player.money -= release_cost
-                                    if song_to_release.mark_as_released(current_game_time.copy()):
-                                        main_window.addstr(1,2, f"'{song_to_release.title}' released! Money: ${player.money}")
-                                        GAME_LOG.add_message(f"Self-released '{song_to_release.title}'.")
-                                        # Feedback & fame logic here
-                                        adv_time_music_mgmt += 60
-                                    else: main_window.addstr(1,2, "Release failed."); player.money += release_cost
-                                else: main_window.addstr(1,2, f"Not enough money (need ${release_cost}).")
-                            else: main_window.addstr(1,2, "Release cancelled.")
-                        else: main_window.addstr(1,2, "Release process cancelled.")
-
-                elif music_choice == "2": # Promote Released Song
-                    main_window.addstr(1,2, "--- Promote Released Song ---", curses.A_BOLD)
-                    released = [s for s in player.songs_written if s.is_released]
-                    if not released: main_window.addstr(3,2, "No songs released to promote.")
-                    else:
-                        song_map = {str(i+1): s for i,s in enumerate(released)}
-                        song_disp = {k: f"{v.title} (Buzz: {v.buzz_score:.1f})" for k,v in song_map.items()}
-                        song_disp["0"] = "Cancel"
-                        chosen_song_key = present_choices_curses(main_window, song_disp, "Choose song to promote:")
-                        main_window.clear(); main_window.box()
-                        if chosen_song_key and chosen_song_key != "0" and chosen_song_key in song_map:
-                            song_to_promote = song_map[chosen_song_key]
-                            main_window.addstr(1,2, f"Promoting: {song_to_promote.title}", curses.A_BOLD)
-                            promo_actions = {"1":"Social Media ($50, 2hr)", "2":"Flyers ($20, 4hr)", "0":"Cancel"}
-                            action_key = present_choices_curses(main_window, promo_actions, "Promotion type:")
-                            main_window.clear(); main_window.box()
-                            cost, time_h, buzz_r, msg_promo = 0,0,(0,0),""
-                            if action_key == "1": cost,time_h,buzz_r,msg_promo = 50,2,(5,15),"Social media"
-                            elif action_key == "2": cost,time_h,buzz_r,msg_promo = 20,4,(2,8),"Flyers"
-
-                            if cost > 0:
-                                if player.money >= cost:
-                                    player.money -= cost; adv_time_music_mgmt += time_h*60
-                                    buzz_inc = round(random.uniform(buzz_r[0],buzz_r[1]),1)
-                                    song_to_promote.buzz_score = min(100, song_to_promote.buzz_score + buzz_inc)
-                                    main_window.addstr(1,2, f"{msg_promo} campaign run for '{song_to_promote.title}'. Buzz +{buzz_inc:.1f}")
-                                    GAME_LOG.add_message(f"Promoted '{song_to_promote.title}' via {msg_promo}. Buzz: {song_to_promote.buzz_score:.1f}")
-                                else: main_window.addstr(1,2, f"Not enough money for {msg_promo}.")
-                            elif action_key != "0": main_window.addstr(1,2,"Promotion type TBD or cancelled.")
-                        else: main_window.addstr(1,2, "Promotion cancelled.")
-
-                elif music_choice == "3": # Plan a Local Gig
-                    main_window.addstr(1,2, "--- Plan a Local Gig ---", curses.A_BOLD)
-                    y_offset_gig = 3
-                    if not player.current_location or not hasattr(player.current_location, 'venues') or not player.current_location.venues:
-                        main_window.addstr(y_offset_gig, 2, "No venues in current location.")
-                        GAME_LOG.add_message("Plan Local Gig: No venues in current location.")
-                    else:
-                        suitable_venues = [v for v in player.current_location.venues if v.category in ["CLUB_SMALL", "CAFE", "VENUE_BAR", "COMMUNITY_HALL"] and getattr(v, 'allows_player_booking', True)]
-                        if not suitable_venues:
-                            main_window.addstr(y_offset_gig, 2, f"No suitable venues in {player.current_location.name}.")
-                            GAME_LOG.add_message(f"Plan Local Gig: No suitable venues in {player.current_location.name}.")
-                        else:
-                            venue_map = {str(i+1): v for i,v in enumerate(suitable_venues)}
-                            venue_disp = {k:f"{v.name} (Fee: ${getattr(v,'booking_fee',50)})" for k,v in venue_map.items()}
-                            venue_disp["0"] = "Cancel"
-                            chosen_venue_key = present_choices_curses(main_window, venue_disp, "Choose venue:")
-                            main_window.clear(); main_window.box(); y_offset_gig=1
-                            if chosen_venue_key and chosen_venue_key != "0" and chosen_venue_key in venue_map:
-                                selected_venue = venue_map[chosen_venue_key]; booking_fee = getattr(selected_venue, 'booking_fee',50)
-                                main_window.addstr(y_offset_gig,2,f"Booking: {selected_venue.name} (Fee: ${booking_fee})", curses.A_BOLD); y_offset_gig+=2
-                                if player.money < booking_fee:
-                                    main_window.addstr(y_offset_gig,2,f"Not enough money (need ${booking_fee}).")
-                                    GAME_LOG.add_message(f"Plan Local Gig: Not enough money for {selected_venue.name} (Need ${booking_fee}).")
-                                else:
-                                    try:
-                                        days_str = get_string_curses(main_window,y_offset_gig,2,"Days from now (7-28)? "); y_offset_gig+=1
-                                        days_adv = int(days_str)
-                                        if not (7<=days_adv<=28): raise ValueError("Must be 7-28 days.")
-
-                                        songs_str = get_string_curses(main_window,y_offset_gig,2,f"#Songs (1-7, have {len(player.songs_written)})? "); y_offset_gig+=1
-                                        num_songs = int(songs_str)
-                                        if not (1<=num_songs<=7): raise ValueError("Setlist 1-7 songs.")
-                                        if len(player.songs_written)<num_songs: raise ValueError(f"Not enough songs ({len(player.songs_written)}) for {num_songs} songs.")
-
-                                        player.money-=booking_fee; adv_time_music_mgmt+=15
-                                        gig_date = current_game_time.copy(); gig_date.advance_time(days_adv*24*60); gig_date.hour,gig_date.minute = 20,0
-                                        ev_name = f"{player.name} Live at {selected_venue.name}"
-                                        new_event = Event(name=ev_name,location=selected_venue,event_type="PLAYER_BOOKED_GIG", required_skills={"vocals":1,"stage_presence":1}, description="Self-organized gig.", is_player_organized=True)
-                                        new_event.songs_required_count = num_songs
-                                        selected_venue.add_event(new_event)
-                                        gig_end = gig_date.copy(); gig_end.advance_time((num_songs*10)+30)
-                                        player.schedule.add_event(gig_date,gig_end,ev_name,"Gig (Self-Booked)",details={"venue_id":selected_venue.venue_id,"event_id":new_event.name})
-                                        main_window.addstr(y_offset_gig,2,f"Booked '{ev_name}' for {gig_date.get_time_string_for_schedule()}!"); y_offset_gig+=1
-                                        main_window.addstr(y_offset_gig,2,f"Paid ${booking_fee}. Money: ${player.money}"); y_offset_gig+=1
-                                        main_window.addstr(y_offset_gig,2,"Promote your gig for better turnout!")
-                                        GAME_LOG.add_message(f"Booked player gig: {ev_name} for {gig_date.get_time_string_for_schedule()}. Paid ${booking_fee}.")
-                                    except ValueError as e:
-                                        main_window.addstr(y_offset_gig,2,f"Booking Error: {e}")
-                                        GAME_LOG.add_message(f"Plan Local Gig: Booking error - {e}")
-                                        if 'booking_fee' in locals() and player.money + booking_fee >= 0 : player.money+=booking_fee
-                                    except Exception as e:
-                                        main_window.addstr(y_offset_gig,2,f"Unexpected Error: {e}")
-                                        GAME_LOG.add_message(f"Plan Local Gig: Unexpected error - {e}")
-                                        if 'booking_fee' in locals() and player.money + booking_fee >= 0 : player.money+=booking_fee
-                            else:
-                                main_window.addstr(y_offset_gig,2,"Gig planning cancelled.")
-                                GAME_LOG.add_message("Plan Local Gig: Cancelled at venue selection.")
-
-                elif music_choice == "0": # Back to Phone Menu
-                    music_management_active = False
-                    adv_time = adv_time_music_mgmt
-                    continue
-
-                if music_choice in ["1","2","3"]:
-                    main_window.addstr(main_window.getmaxyx()[0] - 2, 2, "Press any key...")
-                    main_window.refresh()
-                    main_window.getch()
-                adv_time = adv_time_music_mgmt
-
-            if music_choice == "4": # Check Reviews/Fan Mail
-                main_window.addstr(1,2, "--- Reviews & Fan Mail ---", curses.A_BOLD)
-                if not player.feedback_received:
-                    main_window.addstr(3,2, "No feedback received yet.")
-                else:
-                    max_h, max_w = main_window.getmaxyx()
-                    review_start_line = 3
-                    for i, fb_item in enumerate(reversed(player.feedback_received)):
-                        if review_start_line + 4 >= max_h -1:
-                            main_window.addstr(review_start_line, 2, "--More--(press key)")
-                            main_window.getch()
-                            main_window.clear(); main_window.box()
-                            main_window.addstr(1,2, "--- Reviews & Fan Mail (cont.) ---", curses.A_BOLD)
-                            review_start_line = 3
-
-                        main_window.addstr(review_start_line, 2, f"{'[UNREAD] ' if not fb_item.get('read') else ''}From: {fb_item['source']} (Song: '{fb_item['song_title']}')"[:max_w-4])
-                        review_start_line += 1
-                        main_window.addstr(review_start_line, 4, f"Date: {fb_item['date_generated'].get_time_string_for_schedule()}"[:max_w-6])
-                        review_start_line += 1
-                        main_window.addstr(review_start_line, 4, f"Quote: \"{fb_item['quote']}\""[:max_w-6])
-                        review_start_line +=1
-                        if fb_item.get('impact'):
-                            main_window.addstr(review_start_line,4, f"Impact: {str(fb_item['impact'])}"[:max_w-6])
-                            review_start_line+=1
-                        if not fb_item.get('read'): fb_item['read'] = True
-                        review_start_line +=1
-                main_window.addstr(main_window.getmaxyx()[0] - 2, 2, "Press any key to continue...")
-                main_window.refresh(); main_window.getch()
-                adv_time_music_mgmt += 10
-
-            if music_choice == "5": # View Charts
-                main_window.addstr(1,2, "--- Current Music Charts ---", curses.A_BOLD)
-                if not ACTIVE_CHARTS: main_window.addstr(3,2, "No music charts available.")
-                else:
-                    line_num = 3
-                    for i, chart_obj in enumerate(ACTIVE_CHARTS):
-                        if line_num + 2 + len(chart_obj.entries) >= main_window.getmaxyx()[0] -2:
-                             main_window.addstr(line_num,2,"--More--(press key)"); main_window.getch(); main_window.clear();main_window.box(); line_num=1
-                             main_window.addstr(line_num,2, "--- Charts (cont.) ---", curses.A_BOLD); line_num+=2
-                        main_window.addstr(line_num, 2, f"{i+1}. {chart_obj.name}"); line_num+=1
-                        chart_lines = str(chart_obj).split('\n')
-                        for chart_line in chart_lines:
-                            if line_num >= main_window.getmaxyx()[0]-2: break
-                            main_window.addstr(line_num, 4, chart_line[:main_window.getmaxyx()[1]-6]); line_num+=1
-                        line_num+=1
-                main_window.addstr(main_window.getmaxyx()[0] - 2, 2, "Press any key..."); main_window.refresh(); main_window.getch()
-                adv_time_music_mgmt += 5
-
-            elif music_choice == "6": # View Label Offers
-                main_window.addstr(1,2, "--- Record Label Offers ---", curses.A_BOLD)
-                pending_offers = [o for o in player.active_label_offers if o.get("status") == "pending_player_decision" and current_game_time < o["expiry_date_obj"]]
-                for o in player.active_label_offers:
-                    if o.get("status") == "pending_player_decision" and current_game_time >= o["expiry_date_obj"]:
-                        o["status"] = "expired"; GAME_LOG.add_message(f"Offer from {o['label_name']} expired.")
-
-                if not pending_offers: main_window.addstr(3,2, "No active label offers.")
-                else:
-                    offer_map = {str(i+1): offer for i,offer in enumerate(pending_offers)}
-                    offer_disp = {k: f"{v['label_name']} ({v['offer_type']}) - Adv: ${v['advance_payment']:,}, Exp: {v['expiry_date_obj'].get_time_string_for_schedule()}" for k,v in offer_map.items()}
-                    offer_disp["0"] = "Back"
-                    chosen_offer_key = present_choices_curses(main_window, offer_disp, "Select offer to view/respond:")
-                    main_window.clear(); main_window.box()
-                    if chosen_offer_key and chosen_offer_key != "0" and chosen_offer_key in offer_map:
-                        chosen_offer = offer_map[chosen_offer_key]
-                        main_window.addstr(1,2,f"Details for {chosen_offer['label_name']}:", curses.A_BOLD)
-                        # TODO: Display full offer details here, paginated if necessary
-                        main_window.addstr(3,2,f"Type: {chosen_offer['offer_type']}")
-                        main_window.addstr(4,2,f"Advance: ${chosen_offer['advance_payment']:,}, Royalty: {chosen_offer['royalty_rate_player']*100:.0f}%")
-                        main_window.addstr(5,2,f"Expires: {chosen_offer['expiry_date_obj'].get_time_string_for_schedule()}")
-
-                        response_key = present_choices_curses(main_window, {"1":"Accept","2":"Decline","0":"Decide Later"}, "Your Decision?")
-                        main_window.clear(); main_window.box()
-                        if response_key == "1":
-                            # Original acceptance logic is complex and involves history updates.
-                            # This should be encapsulated or carefully called.
-                            # For now, simplified message.
-                            player.money += chosen_offer['advance_payment']
-                            chosen_offer['status'] = "accepted"
-                            # ... (rest of acceptance logic from original, ensuring GAME_LOG for messages) ...
-                            main_window.addstr(1,2,f"Accepted offer from {chosen_offer['label_name']}!"); GAME_LOG.add_message(f"Accepted label offer: {chosen_offer['label_name']}")
-                            adv_time_music_mgmt += 30
-                        elif response_key == "2":
-                            chosen_offer['status'] = "declined_by_player"
-                            # ... (rest of decline logic) ...
-                            main_window.addstr(1,2,f"Declined offer from {chosen_offer['label_name']}."); GAME_LOG.add_message(f"Declined label offer: {chosen_offer['label_name']}")
-                            adv_time_music_mgmt += 15
-                        else: main_window.addstr(1,2,"Decided to wait on the offer.")
-                    else: main_window.addstr(1,2,"No offer selected or backed out.")
-                main_window.addstr(main_window.getmaxyx()[0]-2,2,"Press any key..."); main_window.refresh(); main_window.getch()
-                adv_time_music_mgmt += 5
-
-            elif music_choice == "7": # View Released Songs
-                main_window.addstr(1,2, "--- Your Released Music ---", curses.A_BOLD)
-                released = [s for s in player.songs_written if s.is_released]
-                if not released: main_window.addstr(3,2, "No music released yet.")
-                else:
-                    y_curr = 3; max_w = main_window.getmaxyx()[1]
-                    for i, song_obj in enumerate(released):
-                        if y_curr + 3 >= main_window.getmaxyx()[0]-2: main_window.addstr(y_curr,2,"--More--(key)");main_window.getch();main_window.clear();main_window.box();y_curr=1;main_window.addstr(y_curr,2,"--Released (cont.)--", curses.A_BOLD);y_curr+=2
-                        main_window.addstr(y_curr,2,f"{i+1}. {str(song_obj)}"[:max_w-4]); y_curr+=1
-                        # Chart info display logic here if needed
-                main_window.addstr(main_window.getmaxyx()[0]-2,2,"Press any key..."); main_window.refresh(); main_window.getch()
-                adv_time_music_mgmt +=10
-
-            elif music_choice == "8": # View Current Label Deal
-                main_window.addstr(1,2, "--- Current Label Deal ---", curses.A_BOLD)
-                if player.signed_label_deal:
-                    deal = player.signed_label_deal; y_curr=3; max_w = main_window.getmaxyx()[1]
-                    # TODO: Paginate this properly if it gets too long
-                    main_window.addstr(y_curr,2,f"Label: {deal['label_name']}"[:max_w-4]); y_curr+=1
-                    main_window.addstr(y_curr,2,f"Type: {deal['offer_type']}"[:max_w-4]); y_curr+=1
-                    # ... display all other deal terms, ensuring they fit ...
-                else: main_window.addstr(3,2, "Not currently signed.")
-                main_window.addstr(main_window.getmaxyx()[0]-2,2,"Press any key..."); main_window.refresh(); main_window.getch()
-                adv_time_music_mgmt += 5
-
-            elif music_choice == "0":
-                music_management_active = False
-
-            adv_time = adv_time_music_mgmt
-            if not music_management_active: continue
-            main_window.clear(); main_window.box()
-
-
-        elif choice == "0": GAME_LOG.add_message("Putting phone away."); adv_time=1; break
-        else: main_window.addstr(1,2,"Invalid phone option."); main_window.refresh(); main_window.getch()
-
-        if adv_time > 0: advance_game_time(adv_time); update_npc_locations(current_game_time); process_time_based_player_needs(player, adv_time)
-
-        if choice == "0": break
-
-    main_window.clear(); main_window.box(); main_window.refresh()
+    while True:
+        choice = ui.present_choices(contacts_menu_opts, "Contacts")
+        if choice == "0":
+            break
+        # Handle other choices
 
 def handle_travel_menu(player, main_window):
     while True:
@@ -933,9 +641,10 @@ def pygame_main():
         ui.draw_log()
 
         main_menu_opts = {
-            "1": "Practice skill", "2": "Travel", "3": "Explore POI/Area",
-            "4": "Check Gigs (City)", "5": "Prep Gig", "6": "Attempt Gig",
-            "7": "Player Stats", "8": "Talk", "9": "Eat Food", "10": "Phone",
+            "1": "Explore",
+            "2": "Travel",
+            "3": "Phone",
+            "4": "Character",
             "0": "Quit"
         }
 
@@ -943,6 +652,8 @@ def pygame_main():
 
         if choice == "0":
             running = False
+        elif choice == "3":
+            handle_phone_menu(player, ui)
 
         # Handle other choices...
 
