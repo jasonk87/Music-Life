@@ -449,6 +449,7 @@ def handle_phone_menu(player, ui):
         "1": "Schedule",
         "2": "Music",
         "3": "Contacts",
+        "4": "Web",
         "0": "Back"
     }
 
@@ -463,6 +464,9 @@ def handle_phone_menu(player, ui):
             handle_music_menu(player, ui)
         elif choice == "3":
             handle_contacts_menu(player, ui)
+        elif choice == "4":
+            # Show web menu
+            pass
 
 def handle_music_menu(player, ui):
     music_menu_opts = {
@@ -485,6 +489,31 @@ def handle_contacts_menu(player, ui):
 
     while True:
         choice = ui.present_choices(contacts_menu_opts, "Contacts")
+        if choice == "0":
+            break
+        # Handle other choices
+
+def handle_character_menu(player, ui):
+    character_menu_opts = {
+        "1": "Stats",
+        "2": "Skills",
+        "3": "Inventory",
+        "0": "Back"
+    }
+    while True:
+        choice = ui.present_choices(character_menu_opts, "Character")
+        if choice == "0":
+            break
+        # Handle other choices
+
+def handle_system_menu(player, ui):
+    system_menu_opts = {
+        "1": "Save",
+        "2": "Load",
+        "0": "Back"
+    }
+    while True:
+        choice = ui.present_choices(system_menu_opts, "System")
         if choice == "0":
             break
         # Handle other choices
@@ -645,6 +674,7 @@ def pygame_main():
             "2": "Travel",
             "3": "Phone",
             "4": "Character",
+            "5": "System",
             "0": "Quit"
         }
 
@@ -654,6 +684,10 @@ def pygame_main():
             running = False
         elif choice == "3":
             handle_phone_menu(player, ui)
+        elif choice == "4":
+            handle_character_menu(player, ui)
+        elif choice == "5":
+            handle_system_menu(player, ui)
 
         # Handle other choices...
 
