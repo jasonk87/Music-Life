@@ -110,6 +110,16 @@ class PygameUI:
             self.update_display()
         return text
 
+    def draw_dialogue_screen(self, npc_name, conversation_history, player_input):
+        self.draw_text(f"Talking to {npc_name}", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        for line in conversation_history:
+            self.draw_text(line, FONT_DEFAULT, WHITE, 100, y_pos)
+            y_pos += 40
+
+        self.draw_text(f"> {player_input}", FONT_DEFAULT, WHITE, 100, self.SCREEN_HEIGHT - 100)
+
     def present_choices(self, options, title):
         selected_index = 0
         while True:

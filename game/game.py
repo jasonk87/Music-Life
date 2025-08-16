@@ -29,7 +29,11 @@ class Game:
         self.game_state = "main_menu"
         self.character_menu_state = "main"
         self.explore_menu_state = "location"
+        self.phone_menu_state = "main"
         self.selected_poi = None
+        self.selected_npc = None
+        self.conversation_history = []
+        self.player_input = ""
 
         self.SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -286,7 +290,7 @@ class Game:
                     self.selected_poi = None
                 else:
                     self.handle_interaction(interaction_options[choice])
-                    if self.explore_menu_state not in ["shop", "write_song"]:
+                    if self.explore_menu_state not in ["shop", "write_song", "talk", "dialogue"]:
                         self.explore_menu_state = "location"
                         self.selected_poi = None
             else:
@@ -327,6 +331,43 @@ class Game:
             else:
                 self.GAME_LOG.add_log_message("Songwriting cancelled.")
             self.explore_menu_state = "poi"
+        elif self.explore_menu_state == "talk":
+            npcs_here = [npc for npc in self.NPC_REGISTRY.values() if npc.current_location == self.selected_poi]
+            if not npcs_here:
+                self.GAME_LOG.add_log_message("No one here to talk to.")
+                self.explore_menu_state = "poi"
+            else:
+                npc_options = {npc.npc_id: npc.name for npc in npcs_here}
+                npc_options["back"] = "Back"
+
+                choice = self.ui.present_choices(npc_options, "Talk to who?")
+                if choice == "back":
+                    self.explore_menu_state = "poi"
+                else:
+                    self.selected_npc = self.NPC_REGISTRY[choice]
+                    self.explore_menu_state = "dialogue"
+                    self.conversation_history = []
+                    self.player_input = ""
+        elif self.explore_menu_state == "dialogue":
+            if self.selected_npc:
+                self.ui.draw_dialogue_screen(self.selected_npc.name, self.conversation_history, self.player_input)
+                for event in pygame.event.get():
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_RETURN:
+                            if self.player_input.lower() == "bye":
+                                self.explore_menu_state = "poi"
+                                self.selected_npc = None
+                            else:
+                                self.conversation_history.append(f"You: {self.player_input}")
+                                response = generate_npc_response(self.player_input, self.selected_npc, self.player.name)
+                                self.conversation_history.append(f"{self.selected_npc.name}: {response}")
+                                self.player_input = ""
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.player_input = self.player_input[:-1]
+                        else:
+                            self.player_input += event.unicode
+            else:
+                self.explore_menu_state = "poi"
 
     def handle_interaction(self, interaction_text):
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
@@ -339,13 +380,51 @@ class Game:
             self.explore_menu_state = "write_song"
         elif interaction_text == "Rest (8 hours)":
             self.rest()
+        elif "Talk" in interaction_text: # More robust check
+            self.explore_menu_state = "talk"
         elif interaction_text == "Talk":
             self.explore_menu_state = "talk"
 
     def handle_travel_menu(self):
-        # Placeholder
-        self.ui.draw_text("Travel Menu", self.ui.FONT_TITLE, self.ui.WHITE, self.ui.SCREEN_WIDTH // 2, 100, centered=True)
-        self.game_state = "main_menu" # Go back to main menu for now
+        travel_options = {
+            "intra_city": f"Travel within {self.player.current_location.name}",
+            "inter_city": "Travel to another city",
+            "back": "Back"
+        }
+        choice = self.ui.present_choices(travel_options, "Travel")
+
+        if choice == "back":
+            self.game_state = "main_menu"
+        elif choice == "inter_city":
+            if not self.player.current_poi or self.player.current_poi.category not in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
+                self.GAME_LOG.add_log_message("You need to be at a Bus Station or Airport to travel to another city.")
+                self.game_state = "main_menu"
+                return
+
+            connections = self.player.current_location.travel_connections
+            if not connections:
+                self.GAME_LOG.add_log_message(f"No inter-city routes from {self.player.current_location.name}.")
+                self.game_state = "main_menu"
+                return
+
+            dest_opts = {dest_name: f"To {dest_name} (Cost: ${details['cost']}, Time: {details['time_hours']}h)" for dest_name, details in connections.items()}
+            dest_opts["back"] = "Cancel"
+
+            dest_choice = self.ui.present_choices(dest_opts, f"Departures from {self.player.current_poi.name}")
+            if dest_choice != "back":
+                travel_details = connections[dest_choice]
+                if self.player.money >= travel_details['cost']:
+                    self.player.money -= travel_details['cost']
+                    dest_loc_obj = self.WORLD_MAP.get(dest_choice)
+                    if dest_loc_obj:
+                        self.player.travel(dest_loc_obj, travel_details['time_hours'])
+                        advance_game_time(travel_details['time_hours'] * 60)
+                        self.update_npc_locations(current_game_time)
+                        self.process_time_based_player_needs(self.player, travel_details['time_hours'] * 60)
+                        self.GAME_LOG.add_log_message(f"You travelled to {dest_choice}.")
+                else:
+                    self.GAME_LOG.add_log_message("You can't afford to travel.")
+            self.game_state = "main_menu"
 
     def rest(self, hours=8):
         self.GAME_LOG.add_log_message(f"You rest for {hours} hours.")
@@ -421,18 +500,22 @@ class Game:
             if npc.current_location != dest: npc.current_location = dest
 
     def handle_phone_menu(self):
-        phone_menu_opts = {
-            "schedule": "Schedule",
-            "music": "Music",
-            "contacts": "Contacts",
-            "web": "Web",
-            "back": "Back"
-        }
+        if self.phone_menu_state == "main":
+            phone_menu_opts = {
+                "schedule": "Schedule",
+                "music": "Music",
+                "contacts": "Contacts",
+                "web": "Web",
+                "back": "Back"
+            }
 
-        choice = self.ui.present_choices(phone_menu_opts, "Phone")
-        if choice == "back":
-            self.game_state = "main_menu"
-        # Handle other choices
+            choice = self.ui.present_choices(phone_menu_opts, "Phone")
+            if choice == "back":
+                self.game_state = "main_menu"
+            else:
+                self.phone_menu_state = choice
+        elif self.phone_menu_state == "contacts":
+            self.handle_contacts_menu()
 
     def handle_music_menu(self):
         music_menu_opts = {
@@ -446,15 +529,22 @@ class Game:
             self.game_state = "phone"
 
     def handle_contacts_menu(self):
-        contacts_menu_opts = {}
-        for i, contact in enumerate(self.player.contacts):
-            contacts_menu_opts[str(i+1)] = contact['name']
+        if not self.player.contacts:
+            self.GAME_LOG.add_log_message("You have no contacts.")
+            self.phone_menu_state = "main"
+            return
+
+        contacts_menu_opts = {contact['npc_id']: contact['name'] for contact in self.player.contacts}
         contacts_menu_opts["back"] = "Back"
 
         choice = self.ui.present_choices(contacts_menu_opts, "Contacts")
         if choice == "back":
-            self.game_state = "phone"
-        # Handle other choices
+            self.phone_menu_state = "main"
+        else:
+            # Placeholder for what to do when a contact is selected
+            npc_name = contacts_menu_opts[choice]
+            self.GAME_LOG.add_log_message(f"You selected {npc_name} from your contacts.")
+            self.phone_menu_state = "main"
 
     def handle_character_menu(self):
         if self.character_menu_state == "main":
