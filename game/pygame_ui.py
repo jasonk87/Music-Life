@@ -81,6 +81,43 @@ class PygameUI:
 
         pygame.draw.rect(self.screen, WHITE, (0, SCREEN_HEIGHT - 140, SCREEN_WIDTH, 140), 2)
 
+    def draw_skills_screen(self, player):
+        self.draw_text("Skills", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        for skill, value in player.skills.items():
+            self.draw_text(f"{skill.capitalize()}: {value:.1f}", FONT_DEFAULT, WHITE, 100, y_pos)
+            y_pos += 40
+
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+
+    def draw_schedule_screen(self, player):
+        self.draw_text("Schedule", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        if not player.schedule.scheduled_items:
+            self.draw_text("Your schedule is empty.", FONT_DEFAULT, WHITE, 100, y_pos)
+        else:
+            for item in player.schedule.scheduled_items:
+                self.draw_text(str(item), FONT_DEFAULT, WHITE, 100, y_pos)
+                y_pos += 40
+
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+
+    def draw_inventory_screen(self, player):
+        self.draw_text("Inventory", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        if not player.gear_inventory:
+            self.draw_text("Your inventory is empty.", FONT_DEFAULT, WHITE, 100, y_pos)
+        else:
+            for item in player.gear_inventory:
+                self.draw_text(f"- {item.name} (Size: {item.size})", FONT_DEFAULT, WHITE, 100, y_pos)
+                y_pos += 40
+
+        self.draw_text(f"Capacity: {player.get_current_gear_load()}/{player.get_current_gear_capacity()}", FONT_DEFAULT, WHITE, 100, self.SCREEN_HEIGHT - 100)
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+
     def draw_character_stats(self, player):
         self.draw_text("Character Stats", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
 

@@ -398,6 +398,37 @@ class Game:
 
         if choice == "back":
             self.game_state = "main_menu"
+        elif choice == "intra_city":
+            if not self.player.current_poi:
+                self.GAME_LOG.add_log_message("You are not at a specific Point of Interest to travel from.")
+            else:
+                city_obj = self.player.current_location
+                all_city_targets = city_obj.points_of_interest + city_obj.venues
+                dest_opts_list = [t for t in all_city_targets if t.name != self.player.current_poi.name]
+
+                if not dest_opts_list:
+                    self.GAME_LOG.add_log_message("No other places to travel to in this city.")
+                else:
+                    dest_map = {t.poi_id if hasattr(t, 'poi_id') else t.venue_id: t for t in dest_opts_list}
+                    dest_disp = {k: f"{v.name} ({getattr(v,'category', getattr(v,'venue_type','N/A'))})" for k, v in dest_map.items()}
+                    dest_disp["back"] = "Cancel"
+
+                    chosen_dest_key = self.ui.present_choices(dest_disp, "Choose destination:")
+                    if chosen_dest_key != "back":
+                        chosen_dest_poi = dest_map[chosen_dest_key]
+                        # For now, let's assume a fixed time and cost for intra-city travel
+                        travel_time_minutes = 15
+                        travel_cost = 2
+                        if self.player.money >= travel_cost:
+                            self.player.money -= travel_cost
+                            self.player.travel_within_city(chosen_dest_poi, travel_time_minutes)
+                            advance_game_time(travel_time_minutes)
+                            self.update_npc_locations(current_game_time)
+                            self.process_time_based_player_needs(self.player, travel_time_minutes)
+                            self.GAME_LOG.add_log_message(f"You travelled to {chosen_dest_poi.name}.")
+                        else:
+                            self.GAME_LOG.add_log_message("You can't afford to travel.")
+            self.game_state = "main_menu"
         elif choice == "inter_city":
             if not self.player.current_poi or self.player.current_poi.category not in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
                 self.GAME_LOG.add_log_message("You need to be at a Bus Station or Airport to travel to another city.")
@@ -519,6 +550,11 @@ class Game:
                 self.phone_menu_state = choice
         elif self.phone_menu_state == "contacts":
             self.handle_contacts_menu()
+        elif self.phone_menu_state == "schedule":
+            self.ui.draw_schedule_screen(self.player)
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.phone_menu_state = "main"
 
     def handle_music_menu(self):
         music_menu_opts = {
@@ -567,8 +603,16 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
-
-        # Handle other character menu states (skills, inventory) here
+        elif self.character_menu_state == "skills":
+            self.ui.draw_skills_screen(self.player)
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.character_menu_state = "main"
+        elif self.character_menu_state == "inventory":
+            self.ui.draw_inventory_screen(self.player)
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.character_menu_state = "main"
 
     def handle_system_menu(self):
         system_menu_opts = {
