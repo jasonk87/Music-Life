@@ -61,17 +61,6 @@ class Location:
 
 if __name__ == '__main__':
     # Basic tests for Location class
-    # Mock Venue, POI, Event for testing relationships
-    class MockVenue:
-        def __init__(self, name):
-            self.name = name
-            self.events_hosted = []
-        def add_event(self, event):
-            self.events_hosted.append(event)
-
-    class MockPOI:
-        def __init__(self, name):
-            self.name = name
 
     class MockEvent:
         def __init__(self, name):
@@ -80,8 +69,8 @@ if __name__ == '__main__':
     loc = Location("Testville", "A place for testing.")
     assert loc.name == "Testville"
 
-    venue1 = MockVenue("The Test Tent")
-    poi1 = MockPOI("Test Statue")
+    venue1 = Venue(venue_id="test_venue", name="The Test Tent")
+    poi1 = PointOfInterest(poi_id="test_poi", name="Test Statue", description="A statue for testing.")
 
     loc.add_venue(venue1)
     assert venue1 in loc.venues

@@ -66,6 +66,50 @@ class PygameUI:
         for i, msg in enumerate(self.log_messages):
             self.draw_text(msg, FONT_LOG, LIGHT_GREY, 20, log_y_start + (i * 20))
 
+    def draw_character_stats(self, player):
+        self.draw_text("Character Stats", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        stats = {
+            "Name": player.name,
+            "Age": player.age,
+            "Fame": player.fame,
+            "Money": f"${player.money}",
+            "Energy": f"{player.energy}/100",
+            "Stress": f"{player.stress}/100",
+            "Hunger": f"{player.hunger}/100",
+            "Comfort": f"{player.comfort}/100",
+            "Homesickness": f"{player.homesickness}/100",
+        }
+
+        for key, value in stats.items():
+            self.draw_text(f"{key}: {value}", FONT_DEFAULT, WHITE, 100, y_pos)
+            y_pos += 40
+
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+
+    def get_text_input(self, prompt):
+        text = ""
+        input_active = True
+        while input_active:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        input_active = False
+                    elif event.key == pygame.K_BACKSPACE:
+                        text = text[:-1]
+                    else:
+                        text += event.unicode
+
+            self.clear_screen()
+            self.draw_text(prompt, FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 100, centered=True)
+            self.draw_text(text, FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, 200, centered=True)
+            self.update_display()
+        return text
+
     def present_choices(self, options, title):
         selected_index = 0
         while True:
