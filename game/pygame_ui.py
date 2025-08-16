@@ -1,5 +1,6 @@
 import pygame
 import sys
+from game.portrait import Portrait
 
 # --- Constants ---
 SCREEN_WIDTH = 1280
@@ -27,6 +28,7 @@ class PygameUI:
         pygame.display.set_caption("Music-Life Sim")
         self.clock = pygame.time.Clock()
         self.log_messages = []
+        self.portrait = Portrait(self.screen)
 
     def clear_screen(self):
         self.screen.fill(BLACK)
@@ -45,16 +47,22 @@ class PygameUI:
         self.screen.blit(text_surface, text_rect)
 
     def draw_hud(self, date_str, money_str, hair_length, beard_length):
+        # A semi-transparent background for the HUD
+        hud_surface = pygame.Surface((SCREEN_WIDTH, 100))
+        hud_surface.set_alpha(128)
+        hud_surface.fill(BLACK)
+        self.screen.blit(hud_surface, (0, 0))
+
         # Top-left: Date and Money
         self.draw_text(f"Date: {date_str}", FONT_DEFAULT, WHITE, 20, 20)
         self.draw_text(f"Money: ${money_str}", FONT_DEFAULT, WHITE, 20, 50)
 
         # Top-right: Portrait and indicators
-        portrait_rect = pygame.Rect(SCREEN_WIDTH - 220, 20, 200, 200)
+        portrait_rect = pygame.Rect(SCREEN_WIDTH - 120, 10, 80, 80)
+        self.portrait.draw(portrait_rect.x, portrait_rect.y, portrait_rect.width, portrait_rect.height, hair_length, beard_length)
         pygame.draw.rect(self.screen, WHITE, portrait_rect, 2)
-        self.draw_text("Portrait", FONT_DEFAULT, WHITE, portrait_rect.centerx, portrait_rect.centery, centered=True)
-        self.draw_text(f"Hair: {hair_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 220, 230)
-        self.draw_text(f"Beard: {beard_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 220, 260)
+        self.draw_text(f"Hair: {hair_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 20)
+        self.draw_text(f"Beard: {beard_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 50)
 
     def add_log_message(self, message):
         self.log_messages.insert(0, message)
@@ -62,9 +70,16 @@ class PygameUI:
             self.log_messages.pop()
 
     def draw_log(self):
+        log_surface = pygame.Surface((SCREEN_WIDTH, 140))
+        log_surface.set_alpha(128)
+        log_surface.fill(BLACK)
+        self.screen.blit(log_surface, (0, SCREEN_HEIGHT - 140))
+
         log_y_start = SCREEN_HEIGHT - 120
         for i, msg in enumerate(self.log_messages):
             self.draw_text(msg, FONT_LOG, LIGHT_GREY, 20, log_y_start + (i * 20))
+
+        pygame.draw.rect(self.screen, WHITE, (0, SCREEN_HEIGHT - 140, SCREEN_WIDTH, 140), 2)
 
     def draw_character_stats(self, player):
         self.draw_text("Character Stats", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
@@ -122,6 +137,11 @@ class PygameUI:
 
     def present_choices(self, options, title):
         selected_index = 0
+        buttons = []
+        for i, (key, text) in enumerate(options.items()):
+            button_rect = pygame.Rect(self.SCREEN_WIDTH // 2 - 150, 200 + i * 60, 300, 50)
+            buttons.append(button_rect)
+
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -134,12 +154,19 @@ class PygameUI:
                         selected_index = (selected_index + 1) % len(options)
                     elif event.key == pygame.K_RETURN:
                         return list(options.keys())[selected_index]
+                if event.type == pygame.MOUSEBUTTONUP:
+                    for i, button_rect in enumerate(buttons):
+                        if button_rect.collidepoint(event.pos):
+                            return list(options.keys())[i]
+
 
             self.clear_screen()
-            self.draw_text(title, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 100, centered=True)
+            self.draw_text(title, FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 100, centered=True)
 
             for i, (key, text) in enumerate(options.items()):
+                button_rect = buttons[i]
                 color = WHITE if i == selected_index else GREY
-                self.draw_text(text, FONT_DEFAULT, color, SCREEN_WIDTH // 2, 200 + i * 40, centered=True)
+                pygame.draw.rect(self.screen, color, button_rect, 2)
+                self.draw_text(text, FONT_DEFAULT, color, button_rect.centerx, button_rect.centery, centered=True)
 
             self.update_display()

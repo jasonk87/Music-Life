@@ -20,10 +20,12 @@ from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 from game.chart import Chart
 from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
+from game.sound import SoundManager
 
 class Game:
     def __init__(self, ui):
         self.ui = ui
+        self.sound_manager = SoundManager()
         self.player = None
         self.running = True
         self.game_state = "main_menu"
@@ -315,6 +317,7 @@ class Game:
                                 self.player.money -= item_to_buy.cost
                                 self.player.add_gear(item_to_buy)
                                 self.GAME_LOG.add_log_message(f"You bought {item_to_buy.name}.")
+                                self.sound_manager.play_buy_sound()
                             else:
                                 self.GAME_LOG.add_log_message(f"You can't carry {item_to_buy.name}.")
                         else:
