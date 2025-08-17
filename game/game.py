@@ -168,13 +168,14 @@ class Game:
         event_defs = [
             {"id": "open_mic_hometown_hall", "venue_id": "hometown_community_hall", "name": "Open Mic Night", "type": "OPEN_MIC", "skills": {"vocals": 1, "guitar": 1}, "gear": ["INSTRUMENT_ACOUSTIC"], "desc": "A chance to show your skills..."},
             {"id": "debut_rusty_mug", "venue_id": "citycenter_rustymug", "name": "Debut at 'The Rusty Mug'", "type": "CLUB_GIG", "skills": {"vocals": 5, "guitar": 5, "stage_presence": 3}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"], "desc": "Your first real club gig!", "prep_tasks": {"Write Setlist (3 songs)": False, "Rehearse Set (2 hours)": False, "Promote Gig Locally": False}},
-            {"id": "opening_act_grande", "venue_id": "citycenter_grandetheater", "name": "Opening Act for Major Band", "type": "CONCERT", "skills": {"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "A huge opportunity...", "prep_tasks": {"Finalize Setlist (5 songs)": False, "Intensive Rehearsal (10 hours)": False, "Coordinate with Main Act": False, "Sound Check (2 hours)": False}}
+            {"id": "opening_act_grande", "venue_id": "citycenter_grandetheater", "name": "Opening Act for Major Band", "type": "CONCERT", "skills": {"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "A huge opportunity...", "prep_tasks": {"Finalize Setlist (5 songs)": False, "Intensive Rehearsal (10 hours)": False, "Coordinate with Main Act": False, "Sound Check (2 hours)": False}},
+            {"id": "headliner_show_grande", "venue_id": "citycenter_grandetheater", "name": "Headliner Show", "type": "CONCERT", "skills": {"vocals": 25, "guitar": 25, "stage_presence": 20, "songwriting": 20}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "Your own headliner show at the Grande Concert Hall!", "required_fame": 500}
         ]
         for ed in event_defs:
             vo = self.get_poi_or_venue_by_id(ed["venue_id"])
             if vo and isinstance(vo, Venue) and ed["id"] in getattr(vo, 'events_hosted_ids_from_json', [ed["id"]]):
                 is_tour_gig_flag = "tour" in ed.get("name", "").lower()
-                evt = Event(name=ed["name"], event_type=ed["type"], location=vo, required_skills=ed["skills"], required_gear_types=ed["gear"], description=ed["desc"], is_tour_gig=is_tour_gig_flag)
+                evt = Event(name=ed["name"], event_type=ed["type"], location=vo, required_skills=ed["skills"], required_gear_types=ed["gear"], description=ed["desc"], is_tour_gig=is_tour_gig_flag, required_fame=ed.get("required_fame", 0))
                 if "prep_tasks" in ed: evt.preparation_tasks_required = ed["prep_tasks"]
                 vo.add_event(evt)
             else: self.GAME_LOG.add_message(f"Warning: Venue ID '{ed['venue_id']}' for event '{ed['name']}' not found or not a Venue.")
@@ -372,8 +373,10 @@ class Game:
             else:
                 self.explore_menu_state = "poi"
 
-    def handle_interaction(self, interaction_text):
+    def handle_interaction(self, interaction_text, time_cost=15):
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
+        advance_game_time(time_cost)
+        self.process_time_based_player_needs(self.player, time_cost)
         if interaction_text == "Browse items for sale":
             if self.selected_poi.shop_inventory_item_ids:
                 self.explore_menu_state = "shop"
@@ -385,8 +388,8 @@ class Game:
             self.rest()
         elif "Talk" in interaction_text: # More robust check
             self.explore_menu_state = "talk"
-        elif interaction_text == "Talk":
-            self.explore_menu_state = "talk"
+        elif interaction_text == "Browse vehicles":
+            self.explore_menu_state = "dealership"
 
     def handle_travel_menu(self):
         travel_options = {
@@ -430,6 +433,24 @@ class Game:
                             self.GAME_LOG.add_log_message("You can't afford to travel.")
             self.game_state = "main_menu"
         elif choice == "inter_city":
+            if self.player.vehicles:
+                vehicle_options = {v.name: str(v) for v in self.player.vehicles}
+                vehicle_options["none"] = "No vehicle"
+                vehicle_options["back"] = "Cancel"
+                vehicle_choice = self.ui.present_choices(vehicle_options, "Choose a vehicle")
+                if vehicle_choice == "back":
+                    self.game_state = "main_menu"
+                    return
+
+                selected_vehicle = None
+                if vehicle_choice != "none":
+                    for v in self.player.vehicles:
+                        if v.name == vehicle_choice:
+                            selected_vehicle = v
+                            break
+            else:
+                selected_vehicle = None
+
             if not self.player.current_poi or self.player.current_poi.category not in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
                 self.GAME_LOG.add_log_message("You need to be at a Bus Station or Airport to travel to another city.")
                 self.game_state = "main_menu"
@@ -451,10 +472,14 @@ class Game:
                     self.player.money -= travel_details['cost']
                     dest_loc_obj = self.WORLD_MAP.get(dest_choice)
                     if dest_loc_obj:
-                        self.player.travel(dest_loc_obj, travel_details['time_hours'])
-                        advance_game_time(travel_details['time_hours'] * 60)
+                        travel_time = travel_details['time_hours']
+                        if selected_vehicle:
+                            travel_time /= selected_vehicle.speed
+
+                        self.player.travel(dest_loc_obj, travel_time)
+                        advance_game_time(travel_time * 60)
                         self.update_npc_locations(current_game_time)
-                        self.process_time_based_player_needs(self.player, travel_details['time_hours'] * 60)
+                        self.process_time_based_player_needs(self.player, travel_time * 60)
                         self.GAME_LOG.add_log_message(f"You travelled to {dest_choice}.")
                 else:
                     self.GAME_LOG.add_log_message("You can't afford to travel.")

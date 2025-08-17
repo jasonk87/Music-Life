@@ -131,6 +131,19 @@
       "properties": {
         "owner_npc_id": "stylist_antoine_npc"
       }
+    },
+    {
+      "poi_id": "citycenter_used_cars",
+      "name": "City Center Used Cars",
+      "description": "A dusty lot with a small selection of used vehicles.",
+      "category": "SHOP_VEHICLE",
+      "interaction_options": ["Browse vehicles"],
+      "properties": {
+        "vehicle_inventory": [
+          {"name": "Bicycle", "cost": 100, "speed": 1.2, "fuel_capacity": 0, "fuel_efficiency": 0},
+          {"name": "Used Car", "cost": 5000, "speed": 2.0, "fuel_capacity": 40, "fuel_efficiency": 10}
+        ]
+      }
     }
   ],
   "venues": [
@@ -163,7 +176,7 @@
         "gear_rental_fee": 100,
         "available_rental_gear_ids": ["pro_electric_guitar", "pro_bass_guitar", "pro_amp_large", "pro_drum_kit"]
       },
-      "events_hosted_ids": ["opening_act_grande"]
+      "events_hosted_ids": ["opening_act_grande", "headliner_show_grande"]
     }
   ],
   "intra_city_poi_connections": [

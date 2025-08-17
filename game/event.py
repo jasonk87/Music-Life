@@ -12,10 +12,11 @@ class Event:
     def __init__(self, name, location, event_type="OPEN_MIC", required_skills=None,
                  required_gear_types=None,
                  description="", specific_fame_reward=None, specific_payout=None,
-                 is_tour_gig=False, is_player_organized=False): # Added is_player_organized
+                 is_tour_gig=False, is_player_organized=False, required_fame=0): # Added is_player_organized
         self.name = name
         self.location = location
         self.event_type = event_type
+        self.required_fame = required_fame
         self.is_player_organized = is_player_organized
         self.required_gear_types = required_gear_types if required_gear_types else []
 
@@ -59,6 +60,9 @@ class Event:
         if not self.are_preparations_complete():
             pending_tasks = [task for task, completed in self.preparation_tasks_required.items() if not completed]
             return False, f"Event preparations are not complete. Pending: {', '.join(pending_tasks)}", False
+
+        if player.fame < self.required_fame:
+            return False, f"Player does not have enough fame to perform this event (needs {self.required_fame}, has {player.fame}).", False
 
         for skill, required_level in self.required_skills.items():
             if player.skills.get(skill, 0) < required_level:
