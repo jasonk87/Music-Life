@@ -17,7 +17,7 @@ class PointOfInterest:
         self.parent_location_id = parent_location_id
 
         self.shop_inventory_item_ids = None
-        self.vehicle_inventory = []
+        self.vehicle_inventory = vehicle_inventory if vehicle_inventory is not None else []
 
         self.rest_quality = rest_quality
         self.stress_modifier_hourly = stress_modifier_hourly

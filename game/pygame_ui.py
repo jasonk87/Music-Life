@@ -1,6 +1,7 @@
 import pygame
 import sys
 from game.portrait import Portrait
+from game.game_time import get_current_time_str
 
 # --- Constants ---
 SCREEN_WIDTH = 1280
@@ -139,6 +140,9 @@ class PygameUI:
             y_pos += 40
 
         self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+
+    def get_current_time_str(self, date_only=False):
+        return get_current_time_str(date_only)
 
     def get_text_input(self, prompt):
         text = ""
