@@ -1,7 +1,6 @@
 from game.gear import GearItem
 from game.player_schedule import PlayerSchedule # Import PlayerSchedule
 from game.game_time import current_game_time # Import global game time for start_date
-from game.vehicle import Vehicle
 
 class Player:
     def __init__(self, name):
@@ -14,7 +13,6 @@ class Player:
         self.money = 500 # Starting money
 
         self.gear_inventory = [] # List of GearItem objects
-        self.vehicles = []
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
@@ -267,7 +265,6 @@ class Player:
         status += f"Skills: {self.skills}\n"
         status += f"Songs Written: {len(self.songs_written)}\n"
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"
-        status += f"Vehicles: {', '.join([v.name for v in self.vehicles]) if self.vehicles else 'None'}\n"
         status += f"Has Bike: {'Yes' if self.has_bike else 'No'}\n"
 
         if self.has_manager:
@@ -314,8 +311,6 @@ if __name__ == '__main__':
     assert len(p.songs_written) == 1
     assert "Songs Written: 1" in str(p)
 
-    p.vehicles.append(Vehicle("Bicycle", 100, 20, 0, 0))
-    assert "Vehicles: Bicycle" in str(p)
 
     p.practice_skill("guitar", 3)
     assert p.skills["guitar"] == 0.5

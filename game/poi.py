@@ -17,7 +17,7 @@ class PointOfInterest:
         self.parent_location_id = parent_location_id
 
         self.shop_inventory_item_ids = None
-        self.vehicle_inventory = vehicle_inventory if vehicle_inventory is not None else []
+        self.shop_inventory_vehicle_ids = None
 
         self.rest_quality = rest_quality
         self.stress_modifier_hourly = stress_modifier_hourly
@@ -47,8 +47,8 @@ class PointOfInterest:
         details = f"{self.name} (ID: {self.poi_id}, Category: {self.category})"
         if self.shop_inventory_item_ids is not None:
             details += f" [Shop with {len(self.shop_inventory_item_ids)} item types]"
-        if self.vehicle_inventory:
-            details += f" [Dealership with {len(self.vehicle_inventory)} vehicles]"
+        if self.shop_inventory_vehicle_ids:
+            details += f" [Dealership with {len(self.shop_inventory_vehicle_ids)} vehicles]"
         if self.category == "HOME" or self.category.startswith("ACCOMMODATION"):
             details += f" [RestQ: {self.rest_quality}, StressMod/hr: {self.stress_modifier_hourly}, ComfortMod/hr: {self.comfort_modifier_hourly}]"
         elif self.category == "POI_CAFE": # Example for other POI types that might affect comfort

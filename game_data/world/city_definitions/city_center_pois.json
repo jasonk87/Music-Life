@@ -139,10 +139,7 @@
       "category": "SHOP_VEHICLE",
       "interaction_options": ["Browse vehicles"],
       "properties": {
-        "vehicle_inventory": [
-          {"name": "Bicycle", "cost": 100, "speed": 1.2, "fuel_capacity": 0, "fuel_efficiency": 0},
-          {"name": "Used Car", "cost": 5000, "speed": 2.0, "fuel_capacity": 40, "fuel_efficiency": 10}
-        ]
+        "shop_inventory_vehicle_ids": ["rusty_sedan", "used_hatchback", "tour_van", "motorcycle"]
       }
     }
   ],

@@ -18,6 +18,7 @@ from game.gear import GearItem
 from game.pygame_ui import PygameUI
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
+from game_data.vehicle_catalog import VEHICLE_CATALOG
 from game.chart import Chart
 from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
 from game.sound import SoundManager
@@ -97,12 +98,14 @@ class Game:
             for poi_data in city_def_data.get("points_of_interest", []):
                 props = poi_data.get("properties", {}).copy()
                 shop_inventory_ids = props.pop("shop_inventory_item_ids", None)
+                shop_inventory_vehicle_ids = props.pop("shop_inventory_vehicle_ids", None)
                 menu_items_data = props.pop("menu_items", None)
                 owner_npc_id_temp = props.pop("owner_npc_id", None)
                 poi = PointOfInterest(poi_id=poi_data["poi_id"], name=poi_data["name"], description=poi_data["description"],
                                     category=poi_data["category"], interaction_options=list(poi_data.get("interaction_options", [])),
                                     parent_location_id=location_obj.name, **props)
                 if shop_inventory_ids is not None: poi.shop_inventory_item_ids = list(shop_inventory_ids)
+                if shop_inventory_vehicle_ids is not None: poi.shop_inventory_vehicle_ids = list(shop_inventory_vehicle_ids)
                 if menu_items_data is not None:
                     poi.menu_items = list(menu_items_data)
                     if poi.category == "FOOD_FASTFOOD" and not poi.interaction_options: poi.interaction_options = [item["display_text"] for item in poi.menu_items]
@@ -293,9 +296,36 @@ class Game:
                     self.selected_poi = None
                 else:
                     self.handle_interaction(interaction_options[choice])
-                    if self.explore_menu_state not in ["shop", "write_song", "talk", "dialogue"]:
+                    if self.explore_menu_state not in ["shop", "write_song", "talk", "dialogue", "dealership"]:
                         self.explore_menu_state = "location"
                         self.selected_poi = None
+            else:
+                self.explore_menu_state = "location"
+        elif self.explore_menu_state == "dealership":
+            if self.selected_poi:
+                vehicle_inventory = {}
+                if self.selected_poi.shop_inventory_vehicle_ids:
+                    for vehicle_id in self.selected_poi.shop_inventory_vehicle_ids:
+                        vehicle = VEHICLE_CATALOG.get(vehicle_id)
+                        if vehicle:
+                            vehicle_inventory[vehicle_id] = f"{vehicle.name} - ${vehicle.cost}"
+                vehicle_inventory["back"] = "Back"
+
+                choice = self.ui.present_choices(vehicle_inventory, f"Vehicles at {self.selected_poi.name}")
+                if choice == "back":
+                    self.explore_menu_state = "poi"
+                else:
+                    vehicle_to_buy = VEHICLE_CATALOG.get(choice)
+                    if vehicle_to_buy:
+                        if any(v.name == vehicle_to_buy.name for v in self.player.vehicles):
+                            self.GAME_LOG.add_log_message(f"You already own a {vehicle_to_buy.name}.")
+                        elif self.player.money >= vehicle_to_buy.cost:
+                            self.player.money -= vehicle_to_buy.cost
+                            self.player.add_vehicle(vehicle_to_buy)
+                            self.GAME_LOG.add_log_message(f"You bought a {vehicle_to_buy.name}.")
+                            self.sound_manager.play_buy_sound()
+                        else:
+                            self.GAME_LOG.add_log_message(f"You can't afford the {vehicle_to_buy.name}.")
             else:
                 self.explore_menu_state = "location"
         elif self.explore_menu_state == "shop":
@@ -389,7 +419,10 @@ class Game:
         elif "Talk" in interaction_text: # More robust check
             self.explore_menu_state = "talk"
         elif interaction_text == "Browse vehicles":
-            self.explore_menu_state = "dealership"
+            if self.selected_poi.shop_inventory_vehicle_ids:
+                self.explore_menu_state = "dealership"
+            else:
+                self.GAME_LOG.add_log_message("No vehicles for sale currently.")
 
     def handle_travel_menu(self):
         travel_options = {
