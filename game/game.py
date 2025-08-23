@@ -3,6 +3,7 @@ import sys
 import collections
 import os
 import json
+import pickle
 import random
 
 from game.player import Player
@@ -672,6 +673,53 @@ class Game:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
 
+    def save_game(self, filename="savegame.dat"):
+        save_data = {
+            'player': self.player,
+            'game_time': current_game_time,
+            'world_map': self.WORLD_MAP,
+            'npc_registry': self.NPC_REGISTRY,
+            'active_charts': self.ACTIVE_CHARTS,
+            'last_chart_update_day': self.LAST_CHART_UPDATE_DAY,
+        }
+        try:
+            with open(filename, 'wb') as f:
+                pickle.dump(save_data, f)
+            self.GAME_LOG.add_log_message("Game saved successfully.")
+        except Exception as e:
+            self.GAME_LOG.add_log_message(f"Error saving game: {e}")
+
+    def load_game(self, filename="savegame.dat"):
+        if not os.path.exists(filename):
+            self.GAME_LOG.add_log_message("No save file found.")
+            return
+
+        try:
+            with open(filename, 'rb') as f:
+                save_data = pickle.load(f)
+
+            self.player = save_data['player']
+            self.WORLD_MAP = save_data['world_map']
+            self.NPC_REGISTRY = save_data['npc_registry']
+            self.ACTIVE_CHARTS = save_data['active_charts']
+            self.LAST_CHART_UPDATE_DAY = save_data['last_chart_update_day']
+
+            # Restore game time
+            loaded_time = save_data['game_time']
+            current_game_time.year = loaded_time.year
+            current_game_time.month = loaded_time.month
+            current_game_time.day = loaded_time.day
+            current_game_time.hour = loaded_time.hour
+            current_game_time.minute = loaded_time.minute
+
+            # Re-initialize transient data
+            self._build_poi_venue_id_map()
+
+            self.GAME_LOG.add_log_message("Game loaded successfully.")
+
+        except Exception as e:
+            self.GAME_LOG.add_log_message(f"Error loading game: {e}")
+
     def handle_system_menu(self):
         system_menu_opts = {
             "save": "Save",
@@ -681,4 +729,9 @@ class Game:
         choice = self.ui.present_choices(system_menu_opts, "System")
         if choice == "back":
             self.game_state = "main_menu"
-        # Handle other choices
+        elif choice == "save":
+            self.save_game()
+            self.game_state = "main_menu" # Go back to main menu after saving
+        elif choice == "load":
+            self.load_game()
+            self.game_state = "main_menu" # Go back to main menu after loading
