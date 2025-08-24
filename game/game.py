@@ -34,6 +34,9 @@ class Game:
         self.character_menu_state = "main"
         self.explore_menu_state = "location"
         self.phone_menu_state = "main"
+        self.music_menu_state = "main"
+        self.web_menu_state = "main"
+        self.text_to_view = ""
         self.selected_poi = None
         self.selected_npc = None
         self.conversation_history = []
@@ -273,8 +276,26 @@ class Game:
                     self.running = False
 
             if (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
-                # ... (chart update logic remains the same) ...
-                pass
+                self.GAME_LOG.add_log_message("--- Weekly Chart Update ---")
+                total_fame_gain = 0
+                total_money_gain = 0
+                for chart in self.ACTIVE_CHARTS:
+                    chart.update_weekly(self.player.songs_written, self.player, current_game_time)
+                    # Calculate fame and money from chart positions
+                    for entry in chart.entries:
+                        if entry['artist_name'] == self.player.name:
+                            fame_gain = max(0, (chart.max_size - entry['current_position'] + 1))
+                            money_gain = fame_gain * 10 # $10 per "fame point" from charting
+                            total_fame_gain += fame_gain
+                            total_money_gain += money_gain
+
+                if total_money_gain > 0 or total_fame_gain > 0:
+                    self.player.money += total_money_gain
+                    self.player.fame += total_fame_gain
+                    self.GAME_LOG.add_log_message(f"Your songs earned you ${total_money_gain} and {total_fame_gain} fame this week.")
+
+                self.LAST_CHART_UPDATE_DAY = current_game_time.day
+
 
             if current_game_time.day != self.last_opportunity_check_day:
                 self.check_for_new_opportunities()
@@ -292,10 +313,14 @@ class Game:
                 self.handle_travel_menu()
             elif self.game_state == "phone":
                 self.handle_phone_menu()
+            elif self.game_state == "music_menu":
+                self.handle_music_menu()
             elif self.game_state == "character":
                 self.handle_character_menu()
             elif self.game_state == "system":
                 self.handle_system_menu()
+            elif self.game_state == "view_text":
+                self.handle_text_viewer()
 
             self.ui.update_display()
 
@@ -491,6 +516,50 @@ class Game:
                 self.songwriting_stage = None
                 self.explore_menu_state = "poi"
 
+        elif self.explore_menu_state == "record_song":
+            if self.selected_poi and self.selected_poi.category == "STUDIO_RECORDING":
+                unrecorded_songs = [s for s in self.player.songs_written if not s.is_recorded]
+                if not unrecorded_songs:
+                    self.GAME_LOG.add_log_message("You have no unrecorded songs to record.")
+                    self.explore_menu_state = "poi"
+                    return
+
+                song_options = {str(i): f"'{s.title}' (Quality: {s.song_quality:.2f})" for i, s in enumerate(unrecorded_songs)}
+                song_options["back"] = "Cancel"
+
+                choice = self.ui.present_choices(song_options, "Which song would you like to record?")
+
+                if choice == "back":
+                    self.explore_menu_state = "poi"
+                else:
+                    selected_song = unrecorded_songs[int(choice)]
+                    studio_quality = self.selected_poi.studio_quality
+                    # Let's say a session is 4 hours
+                    session_cost = self.selected_poi.hourly_rate * 4
+
+                    if self.player.money < session_cost:
+                        self.GAME_LOG.add_log_message(f"You can't afford the ${session_cost} session fee.")
+                        self.explore_menu_state = "poi"
+                        return
+
+                    self.player.money -= session_cost
+                    advance_game_time(4 * 60)
+                    self.GAME_LOG.add_log_message(f"You pay ${session_cost} and spend 4 hours in the studio.")
+
+                    # Calculate recording quality
+                    # Base is a weighted average of song quality and studio quality
+                    base_quality = (selected_song.song_quality * 0.6) + (studio_quality * 0.4)
+                    # Skill adds a bonus. Let's use 'guitar' skill for now.
+                    skill_bonus = self.player.skills.get('guitar', 0) / 100.0 # e.g., 10 skill = 0.1 bonus
+
+                    final_quality = min(1.0, base_quality + skill_bonus)
+
+                    selected_song.mark_as_recorded(final_quality)
+                    self.GAME_LOG.add_log_message(f"'{selected_song.title}' is now recorded! Recording Quality: {final_quality:.2f}")
+                    self.explore_menu_state = "poi"
+            else:
+                # Should not happen if triggered correctly
+                self.explore_menu_state = "location"
         elif self.explore_menu_state == "talk":
             npcs_here = [npc for npc in self.NPC_REGISTRY.values() if npc.current_location == self.selected_poi]
             if not npcs_here:
@@ -542,6 +611,8 @@ class Game:
             self.explore_menu_state = "write_song_menu"
             self.songwriting_stage = "choose_genre"
             self.song_in_progress = {}
+        elif interaction_text == "Book recording session":
+            self.explore_menu_state = "record_song"
         elif interaction_text == "Rest (8 hours)":
             self.rest()
         elif "Talk" in interaction_text: # More robust check
@@ -740,6 +811,9 @@ class Game:
 
             if choice == "back":
                 self.game_state = "main_menu"
+            elif choice == "music":
+                self.game_state = "music_menu"
+                self.music_menu_state = "main"
             elif choice in self.OPPORTUNITY_CATALOG:
                 # Handle the selected opportunity
                 self.handle_opportunity(choice)
@@ -749,6 +823,39 @@ class Game:
         elif self.phone_menu_state == "contacts":
             self.handle_contacts_menu()
         elif self.phone_menu_state == "schedule":
+            self.ui.draw_schedule_screen(self.player)
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.phone_menu_state = "main"
+        elif self.phone_menu_state == "web":
+            self.handle_web_menu()
+
+    def handle_web_menu(self):
+        if self.web_menu_state == "main":
+            web_options = {
+                "view_charts": "View Music Charts",
+                "back": "Back to Phone"
+            }
+            choice = self.ui.present_choices(web_options, "Web Browser")
+            if choice == "back":
+                self.game_state = "phone"
+                self.phone_menu_state = "main"
+            else:
+                self.web_menu_state = choice
+
+        elif self.web_menu_state == "view_charts":
+            chart_options = {str(i): chart.name for i, chart in enumerate(self.ACTIVE_CHARTS)}
+            chart_options["back"] = "Back"
+
+            choice = self.ui.present_choices(chart_options, "Which chart to view?")
+            if choice == "back":
+                self.web_menu_state = "main"
+            else:
+                chart_to_view = self.ACTIVE_CHARTS[int(choice)]
+                self.text_to_view = str(chart_to_view)
+                self.game_state = "view_text"
+                self.web_menu_state = "main"
+
 
     def handle_opportunity(self, opp_id):
         opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
@@ -782,15 +889,53 @@ class Game:
                     self.phone_menu_state = "main"
 
     def handle_music_menu(self):
-        music_menu_opts = {
-            "write": "Write Song",
-            "record": "Record Song",
-            "release": "Release Song",
-            "back": "Back"
-        }
-        choice = self.ui.present_choices(music_menu_opts, "Music")
-        if choice == "back":
-            self.game_state = "phone"
+        if self.music_menu_state == "main":
+            music_menu_opts = {
+                "view_songs": "View Your Songs",
+                "release_song": "Release a Song",
+                "back": "Back to Phone"
+            }
+            choice = self.ui.present_choices(music_menu_opts, "Music")
+            if choice == "back":
+                self.game_state = "phone"
+                self.phone_menu_state = "main"
+            else:
+                self.music_menu_state = choice
+
+        elif self.music_menu_state == "view_songs":
+            if not self.player.songs_written:
+                self.GAME_LOG.add_log_message("You haven't written any songs yet.")
+                self.music_menu_state = "main"
+                return
+
+            song_options = {str(i): str(s) for i, s in enumerate(self.player.songs_written)}
+            song_options["back"] = "Back"
+
+            choice = self.ui.present_choices(song_options, "Your Songs")
+            if choice == "back":
+                self.music_menu_state = "main"
+
+        elif self.music_menu_state == "release_song":
+            releasable_songs = [s for s in self.player.songs_written if s.is_recorded and not s.is_released]
+
+            if not releasable_songs:
+                self.GAME_LOG.add_log_message("You have no recorded songs ready for release.")
+                self.music_menu_state = "main"
+                return
+
+            song_options = {str(i): f"'{s.title}' (Rec Q: {s.recording_quality:.2f})" for i, s in enumerate(releasable_songs)}
+            song_options["back"] = "Cancel"
+
+            choice = self.ui.present_choices(song_options, "Which song would you like to self-release?")
+
+            if choice == "back":
+                self.music_menu_state = "main"
+            else:
+                selected_song = releasable_songs[int(choice)]
+                selected_song.mark_as_released(current_game_time)
+                self.GAME_LOG.add_log_message(f"You've self-released '{selected_song.title}' to the world!")
+                # In the future, this could cost money for distribution.
+                self.music_menu_state = "main"
 
     def handle_contacts_menu(self):
         if not self.player.contacts:
@@ -901,3 +1046,12 @@ class Game:
         elif choice == "load":
             self.load_game()
             self.game_state = "main_menu" # Go back to main menu after loading
+
+    def handle_text_viewer(self):
+        self.ui.draw_text_viewer(self.text_to_view)
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE or event.key == pygame.K_RETURN:
+                    self.game_state = "phone" # Go back to the phone menu
+                    self.phone_menu_state = "web"
+                    self.web_menu_state = "main"

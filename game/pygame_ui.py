@@ -176,6 +176,18 @@ class PygameUI:
 
         self.draw_text(f"> {player_input}", FONT_DEFAULT, WHITE, 100, self.SCREEN_HEIGHT - 100)
 
+    def draw_text_viewer(self, text_content):
+        self.clear_screen()
+        self.draw_text("Viewing Document", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        lines = text_content.split('\n')
+        for line in lines:
+            self.draw_text(line, FONT_LOG, WHITE, 50, y_pos)
+            y_pos += 25
+
+        self.draw_text("Press Enter or ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
+
     def present_choices(self, options, title):
         selected_index = 0
         buttons = []

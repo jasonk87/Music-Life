@@ -1,9 +1,13 @@
+import random
+from .song import Song
+
 class Chart:
     def __init__(self, name, max_size=10, chart_genre_preference=None):
         self.name = name
         self.max_size = max_size
         self.chart_genre_preference = chart_genre_preference # Optional: e.g., "Indie", "Rock"
         self.entries = [] # List of dictionaries, each representing a charted song
+        self._populate_initial_ai_songs()
 
         # Each entry dictionary could look like:
         # {
@@ -40,11 +44,51 @@ class Chart:
                   f"{pos_change}\n")
         return s
 
-    # Methods for updating the chart will be added later:
-    # - add_song_candidate(song, player_fame)
-    # - calculate_song_chart_score(song, player_fame)
-    # - update_weekly()
-    # - sort_and_trim_entries()
+    def _generate_ai_song(self):
+        # Helper to create a random song for AI artists
+        genres = ["Rock", "Pop", "Folk", "Indie", "Electronic", "Blues"]
+        adjectives = ["Midnight", "Broken", "Summer", "Electric", "Forgotten", "Cosmic"]
+        nouns = ["Heart", "Dream", "Highway", "Tears", "Echoes", "Sky"]
+        artists = ["The Wanderers", "Starlight Machine", "Echo Bloom", "Neon Kites", "Rivertown Prophets"]
+
+        title = f"{random.choice(adjectives)} {random.choice(nouns)}"
+        genre = self.chart_genre_preference or random.choice(genres)
+
+        song = Song(
+            title=title,
+            author=random.choice(artists),
+            genre=genre,
+            originality=random.uniform(0.4, 0.8),
+            catchiness=random.uniform(0.5, 0.9),
+            lyrical_depth=random.uniform(0.3, 0.7),
+            music_complexity=random.uniform(0.4, 0.8)
+        )
+        song.is_recorded = True
+        song.recording_quality = random.uniform(0.5, 0.8)
+        song.is_released = True # AI songs are always "released"
+        return song
+
+    def _populate_initial_ai_songs(self):
+        num_songs = self.max_size - 2 # Leave some room for the player
+        if num_songs <= 0:
+            return
+        for _ in range(num_songs):
+            song = self._generate_ai_song()
+            # Calculate a chart score. AI artists don't have fame, so we pass a mock player or just 0 fame.
+            # Let's create a simple score calculation for AI songs.
+            chart_score = (song.song_quality * 75) + (song.recording_quality * 50) + random.uniform(0, 30)
+            self.entries.append({
+                'song_id': song.song_id,
+                'song_obj': song,
+                'song_title': song.title,
+                'artist_name': song.author,
+                'current_position': None,
+                'previous_position': None,
+                'weeks_on_chart': random.randint(1, 15),
+                'peak_position': None,
+                'chart_score': chart_score
+            })
+        self._sort_and_trim_entries()
 
     def calculate_song_chart_score(self, song_obj, player_obj): # Now takes player_obj
         """
