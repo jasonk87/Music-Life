@@ -1,6 +1,7 @@
 from game.gear import GearItem
 from game.player_schedule import PlayerSchedule # Import PlayerSchedule
 from game.game_time import current_game_time # Import global game time for start_date
+from game.vehicle import Vehicle
 
 class Player:
     def __init__(self, name):
@@ -8,11 +9,12 @@ class Player:
         self.current_location = None  # City/Location object
         self.current_poi = None       # PointOfInterest object within current_location
 
-        self.skills = {}  # e.g., {"guitar": 10, "vocals": 5}
+        self.skills = {"songwriting": 5, "guitar": 2, "vocals": 1} # Start with some basic skills
         self.fame = 0
         self.money = 500 # Starting money
 
         self.gear_inventory = [] # List of GearItem objects
+        self.vehicles = []
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
@@ -137,6 +139,16 @@ class Player:
         else:
             print(f"Item '{str(item_id_or_instance)}' not found in inventory.")
             return False
+
+    def add_vehicle(self, vehicle):
+        if not isinstance(vehicle, Vehicle):
+            print(f"Error: Cannot add '{vehicle}'. Not a valid Vehicle.")
+            return False
+        # Create a new instance to ensure player's vehicle has its own state (e.g. fuel)
+        new_vehicle = Vehicle(vehicle.name, vehicle.cost, vehicle.speed, vehicle.fuel_capacity, vehicle.fuel_efficiency)
+        self.vehicles.append(new_vehicle)
+        print(f"{new_vehicle.name} added to your garage.")
+        return True
 
     def practice_skill(self, skill_name, hours):
         if skill_name not in self.skills:
@@ -265,6 +277,7 @@ class Player:
         status += f"Skills: {self.skills}\n"
         status += f"Songs Written: {len(self.songs_written)}\n"
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"
+        status += f"Vehicles: {', '.join([v.name for v in self.vehicles]) if self.vehicles else 'None'}\n"
         status += f"Has Bike: {'Yes' if self.has_bike else 'No'}\n"
 
         if self.has_manager:

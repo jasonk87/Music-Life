@@ -38,6 +38,9 @@ class Game:
         self.selected_npc = None
         self.conversation_history = []
         self.player_input = ""
+        self.songwriting_stage = None
+        self.song_in_progress = {}
+        self.SONG_GENRES = ["Rock", "Pop", "Folk", "Indie", "Electronic", "Blues"]
 
         self.SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -66,6 +69,27 @@ class Game:
     def _get_time_slot_key(self, gt_obj):
         day_name = self._get_day_of_week_name(gt_obj.day); hour = gt_obj.hour
         day_type = "Weekend" if day_name in ["Saturday", "Sunday"] else "Weekday"
+
+    def _calculate_song_component_quality(self, primary_skill, secondary_skill=None, weight=0.75):
+        """Calculates the quality of a song component based on player skills."""
+        primary_skill_val = self.player.skills.get(primary_skill, 0)
+        secondary_skill_val = self.player.skills.get(secondary_skill, 0) if secondary_skill else 0
+
+        # Weighted average of skills
+        combined_skill = (primary_skill_val * weight) + (secondary_skill_val * (1 - weight))
+
+        # Add some randomness
+        random_factor = random.uniform(0.5, 1.5)
+
+        # Base quality is influenced by skill and randomness
+        quality = combined_skill * random_factor
+
+        # Normalize to 0-1 range
+        # Let's assume max possible skill effect is around 50 for a quality of 1.0
+        # This is a magic number and can be tuned.
+        normalized_quality = min(1.0, quality / 50.0)
+
+        return normalized_quality
         if 6 <= hour <= 11: period = "Morning"
         elif 12 <= hour <= 17: period = "Afternoon"
         elif 18 <= hour <= 23: period = "Evening"
@@ -297,7 +321,7 @@ class Game:
                     self.selected_poi = None
                 else:
                     self.handle_interaction(interaction_options[choice])
-                    if self.explore_menu_state not in ["shop", "write_song", "talk", "dialogue", "dealership"]:
+                    if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership"]:
                         self.explore_menu_state = "location"
                         self.selected_poi = None
             else:
@@ -356,16 +380,96 @@ class Game:
                             self.GAME_LOG.add_log_message(f"You can't afford {item_to_buy.name}.")
             else:
                 self.explore_menu_state = "location"
-        elif self.explore_menu_state == "write_song":
-            song_title = self.ui.get_text_input("Enter a title for your new song:")
-            if song_title:
-                # Simplified song creation for now
-                new_song = Song(title=song_title, author=self.player.name, genre="Rock")
+        elif self.explore_menu_state == "write_song_menu":
+            if self.songwriting_stage == "choose_genre":
+                genre_options = {genre: genre for genre in self.SONG_GENRES}
+                genre_options["back"] = "Cancel"
+
+                choice = self.ui.present_choices(genre_options, "Choose a genre for your song:")
+                if choice == "back":
+                    self.explore_menu_state = "poi"
+                    self.songwriting_stage = None
+                else:
+                    self.song_in_progress['genre'] = choice
+                    self.songwriting_stage = "get_title"
+
+            elif self.songwriting_stage == "get_title":
+                song_title = self.ui.get_text_input("Enter a title for your new song:")
+                if song_title:
+                    self.song_in_progress['title'] = song_title
+                    self.songwriting_stage = "confirm_start"
+                else:
+                    self.GAME_LOG.add_log_message("Songwriting cancelled.")
+                    self.explore_menu_state = "poi"
+                    self.songwriting_stage = None
+
+            elif self.songwriting_stage == "confirm_start":
+                title = self.song_in_progress.get('title', 'Untitled')
+                genre = self.song_in_progress.get('genre', 'Unknown')
+                confirm_options = {
+                    "yes": f"Start writing '{title}' ({genre}) (Will take ~8 hours)",
+                    "no": "Cancel"
+                }
+                choice = self.ui.present_choices(confirm_options, "Ready to start writing?")
+                if choice == "yes":
+                    self.songwriting_stage = "writing_components"
+                    # This will fall through to the next stage in the same frame
+                else:
+                    self.GAME_LOG.add_log_message("Songwriting cancelled.")
+                    self.explore_menu_state = "poi"
+                    self.songwriting_stage = None
+
+            if self.songwriting_stage == "writing_components":
+                # This is a non-interactive stage, so we do the work and then change state.
+                self.GAME_LOG.add_log_message("You spend a long day writing...")
+
+                # Lyrics (2 hours)
+                lyrical_depth = self._calculate_song_component_quality('songwriting')
+                self.song_in_progress['lyrical_depth'] = lyrical_depth
+                advance_game_time(120)
+                self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
+
+                # Melody (3 hours)
+                catchiness = self._calculate_song_component_quality('songwriting', 'guitar')
+                self.song_in_progress['catchiness'] = catchiness
+                advance_game_time(180)
+                self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
+
+                # Arrangement / Complexity (3 hours)
+                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7)
+                self.song_in_progress['music_complexity'] = music_complexity
+                originality = self._calculate_song_component_quality('songwriting') # Originality is based on songwriting
+                self.song_in_progress['originality'] = originality
+                advance_game_time(180)
+                self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
+
+                self.GAME_LOG.add_log_message("The song is written! Now to finalize it.")
+                self.songwriting_stage = "finalize_song"
+                # Fall through to the finalize stage immediately
+
+            if self.songwriting_stage == "finalize_song":
+                # This is also a non-interactive stage
+                title = self.song_in_progress.get('title', 'Untitled')
+                genre = self.song_in_progress.get('genre', 'Rock')
+
+                new_song = Song(
+                    title=title,
+                    author=self.player.name,
+                    genre=genre,
+                    originality=self.song_in_progress.get('originality', 0.5),
+                    catchiness=self.song_in_progress.get('catchiness', 0.5),
+                    lyrical_depth=self.song_in_progress.get('lyrical_depth', 0.5),
+                    music_complexity=self.song_in_progress.get('music_complexity', 0.5)
+                )
+
                 self.player.songs_written.append(new_song)
-                self.GAME_LOG.add_log_message(f"You wrote a new song: '{song_title}'")
-            else:
-                self.GAME_LOG.add_log_message("Songwriting cancelled.")
-            self.explore_menu_state = "poi"
+                self.GAME_LOG.add_log_message(f"You finished writing '{title}'! Overall Quality: {new_song.song_quality:.2f}")
+
+                # Clean up and exit songwriting mode
+                self.song_in_progress = {}
+                self.songwriting_stage = None
+                self.explore_menu_state = "poi"
+
         elif self.explore_menu_state == "talk":
             npcs_here = [npc for npc in self.NPC_REGISTRY.values() if npc.current_location == self.selected_poi]
             if not npcs_here:
@@ -414,7 +518,9 @@ class Game:
             else:
                 self.GAME_LOG.add_log_message("Nothing for sale currently.")
         elif interaction_text == "Write a new song":
-            self.explore_menu_state = "write_song"
+            self.explore_menu_state = "write_song_menu"
+            self.songwriting_stage = "choose_genre"
+            self.song_in_progress = {}
         elif interaction_text == "Rest (8 hours)":
             self.rest()
         elif "Talk" in interaction_text: # More robust check
