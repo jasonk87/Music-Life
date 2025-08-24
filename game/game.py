@@ -41,6 +41,14 @@ class Game:
         self.songwriting_stage = None
         self.song_in_progress = {}
         self.SONG_GENRES = ["Rock", "Pop", "Folk", "Indie", "Electronic", "Blues"]
+        self.OPPORTUNITY_CATALOG = {
+            "radio_interview_local": {
+                "name": "Local Radio Interview",
+                "trigger": lambda p: p.fame >= 50 and any(s.is_released and s.song_quality >= 0.6 for s in p.songs_written),
+                "action_text": "Call K-ROK Radio for interview",
+                "type": "phone"
+            }
+        }
 
         self.SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -49,6 +57,7 @@ class Game:
         self.PLAYER_HOME_POI_ID_GLOBAL = None
         self.ACTIVE_CHARTS = []
         self.LAST_CHART_UPDATE_DAY = -1
+        self.last_opportunity_check_day = -1
 
         self._poi_venue_id_map = {}
 
@@ -69,6 +78,11 @@ class Game:
     def _get_time_slot_key(self, gt_obj):
         day_name = self._get_day_of_week_name(gt_obj.day); hour = gt_obj.hour
         day_type = "Weekend" if day_name in ["Saturday", "Sunday"] else "Weekday"
+        if 6 <= hour <= 11: period = "Morning"
+        elif 12 <= hour <= 17: period = "Afternoon"
+        elif 18 <= hour <= 23: period = "Evening"
+        else: period = "Night"
+        return f"{day_type}_{period}"
 
     def _calculate_song_component_quality(self, primary_skill, secondary_skill=None, weight=0.75):
         """Calculates the quality of a song component based on player skills."""
@@ -90,11 +104,6 @@ class Game:
         normalized_quality = min(1.0, quality / 50.0)
 
         return normalized_quality
-        if 6 <= hour <= 11: period = "Morning"
-        elif 12 <= hour <= 17: period = "Afternoon"
-        elif 18 <= hour <= 23: period = "Evening"
-        else: period = "Night"
-        return f"{day_type}_{period}"
 
     def setup_world(self):
         self.WORLD_MAP.clear(); self.NPC_REGISTRY.clear(); self._poi_venue_id_map.clear()
@@ -240,6 +249,14 @@ class Game:
 
         self.LAST_CHART_UPDATE_DAY = current_game_time.day
 
+    def check_for_new_opportunities(self):
+        for opp_id, opp_data in self.OPPORTUNITY_CATALOG.items():
+            if opp_id not in self.player.active_opportunities:
+                if opp_data['trigger'](self.player):
+                    self.player.active_opportunities[opp_id] = "available"
+                    self.GAME_LOG.add_log_message(f"A new opportunity has arisen: {opp_data['name']}!")
+                    self.GAME_LOG.add_log_message("Check your phone for more details.")
+
     def run(self):
         if not self.setup_world():
             print("World setup failed. Check log.")
@@ -258,6 +275,10 @@ class Game:
             if (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
                 # ... (chart update logic remains the same) ...
                 pass
+
+            if current_game_time.day != self.last_opportunity_check_day:
+                self.check_for_new_opportunities()
+                self.last_opportunity_check_day = current_game_time.day
 
             self.ui.clear_screen()
             self.ui.draw_hud(get_current_time_str(date_only=True), str(self.player.money), str(self.player.hair_length), str(self.player.beard_length))
@@ -705,17 +726,56 @@ class Game:
                 "music": "Music",
                 "contacts": "Contacts",
                 "web": "Web",
-                "back": "Back"
             }
+            # Add dynamic opportunities
+            for opp_id, status in self.player.active_opportunities.items():
+                if status == "available":
+                    opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
+                    if opp_data and opp_data.get("type") == "phone":
+                        phone_menu_opts[opp_id] = opp_data["action_text"]
+
+            phone_menu_opts["back"] = "Back"
 
             choice = self.ui.present_choices(phone_menu_opts, "Phone")
+
             if choice == "back":
                 self.game_state = "main_menu"
+            elif choice in self.OPPORTUNITY_CATALOG:
+                # Handle the selected opportunity
+                self.handle_opportunity(choice)
+                self.phone_menu_state = "main" # Return to phone menu
             else:
                 self.phone_menu_state = choice
         elif self.phone_menu_state == "contacts":
             self.handle_contacts_menu()
         elif self.phone_menu_state == "schedule":
+
+    def handle_opportunity(self, opp_id):
+        opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
+        if not opp_data:
+            return
+
+        self.GAME_LOG.add_log_message(f"You pursue the opportunity: {opp_data['name']}")
+
+        if opp_id == "radio_interview_local":
+            # Time cost: 2 hours
+            advance_game_time(120)
+
+            # Logic for the interview
+            self.GAME_LOG.add_log_message("You head down to the K-ROK radio station...")
+            # Simple success chance for now
+            # TODO: Base this on a player skill like charisma
+            if random.random() > 0.3: # 70% chance of success
+                fame_gain = 25
+                self.player.fame += fame_gain
+                self.GAME_LOG.add_log_message(f"The interview went great! You feel your buzz growing. (+{fame_gain} Fame)")
+            else:
+                fame_gain = 5
+                self.player.fame += fame_gain
+                self.GAME_LOG.add_log_message(f"You were a bit nervous and stumbled on a few questions. Still, exposure is exposure. (+{fame_gain} Fame)")
+
+            # Mark as completed
+            self.player.active_opportunities[opp_id] = "completed"
             self.ui.draw_schedule_screen(self.player)
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
