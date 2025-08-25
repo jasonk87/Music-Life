@@ -9,7 +9,7 @@ class Player:
         self.current_location = None  # City/Location object
         self.current_poi = None       # PointOfInterest object within current_location
 
-        self.skills = {"songwriting": 5, "guitar": 2, "vocals": 1} # Start with some basic skills
+        self.skills = {"songwriting": 5, "guitar": 2, "vocals": 1, "stage_presence": 1} # Start with some basic skills
         self.fame = 0
         self.money = 500 # Starting money
 

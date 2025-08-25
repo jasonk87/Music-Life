@@ -23,6 +23,7 @@ from game_data.vehicle_catalog import VEHICLE_CATALOG
 from game.chart import Chart
 from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
 from game.sound import SoundManager
+from game.ascii_art import ART
 
 class Game:
     def __init__(self, ui):
@@ -37,6 +38,9 @@ class Game:
         self.music_menu_state = "main"
         self.web_menu_state = "main"
         self.text_to_view = ""
+        self.active_performance = None
+        self.performance_log = []
+        self.performance_stage = None
         self.selected_poi = None
         self.selected_npc = None
         self.conversation_history = []
@@ -163,6 +167,8 @@ class Game:
                 if owner_npc_id_temp_venue: venue.owner_npc_id = owner_npc_id_temp_venue
                 venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
                 venue.booking_fee = booking_fee_prop; venue.allows_player_booking = allows_player_booking_prop
+                if not venue.interaction_options:
+                    venue.interaction_options = ["View upcoming events", "Talk to the owner"]
                 location_obj.add_venue(venue)
 
             for conn_data in city_def_data.get("intra_city_poi_connections", []):
@@ -321,6 +327,8 @@ class Game:
                 self.handle_system_menu()
             elif self.game_state == "view_text":
                 self.handle_text_viewer()
+            elif self.game_state == "performance":
+                self.handle_performance_scene()
 
             self.ui.update_display()
 
@@ -358,6 +366,11 @@ class Game:
                 self.explore_menu_state = "poi"
         elif self.explore_menu_state == "poi":
             if self.selected_poi:
+                # Draw ASCII art for the location
+                poi_id = self.selected_poi.poi_id if hasattr(self.selected_poi, 'poi_id') else self.selected_poi.venue_id
+                art_to_display = ART.get(poi_id, ART['default'])
+                self.ui.draw_ascii_art(art_to_display, 450, 120)
+
                 interaction_options = {str(i): option for i, option in enumerate(self.selected_poi.get_interactions())}
                 interaction_options["back"] = "Back"
 
@@ -577,6 +590,33 @@ class Game:
                     self.explore_menu_state = "dialogue"
                     self.conversation_history = []
                     self.player_input = ""
+        elif self.explore_menu_state == "view_events":
+            if self.selected_poi and isinstance(self.selected_poi, Venue):
+                if not self.selected_poi.events_hosted:
+                    self.GAME_LOG.add_log_message("There are no events scheduled here right now.")
+                    self.explore_menu_state = "poi"
+                    return
+
+                event_options = {str(i): f"{event.name} ({event.event_type})" for i, event in enumerate(self.selected_poi.events_hosted)}
+                event_options["back"] = "Back"
+
+                choice = self.ui.present_choices(event_options, f"Events at {self.selected_poi.name}")
+
+                if choice == "back":
+                    self.explore_menu_state = "poi"
+                else:
+                    event = self.selected_poi.events_hosted[int(choice)]
+                    # For now, we only handle Open Mic night
+                    if event.event_type == "OPEN_MIC":
+                        self.active_performance = event
+                        self.game_state = "performance"
+                        self.performance_stage = "choose_song"
+                    else:
+                        self.GAME_LOG.add_log_message("You can't sign up for this type of event yet.")
+                        self.explore_menu_state = "poi"
+            else:
+                self.explore_menu_state = "poi"
+
         elif self.explore_menu_state == "dialogue":
             if self.selected_npc:
                 self.ui.draw_dialogue_screen(self.selected_npc.name, self.conversation_history, self.player_input)
@@ -600,6 +640,12 @@ class Game:
 
     def handle_interaction(self, interaction_text, time_cost=15):
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
+
+        # Some interactions have no time cost, handle them first
+        if interaction_text == "View upcoming events":
+            self.explore_menu_state = "view_events"
+            return
+
         advance_game_time(time_cost)
         self.process_time_based_player_needs(self.player, time_cost)
         if interaction_text == "Browse items for sale":
@@ -1055,3 +1101,101 @@ class Game:
                     self.game_state = "phone" # Go back to the phone menu
                     self.phone_menu_state = "web"
                     self.web_menu_state = "main"
+
+    def handle_performance_scene(self):
+        if self.performance_stage == "choose_song":
+            if not self.player.songs_written:
+                self.GAME_LOG.add_log_message("You have no songs to perform!")
+                self.game_state = "explore"
+                return
+
+            song_options = {str(i): f"'{s.title}' (Q: {s.song_quality:.2f})" for i, s in enumerate(self.player.songs_written)}
+            song_options["back"] = "Cancel"
+            choice = self.ui.present_choices(song_options, "Choose a song to perform:")
+
+            if choice == "back":
+                self.game_state = "explore"
+            else:
+                selected_song = self.player.songs_written[int(choice)]
+                self.active_performance.song_to_perform = selected_song # Store it
+                self.performance_stage = "intro"
+                self.performance_log = [f"You take the stage at {self.active_performance.location.name} for {self.active_performance.name}...",
+                                        f"You've decided to play '{selected_song.title}'."]
+
+        elif self.performance_stage == "intro":
+            # This is a timed, non-interactive stage
+            self.ui.clear_screen()
+            venue_id = self.active_performance.location.venue_id
+            art_to_display = ART.get(venue_id, ART['default'])
+            self.ui.draw_ascii_art(art_to_display, 300, 150)
+            # Display the log
+            for i, line in enumerate(self.performance_log):
+                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
+            self.ui.update_display()
+            pygame.time.wait(2000) # Pause for 2 seconds
+
+            # Skill check for the intro
+            performance_score = 0
+            if self.player.skills.get('stage_presence', 0) > 5:
+                self.performance_log.append("You greet the crowd with confidence.")
+                performance_score += 10
+            else:
+                self.performance_log.append("You nervously approach the mic.")
+                performance_score -= 5
+            self.performance_stage = "verse_1"
+
+        elif self.performance_stage == "verse_1":
+            self.ui.clear_screen()
+            venue_id = self.active_performance.location.venue_id
+            art_to_display = ART.get(venue_id, ART['default'])
+            self.ui.draw_ascii_art(art_to_display, 300, 150)
+            # Display the log
+            for i, line in enumerate(self.performance_log):
+                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
+            self.ui.update_display()
+            pygame.time.wait(2000)
+
+            # Skill check for vocals
+            song = self.active_performance.song_to_perform
+            if (self.player.skills.get('vocals', 0) + song.song_quality * 50) > 30:
+                self.performance_log.append("Your voice is clear and hits all the right notes.")
+                performance_score += 20
+            else:
+                self.performance_log.append("Your voice cracks a little, but you push through.")
+                performance_score += 5
+
+            self.active_performance.performance_score = performance_score # Store score
+            self.performance_stage = "outro"
+
+        elif self.performance_stage == "outro":
+            self.ui.clear_screen()
+            venue_id = self.active_performance.location.venue_id
+            art_to_display = ART.get(venue_id, ART['default'])
+            self.ui.draw_ascii_art(art_to_display, 300, 150)
+            # Display the log
+            for i, line in enumerate(self.performance_log):
+                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
+            self.ui.update_display()
+            pygame.time.wait(2000)
+
+            # Final skill check
+            performance_score = self.active_performance.performance_score
+            if (self.player.skills.get('guitar', 0) + self.player.skills.get('stage_presence', 0)) > 10:
+                self.performance_log.append("You finish with a flourish! The crowd applauds.")
+                performance_score += 15
+            else:
+                self.performance_log.append("The song ends. A few people clap politely.")
+                performance_score += 5
+
+            # Final rewards
+            fame_gain = int(performance_score / 5)
+            money_gain = int(performance_score / 2) # Open mic doesn't pay much
+            self.player.fame += fame_gain
+            self.player.money += money_gain
+            self.GAME_LOG.add_log_message(f"Performance complete! You earned ${money_gain} and {fame_gain} fame.")
+
+            # Cleanup
+            self.active_performance = None
+            self.performance_log = []
+            self.performance_stage = None
+            self.game_state = "explore"

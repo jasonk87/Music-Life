@@ -21,6 +21,7 @@ pygame.font.init()
 FONT_DEFAULT = pygame.font.Font(None, 32)
 FONT_TITLE = pygame.font.Font(None, 48)
 FONT_LOG = pygame.font.Font(None, 24)
+FONT_ASCII = pygame.font.SysFont('monospace', 18)
 
 class PygameUI:
     def __init__(self):
@@ -64,6 +65,11 @@ class PygameUI:
         pygame.draw.rect(self.screen, WHITE, portrait_rect, 2)
         self.draw_text(f"Hair: {hair_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 20)
         self.draw_text(f"Beard: {beard_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 50)
+
+    def draw_ascii_art(self, art_lines, x, y, color=WHITE):
+        line_height = FONT_ASCII.get_linesize()
+        for i, line in enumerate(art_lines):
+            self.draw_text(line, FONT_ASCII, color, x, y + (i * line_height))
 
     def add_log_message(self, message):
         self.log_messages.insert(0, message)
