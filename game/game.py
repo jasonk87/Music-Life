@@ -54,6 +54,19 @@ class Game:
                 "trigger": lambda p: p.fame >= 50 and any(s.is_released and s.song_quality >= 0.6 for s in p.songs_written),
                 "action_text": "Call K-ROK Radio for interview",
                 "type": "phone"
+            },
+            "music_blog_feature": {
+                "name": "IndiePulse Music Blog Feature",
+                "trigger": lambda p: p.fame >= 75 and any(s.is_released for s in p.songs_written),
+                "action_text": "Respond to email from IndiePulse blog",
+                "type": "phone"
+            },
+            "battle_of_the_bands_local": {
+                "name": "Hometown Battle of the Bands",
+                "trigger": lambda p: p.fame >= 100 and len(p.songs_written) >= 2,
+                "action_text": "Sign up for Battle of the Bands",
+                "type": "venue_event",
+                "venue_id": "hometown_community_hall"
             }
         }
 
@@ -598,15 +611,30 @@ class Game:
                     return
 
                 event_options = {str(i): f"{event.name} ({event.event_type})" for i, event in enumerate(self.selected_poi.events_hosted)}
+
+                # Add dynamic opportunities that are venue-specific
+                for opp_id, status in self.player.active_opportunities.items():
+                    if status == "available":
+                        opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
+                        if opp_data and opp_data.get("type") == "venue_event" and opp_data.get("venue_id") == self.selected_poi.venue_id:
+                            event_options[opp_id] = opp_data["action_text"]
+
                 event_options["back"] = "Back"
 
                 choice = self.ui.present_choices(event_options, f"Events at {self.selected_poi.name}")
 
                 if choice == "back":
                     self.explore_menu_state = "poi"
+                elif choice in self.OPPORTUNITY_CATALOG:
+                    # Dynamic Venue Event (Battle of the Bands)
+                    opp_data = self.OPPORTUNITY_CATALOG[choice]
+                    temp_event = Event(name=opp_data['name'], event_type="BATTLE_OF_THE_BANDS", location=self.selected_poi)
+                    self.active_performance = temp_event
+                    self.game_state = "performance"
+                    self.performance_stage = "choose_song"
                 else:
+                    # Regular, hardcoded event
                     event = self.selected_poi.events_hosted[int(choice)]
-                    # For now, we only handle Open Mic night
                     if event.event_type == "OPEN_MIC":
                         self.active_performance = event
                         self.game_state = "performance"
@@ -917,7 +945,6 @@ class Game:
             # Logic for the interview
             self.GAME_LOG.add_log_message("You head down to the K-ROK radio station...")
             # Simple success chance for now
-            # TODO: Base this on a player skill like charisma
             if random.random() > 0.3: # 70% chance of success
                 fame_gain = 25
                 self.player.fame += fame_gain
@@ -927,7 +954,14 @@ class Game:
                 self.player.fame += fame_gain
                 self.GAME_LOG.add_log_message(f"You were a bit nervous and stumbled on a few questions. Still, exposure is exposure. (+{fame_gain} Fame)")
 
-            # Mark as completed
+            self.player.active_opportunities[opp_id] = "completed"
+
+        elif opp_id == "music_blog_feature":
+            # Time cost: 1 hour
+            advance_game_time(60)
+            fame_gain = 15
+            self.player.fame += fame_gain
+            self.GAME_LOG.add_log_message(f"IndiePulse runs a great feature on your music! (+{fame_gain} Fame)")
             self.player.active_opportunities[opp_id] = "completed"
             self.ui.draw_schedule_screen(self.player)
             for event in pygame.event.get():
@@ -1188,13 +1222,26 @@ class Game:
                 performance_score += 5
 
             # Final rewards
-            fame_gain = int(performance_score / 5)
-            money_gain = int(performance_score / 2) # Open mic doesn't pay much
+            if self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
+                if performance_score > 40:
+                    self.GAME_LOG.add_log_message("You won the Battle of the Bands!")
+                    fame_gain = 50
+                    money_gain = 500
+                else:
+                    self.GAME_LOG.add_log_message("You didn't win, but you put on a good show.")
+                    fame_gain = 15
+                    money_gain = 50
+            else: # Default for Open Mic
+                fame_gain = int(performance_score / 5)
+                money_gain = int(performance_score / 2)
+
             self.player.fame += fame_gain
             self.player.money += money_gain
             self.GAME_LOG.add_log_message(f"Performance complete! You earned ${money_gain} and {fame_gain} fame.")
 
             # Cleanup
+            if self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
+                self.player.active_opportunities["battle_of_the_bands_local"] = "completed"
             self.active_performance = None
             self.performance_log = []
             self.performance_stage = None
