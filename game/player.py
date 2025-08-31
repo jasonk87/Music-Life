@@ -2,6 +2,7 @@ from game.gear import GearItem
 from game.player_schedule import PlayerSchedule # Import PlayerSchedule
 from game.game_time import current_game_time # Import global game time for start_date
 from game.vehicle import Vehicle
+from game.band import Band
 
 class Player:
     def __init__(self, name):
@@ -25,6 +26,7 @@ class Player:
         self.hunger = 0 # 0-100, 0 is full, 100 is starving
 
         self.songs_written = []
+        self.band = None
 
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200

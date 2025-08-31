@@ -14,12 +14,16 @@
   },
   {
     "npc_id": "sarah001",
-    "name": "Sarah the Fan",
-    "personality_key": "adoring_fan",
+    "name": "Sarah",
+    "personality_key": "potential_bandmate_bassist",
     "home_location_location_id": "your_hometown",
     "initial_current_location_location_id": "your_hometown",
     "schedule": {
       "open_mic_night_at_community_hall": "hometown_community_hall"
+    },
+    "skills": {
+      "bass": 15,
+      "musicianship": 10
     }
   },
   {
@@ -45,6 +49,11 @@
       "Weekday_Evening": "citycenter_rustymug",
       "Weekend_Afternoon": "citycenter_proaudio",
       "Weekend_Evening": "citycenter_rustymug"
+    },
+    "skills": {
+      "guitar": 25,
+      "musicianship": 15,
+      "stage_presence": 10
     }
   },
   {

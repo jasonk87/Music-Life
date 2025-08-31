@@ -41,6 +41,7 @@ class Game:
         self.active_performance = None
         self.performance_log = []
         self.performance_stage = None
+        self.band_menu_state = "main"
         self.selected_poi = None
         self.selected_npc = None
         self.conversation_history = []
@@ -105,9 +106,11 @@ class Game:
         return f"{day_type}_{period}"
 
     def _calculate_song_component_quality(self, primary_skill, secondary_skill=None, weight=0.75):
-        """Calculates the quality of a song component based on player skills."""
-        primary_skill_val = self.player.skills.get(primary_skill, 0)
-        secondary_skill_val = self.player.skills.get(secondary_skill, 0) if secondary_skill else 0
+        """Calculates the quality of a song component based on player or band skills."""
+        skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
+
+        primary_skill_val = skills_to_use.get(primary_skill, 0)
+        secondary_skill_val = skills_to_use.get(secondary_skill, 0) if secondary_skill else 0
 
         # Weighted average of skills
         combined_skill = (primary_skill_val * weight) + (secondary_skill_val * (1 - weight))
@@ -206,6 +209,8 @@ class Game:
                 scheduled_loc_obj = self.get_poi_or_venue_by_id(loc_id_str)
                 if scheduled_loc_obj: npc.schedule[time_slot] = scheduled_loc_obj
                 else: self.GAME_LOG.add_message(f"Warning: Scheduled POI/Venue ID '{loc_id_str}' not found for {npc.name}'s schedule.")
+            if "skills" in npc_data:
+                npc.skills = npc_data["skills"]
             self.NPC_REGISTRY[npc.npc_id] = npc
 
         for loc in self.WORLD_MAP.values():
@@ -1041,6 +1046,7 @@ class Game:
                 "stats": "Stats",
                 "skills": "Skills",
                 "inventory": "Inventory",
+                "band": "Band",
                 "back": "Back"
             }
             choice = self.ui.present_choices(character_menu_opts, "Character")
@@ -1053,6 +1059,52 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
+
+        elif self.character_menu_state == "band":
+            if self.band_menu_state == "main":
+                if self.player.band is None:
+                    band_options = {"form_band": "Form a new band", "back": "Back"}
+                    choice = self.ui.present_choices(band_options, "You are not in a band.")
+                    if choice == "back":
+                        self.character_menu_state = "main"
+                    elif choice == "form_band":
+                        self.band_menu_state = "recruit"
+                else:
+                    self.ui.draw_band_screen(self.player.band)
+                    for event in pygame.event.get():
+                        if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_ESCAPE:
+                                self.character_menu_state = "main"
+                                self.band_menu_state = "main"
+
+            elif self.band_menu_state == "recruit":
+                recruitable_npcs = {npc.npc_id: npc for npc in self.NPC_REGISTRY.values() if npc.skills and npc not in (self.player.band.members if self.player.band else [])}
+                if not recruitable_npcs:
+                    self.GAME_LOG.add_log_message("There's no one suitable to recruit right now.")
+                    self.band_menu_state = "main"
+                    return
+
+                npc_options = {npc_id: f"{npc.name} ({', '.join(npc.skills.keys())})" for npc_id, npc in recruitable_npcs.items()}
+                npc_options["back"] = "Cancel"
+
+                choice = self.ui.present_choices(npc_options, "Who do you want to recruit?")
+                if choice == "back":
+                    self.band_menu_state = "main"
+                else:
+                    npc_to_recruit = recruitable_npcs[choice]
+                    # Simple fame check for now
+                    if self.player.fame >= 100:
+                        if self.player.band is None:
+                            band_name = self.ui.get_text_input("Enter a name for your new band:")
+                            if not band_name:
+                                band_name = f"{self.player.name} and the Noise"
+                            self.player.band = Band(band_name, self.player)
+
+                        self.player.band.add_member(npc_to_recruit)
+                        self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} agreed to join your band!")
+                    else:
+                        self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} isn't interested. Maybe when you're more famous.")
+                    self.band_menu_state = "main"
         elif self.character_menu_state == "skills":
             self.ui.draw_skills_screen(self.player)
             for event in pygame.event.get():
@@ -1169,9 +1221,10 @@ class Game:
             pygame.time.wait(2000) # Pause for 2 seconds
 
             # Skill check for the intro
+            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
             performance_score = 0
-            if self.player.skills.get('stage_presence', 0) > 5:
-                self.performance_log.append("You greet the crowd with confidence.")
+            if skills_to_use.get('stage_presence', 0) > 5:
+                self.performance_log.append("The band looks confident on stage.")
                 performance_score += 10
             else:
                 self.performance_log.append("You nervously approach the mic.")
@@ -1190,12 +1243,13 @@ class Game:
             pygame.time.wait(2000)
 
             # Skill check for vocals
+            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
             song = self.active_performance.song_to_perform
-            if (self.player.skills.get('vocals', 0) + song.song_quality * 50) > 30:
-                self.performance_log.append("Your voice is clear and hits all the right notes.")
+            if (skills_to_use.get('vocals', 0) + song.song_quality * 50) > 30:
+                self.performance_log.append("The vocals are clear and hit all the right notes.")
                 performance_score += 20
             else:
-                self.performance_log.append("Your voice cracks a little, but you push through.")
+                self.performance_log.append("The vocals are a bit shaky, but the band pushes through.")
                 performance_score += 5
 
             self.active_performance.performance_score = performance_score # Store score
@@ -1213,9 +1267,10 @@ class Game:
             pygame.time.wait(2000)
 
             # Final skill check
+            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
             performance_score = self.active_performance.performance_score
-            if (self.player.skills.get('guitar', 0) + self.player.skills.get('stage_presence', 0)) > 10:
-                self.performance_log.append("You finish with a flourish! The crowd applauds.")
+            if (skills_to_use.get('guitar', 0) + skills_to_use.get('stage_presence', 0)) > 10:
+                self.performance_log.append("The band finishes with a flourish! The crowd applauds.")
                 performance_score += 15
             else:
                 self.performance_log.append("The song ends. A few people clap politely.")

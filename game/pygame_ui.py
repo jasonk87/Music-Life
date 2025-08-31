@@ -147,6 +147,31 @@ class PygameUI:
 
         self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
 
+    def draw_band_screen(self, band):
+        self.draw_text(band.name, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
+
+        # Members
+        self.draw_text("Members:", FONT_DEFAULT, WHITE, 100, 120)
+        y_pos = 160
+        for member in band.members:
+            self.draw_text(f"- {member.name}", FONT_DEFAULT, WHITE, 120, y_pos)
+            y_pos += 30
+            # Draw member skills
+            for skill, value in member.skills.items():
+                self.draw_text(f"  {skill.capitalize()}: {value}", FONT_LOG, LIGHT_GREY, 140, y_pos)
+                y_pos += 25
+            y_pos += 15
+
+        # Average Band Skills
+        self.draw_text("Average Band Skills:", FONT_DEFAULT, WHITE, 600, 120)
+        y_pos = 160
+        for skill, value in band.band_skills.items():
+            self.draw_text(f"{skill.capitalize()}: {value:.1f}", FONT_DEFAULT, WHITE, 620, y_pos)
+            y_pos += 40
+
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+
+
     def get_current_time_str(self, date_only=False):
         return get_current_time_str(date_only)
 
