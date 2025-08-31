@@ -26,6 +26,7 @@ class NPC:
         self.memories = [] # List of strings summarizing key interactions/facts
         self.dialogue_history = [] # Specific to this NPC instance
         self.skills = {} # e.g., {"guitar": 10, "vocals": 5}
+        self.gift_preferences = {} # e.g., {"category": "FOOD", "value": 5}
 
     def __str__(self):
         return f"NPC: {self.name} (ID: {self.npc_id}, Personality: {self.personality_key}, Relationship: {self.relationship_with_player.name} ({self.relationship_score}))"

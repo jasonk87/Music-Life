@@ -171,6 +171,21 @@ class PygameUI:
 
         self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
 
+    def draw_contact_details_screen(self, npc):
+        self.draw_text(npc.name, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
+
+        y_pos = 120
+        self.draw_text(f"Relationship: {npc.relationship_with_player.name} ({npc.relationship_score}/100)", FONT_DEFAULT, WHITE, 100, y_pos)
+        y_pos += 60
+
+        if npc.skills:
+            self.draw_text("Skills:", FONT_DEFAULT, WHITE, 100, y_pos)
+            y_pos += 40
+            for skill, value in npc.skills.items():
+                self.draw_text(f"- {skill.capitalize()}: {value}", FONT_DEFAULT, LIGHT_GREY, 120, y_pos)
+                y_pos += 40
+
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def get_current_time_str(self, date_only=False):
         return get_current_time_str(date_only)

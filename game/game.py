@@ -42,6 +42,7 @@ class Game:
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
+        self.selected_contact_id = None
         self.selected_poi = None
         self.selected_npc = None
         self.conversation_history = []
@@ -211,6 +212,8 @@ class Game:
                 else: self.GAME_LOG.add_message(f"Warning: Scheduled POI/Venue ID '{loc_id_str}' not found for {npc.name}'s schedule.")
             if "skills" in npc_data:
                 npc.skills = npc_data["skills"]
+            if "gift_preferences" in npc_data:
+                npc.gift_preferences = npc_data["gift_preferences"]
             self.NPC_REGISTRY[npc.npc_id] = npc
 
         for loc in self.WORLD_MAP.values():
@@ -605,6 +608,11 @@ class Game:
                     self.explore_menu_state = "poi"
                 else:
                     self.selected_npc = self.NPC_REGISTRY[choice]
+                    # Add to contacts if not already there
+                    if self.selected_npc.npc_id not in self.player.contacts:
+                        self.player.contacts.append(self.selected_npc.npc_id)
+                        self.GAME_LOG.add_log_message(f"You added {self.selected_npc.name} to your contacts.")
+
                     self.explore_menu_state = "dialogue"
                     self.conversation_history = []
                     self.player_input = ""
@@ -650,6 +658,34 @@ class Game:
             else:
                 self.explore_menu_state = "poi"
 
+        elif self.explore_menu_state == "gifting":
+            if not self.player.gear_inventory:
+                self.GAME_LOG.add_log_message("You have nothing to give.")
+                self.explore_menu_state = "dialogue"
+                return
+
+            inventory_options = {str(i): item.name for i, item in enumerate(self.player.gear_inventory)}
+            inventory_options["back"] = "Cancel"
+
+            choice = self.ui.present_choices(inventory_options, f"Give a gift to {self.selected_npc.name}:")
+
+            if choice == "back":
+                self.explore_menu_state = "dialogue"
+            else:
+                item_to_give = self.player.gear_inventory[int(choice)]
+
+                # Check preferences
+                relationship_gain = 1 # Default gain for any gift
+                if item_to_give.category in self.selected_npc.gift_preferences:
+                    relationship_gain = self.selected_npc.gift_preferences[item_to_give.category]
+                    self.GAME_LOG.add_log_message(f"{self.selected_npc.name} loves the {item_to_give.name}!")
+                else:
+                    self.GAME_LOG.add_log_message(f"{self.selected_npc.name} seems pleased with the gift.")
+
+                self.selected_npc.update_relationship(relationship_gain)
+                self.player.remove_gear(item_to_give)
+                self.explore_menu_state = "dialogue"
+
         elif self.explore_menu_state == "dialogue":
             if self.selected_npc:
                 self.ui.draw_dialogue_screen(self.selected_npc.name, self.conversation_history, self.player_input)
@@ -657,8 +693,12 @@ class Game:
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_RETURN:
                             if self.player_input.lower() == "bye":
+                                self.selected_npc.update_relationship(1) # Small boost for talking
                                 self.explore_menu_state = "poi"
                                 self.selected_npc = None
+                            elif self.player_input.lower() == "gift":
+                                self.explore_menu_state = "gifting"
+                                self.player_input = ""
                             else:
                                 self.conversation_history.append(f"You: {self.player_input}")
                                 response = generate_npc_response(self.player_input, self.selected_npc, self.player.name)
@@ -1023,22 +1063,38 @@ class Game:
                 self.music_menu_state = "main"
 
     def handle_contacts_menu(self):
-        if not self.player.contacts:
-            self.GAME_LOG.add_log_message("You have no contacts.")
-            self.phone_menu_state = "main"
-            return
+        if self.phone_menu_state == "contacts": # Main contacts list view
+            if not self.player.contacts:
+                self.GAME_LOG.add_log_message("You have no contacts.")
+                self.phone_menu_state = "main"
+                return
 
-        contacts_menu_opts = {contact['npc_id']: contact['name'] for contact in self.player.contacts}
-        contacts_menu_opts["back"] = "Back"
+            contacts_menu_opts = {}
+            for npc_id in self.player.contacts:
+                npc = self.NPC_REGISTRY.get(npc_id)
+                if npc:
+                    contacts_menu_opts[npc_id] = f"{npc.name} ({npc.relationship_with_player.name})"
+            contacts_menu_opts["back"] = "Back"
 
-        choice = self.ui.present_choices(contacts_menu_opts, "Contacts")
-        if choice == "back":
-            self.phone_menu_state = "main"
-        else:
-            # Placeholder for what to do when a contact is selected
-            npc_name = contacts_menu_opts[choice]
-            self.GAME_LOG.add_log_message(f"You selected {npc_name} from your contacts.")
-            self.phone_menu_state = "main"
+            choice = self.ui.present_choices(contacts_menu_opts, "Contacts")
+            if choice == "back":
+                self.phone_menu_state = "main"
+            else:
+                self.selected_contact_id = choice
+                self.phone_menu_state = "contact_details"
+
+        elif self.phone_menu_state == "contact_details":
+            npc = self.NPC_REGISTRY.get(self.selected_contact_id)
+            if not npc:
+                self.GAME_LOG.add_log_message("Error: Contact not found.")
+                self.phone_menu_state = "contacts"
+                return
+
+            self.ui.draw_contact_details_screen(npc)
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.phone_menu_state = "contacts"
 
     def handle_character_menu(self):
         if self.character_menu_state == "main":

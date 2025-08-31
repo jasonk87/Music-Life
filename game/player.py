@@ -42,12 +42,6 @@ class Player:
             # Example: "interview_city_chronicle": "available"
         }
 
-        # Thresholds for when a PR manager might *find* an opportunity. Player still needs PR manager.
-        self.OPPORTUNITY_FAME_THRESHOLDS = {
-            "interview_city_chronicle": 75
-            # Add other opportunities like "local_radio_spot": 100 etc.
-        }
-
         self.schedule = PlayerSchedule() # Initialize schedule
         self.contacts = [] # List of dictionaries: {'npc_id': 'id', 'name': 'NPC Name', 'notes': 'Optional notes'}
 

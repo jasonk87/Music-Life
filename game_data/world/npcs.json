@@ -24,6 +24,9 @@
     "skills": {
       "bass": 15,
       "musicianship": 10
+    },
+    "gift_preferences": {
+      "FOOD": 5
     }
   },
   {
@@ -54,6 +57,10 @@
       "guitar": 25,
       "musicianship": 15,
       "stage_presence": 10
+    },
+    "gift_preferences": {
+      "ACCESSORY": 10,
+      "INSTRUMENT": 5
     }
   },
   {
