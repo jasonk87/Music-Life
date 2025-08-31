@@ -605,6 +605,47 @@ class Game:
                 self.songwriting_stage = None
                 self.explore_menu_state = "poi"
 
+        elif self.explore_menu_state == "remix_menu":
+            # This is a full state machine, but simplified for now
+            released_songs = [s for s in self.player.songs_written if s.is_released and not s.is_remix]
+            if not released_songs:
+                self.GAME_LOG.add_log_message("You have no songs that can be remixed.")
+                self.explore_menu_state = "poi"
+                return
+
+            song_options = {str(i): f"'{s.title}' (Q: {s.song_quality:.2f})" for i, s in enumerate(released_songs)}
+            song_options["back"] = "Cancel"
+
+            choice = self.ui.present_choices(song_options, "Which song would you like to remix?")
+
+            if choice == "back":
+                self.explore_menu_state = "poi"
+            else:
+                original_song = released_songs[int(choice)]
+                self.GAME_LOG.add_log_message(f"You spend a few days working on a remix of '{original_song.title}'...")
+                advance_game_time(2 * 24 * 60) # 2 days
+
+                # Calculate remix quality
+                electronic_skill = self.player.skills.get('electronic', 0)
+                musicianship_skill = self.player.skills.get('musicianship', 0)
+
+                # Remix quality depends on original quality and new skills
+                remix_quality = (original_song.song_quality * 0.5) + (electronic_skill / 100.0 * 0.3) + (musicianship_skill / 100.0 * 0.2)
+                remix_quality = min(1.0, remix_quality * random.uniform(0.8, 1.2)) # Add randomness
+
+                # Create new song object for the remix
+                remix_song = Song(
+                    title=f"{original_song.title} (Remix)",
+                    author=self.player.name,
+                    genre="Electronic", # Remixes are often electronic
+                    song_quality=remix_quality
+                )
+                remix_song.is_remix = True
+                remix_song.original_song_id = original_song.song_id
+
+                self.player.songs_written.append(remix_song)
+                self.GAME_LOG.add_log_message(f"You finished the remix! Final Quality: {remix_song.song_quality:.2f}")
+                self.explore_menu_state = "poi"
         elif self.explore_menu_state == "record_song":
             if self.selected_poi and self.selected_poi.category == "STUDIO_RECORDING":
                 unrecorded_songs = [s for s in self.player.songs_written if not s.is_recorded]
@@ -787,6 +828,8 @@ class Game:
             self.song_in_progress = {}
         elif interaction_text == "Book recording session":
             self.explore_menu_state = "record_song"
+        elif interaction_text == "Create a Remix":
+            self.explore_menu_state = "remix_menu"
         elif interaction_text == "Rest (8 hours)":
             self.rest()
         elif "Talk" in interaction_text: # More robust check

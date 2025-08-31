@@ -25,7 +25,7 @@
       "name": "Your Apartment",
       "description": "Your starting digs. A bit small, but it's home.",
       "category": "HOME",
-      "interaction_options": ["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Relax at home (2 hours)"],
+      "interaction_options": ["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Create a Remix", "Relax at home (2 hours)"],
       "properties": {
         "rest_quality": 0.8,
         "stress_modifier_hourly": -10,

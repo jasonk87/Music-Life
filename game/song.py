@@ -31,6 +31,8 @@ class Song:
         self.has_music_video = False
         self.music_video_quality = 0.0
         self.considered_for_album_with_label_id = None # Store label_poi_id if part of their album discussion/release
+        self.is_remix = False
+        self.original_song_id = None
 
     def __str__(self):
         details = [
