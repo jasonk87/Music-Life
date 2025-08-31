@@ -11,6 +11,7 @@ from game.location import Location
 from game.venue import Venue
 from game.poi import PointOfInterest
 from game.event import Event
+from game.npc import RelationshipStatus
 from game.game_time import current_game_time, advance_game_time, get_current_time_str, calculate_player_age, GameTime
 from game.dialogue import generate_npc_response, NPC_PERSONALITIES
 from game.random_events import check_for_random_event, check_for_post_gig_random_event
@@ -280,12 +281,25 @@ class Game:
         self.LAST_CHART_UPDATE_DAY = current_game_time.day
 
     def check_for_new_opportunities(self):
+        # Check for static opportunities from the catalog
         for opp_id, opp_data in self.OPPORTUNITY_CATALOG.items():
             if opp_id not in self.player.active_opportunities:
                 if opp_data['trigger'](self.player):
                     self.player.active_opportunities[opp_id] = "available"
                     self.GAME_LOG.add_log_message(f"A new opportunity has arisen: {opp_data['name']}!")
                     self.GAME_LOG.add_log_message("Check your phone for more details.")
+
+        # Check for dynamic, NPC-driven opportunities
+        for npc_id in self.player.contacts:
+            npc = self.NPC_REGISTRY.get(npc_id)
+            if npc and npc.skills and npc.relationship_with_player in [RelationshipStatus.FRIENDLY, RelationshipStatus.ALLY]:
+                # Small chance per day for a friend to offer a feature
+                if random.random() < 0.05: # 5% chance
+                    opp_id = f"guest_feature_{npc.npc_id}"
+                    if opp_id not in self.player.active_opportunities:
+                        self.player.active_opportunities[opp_id] = "available"
+                        self.GAME_LOG.add_log_message(f"{npc.name} was impressed with your work and wants you to feature on their new track!")
+                        self.GAME_LOG.add_log_message("Check your phone for more details.")
 
     def run(self):
         if not self.setup_world():
@@ -524,26 +538,67 @@ class Game:
                 self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
 
                 self.GAME_LOG.add_log_message("The song is written! Now to finalize it.")
-                self.songwriting_stage = "finalize_song"
-                # Fall through to the finalize stage immediately
+                self.songwriting_stage = "invite_feature"
+                # Fall through to the invite stage immediately
+
+            if self.songwriting_stage == "invite_feature":
+                eligible_features = []
+                for npc_id in self.player.contacts:
+                    npc = self.NPC_REGISTRY.get(npc_id)
+                    if npc and npc.skills:
+                        if self.player.band is None or npc not in self.player.band.members:
+                            if npc.relationship_with_player in [RelationshipStatus.FRIENDLY, RelationshipStatus.ALLY]:
+                                eligible_features.append(npc)
+
+                if not eligible_features:
+                    self.songwriting_stage = "finalize_song"
+                    # Fall through if no one is available
+                else:
+                    feature_options = {npc.npc_id: f"Ask {npc.name} to feature on the song." for npc in eligible_features}
+                    feature_options["none"] = "Finish the song solo"
+
+                    choice = self.ui.present_choices(feature_options, "A collaboration could make this song a hit...")
+                    if choice == "none":
+                        self.songwriting_stage = "finalize_song"
+                    else:
+                        self.song_in_progress['featured_artist_id'] = choice
+                        self.songwriting_stage = "finalize_song"
 
             if self.songwriting_stage == "finalize_song":
                 # This is also a non-interactive stage
                 title = self.song_in_progress.get('title', 'Untitled')
                 genre = self.song_in_progress.get('genre', 'Rock')
+                author = self.player.name
+
+                originality=self.song_in_progress.get('originality', 0.5)
+                catchiness=self.song_in_progress.get('catchiness', 0.5)
+                lyrical_depth=self.song_in_progress.get('lyrical_depth', 0.5)
+                music_complexity=self.song_in_progress.get('music_complexity', 0.5)
+
+                featured_artist_id = self.song_in_progress.get('featured_artist_id')
+                if featured_artist_id:
+                    npc = self.NPC_REGISTRY.get(featured_artist_id)
+                    if npc:
+                        author = f"{self.player.name} (feat. {npc.name})"
+                        # Add a bonus based on the NPC's primary skill
+                        # This is a simple way to represent their contribution
+                        primary_skill = max(npc.skills, key=npc.skills.get)
+                        skill_bonus = npc.skills.get(primary_skill, 0) / 200.0 # 50 skill = 0.25 bonus
+                        catchiness += skill_bonus
+                        music_complexity += skill_bonus
 
                 new_song = Song(
                     title=title,
-                    author=self.player.name,
+                    author=author,
                     genre=genre,
-                    originality=self.song_in_progress.get('originality', 0.5),
-                    catchiness=self.song_in_progress.get('catchiness', 0.5),
-                    lyrical_depth=self.song_in_progress.get('lyrical_depth', 0.5),
-                    music_complexity=self.song_in_progress.get('music_complexity', 0.5)
+                    originality=originality,
+                    catchiness=catchiness,
+                    lyrical_depth=lyrical_depth,
+                    music_complexity=music_complexity
                 )
 
                 self.player.songs_written.append(new_song)
-                self.GAME_LOG.add_log_message(f"You finished writing '{title}'! Overall Quality: {new_song.song_quality:.2f}")
+                self.GAME_LOG.add_log_message(f"You finished writing '{new_song.title}'! Overall Quality: {new_song.song_quality:.2f}")
 
                 # Clean up and exit songwriting mode
                 self.song_in_progress = {}
@@ -920,9 +975,15 @@ class Game:
             # Add dynamic opportunities
             for opp_id, status in self.player.active_opportunities.items():
                 if status == "available":
-                    opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
-                    if opp_data and opp_data.get("type") == "phone":
-                        phone_menu_opts[opp_id] = opp_data["action_text"]
+                    if opp_id.startswith('guest_feature_'):
+                        npc_id = opp_id.replace('guest_feature_', '')
+                        npc = self.NPC_REGISTRY.get(npc_id)
+                        if npc:
+                            phone_menu_opts[opp_id] = f"Accept feature request from {npc.name}"
+                    else:
+                        opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
+                        if opp_data and opp_data.get("type") == "phone":
+                            phone_menu_opts[opp_id] = opp_data["action_text"]
 
             phone_menu_opts["back"] = "Back"
 
@@ -1008,6 +1069,30 @@ class Game:
             self.player.fame += fame_gain
             self.GAME_LOG.add_log_message(f"IndiePulse runs a great feature on your music! (+{fame_gain} Fame)")
             self.player.active_opportunities[opp_id] = "completed"
+
+        elif opp_id.startswith('guest_feature_'):
+            npc_id = opp_id.replace('guest_feature_', '')
+            npc = self.NPC_REGISTRY.get(npc_id)
+            if npc:
+                self.GAME_LOG.add_log_message(f"You agree to play on {npc.name}'s new song.")
+                advance_game_time(240) # 4 hours studio time
+
+                # Simple skill check based on player's best skill
+                primary_skill = max(self.player.skills, key=self.player.skills.get)
+                skill_val = self.player.skills.get(primary_skill, 0)
+
+                if skill_val > 10:
+                    money_gain = 250
+                    fame_gain = 20
+                    self.GAME_LOG.add_log_message(f"You nailed your part! {npc.name} is impressed. (+${money_gain}, +{fame_gain} Fame)")
+                else:
+                    money_gain = 100
+                    fame_gain = 10
+                    self.GAME_LOG.add_log_message(f"You did a decent job on the track. (+${money_gain}, +{fame_gain} Fame)")
+
+                self.player.money += money_gain
+                self.player.fame += fame_gain
+                self.player.active_opportunities[opp_id] = "completed"
             self.ui.draw_schedule_screen(self.player)
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
