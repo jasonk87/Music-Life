@@ -517,7 +517,7 @@ class Game:
             self.check_for_scheduled_events()
 
             self.ui.clear_screen()
-            self.ui.draw_hud(get_current_time_str(date_only=True), str(self.player.money), str(self.player.hair_length), str(self.player.beard_length))
+            self.ui.draw_hud(get_current_time_str(date_only=True), str(self.player.money), self.player.hair_length, self.player.beard_length)
             self.ui.draw_log()
 
             if self.game_state == "main_menu":
