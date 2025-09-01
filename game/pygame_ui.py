@@ -48,25 +48,25 @@ class PygameUI:
             text_rect.topleft = (x, y)
         self.screen.blit(text_surface, text_rect)
 
-    def draw_hud(self, date_str, money_str, hair_length, beard_length):
+    def draw_hud(self, date_str, location_str, next_event_str, money_str, hair_length, beard_length):
         # A semi-transparent background for the HUD
-        hud_surface = pygame.Surface((SCREEN_WIDTH, 100))
+        hud_surface = pygame.Surface((SCREEN_WIDTH, 120)) # Increased height
         hud_surface.set_alpha(128)
         hud_surface.fill(BLACK)
         self.screen.blit(hud_surface, (0, 0))
 
-        # Top-left: Date and Money
-        self.draw_text(f"Date: {date_str}", FONT_DEFAULT, WHITE, 20, 20)
-        self.draw_text(f"Money: ${money_str}", FONT_DEFAULT, WHITE, 20, 50)
+        # Top-left: Date, Location, Next Event
+        self.draw_text(f"Date: {date_str}", FONT_DEFAULT, WHITE, 20, 10)
+        self.draw_text(f"Location: {location_str}", FONT_LOG, LIGHT_GREY, 20, 45)
+        self.draw_text(f"Next Up: {next_event_str}", FONT_LOG, LIGHT_GREY, 20, 70)
 
-        # Top-right: Portrait and indicators
+        # Top-right: Money, Portrait, and indicators
+        self.draw_text(f"Money: ${money_str}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 260, 10)
         portrait_rect = pygame.Rect(SCREEN_WIDTH - 120, 10, 80, 80)
-        # The portrait draw method requires integers
         self.portrait.draw(portrait_rect.x, portrait_rect.y, portrait_rect.width, portrait_rect.height, hair_length, beard_length)
         pygame.draw.rect(self.screen, WHITE, portrait_rect, 2)
-        # The draw_text method requires strings
-        self.draw_text(f"Hair: {str(hair_length)}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 20)
-        self.draw_text(f"Beard: {str(beard_length)}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 50)
+        self.draw_text(f"Hair: {str(hair_length)}", FONT_LOG, WHITE, SCREEN_WIDTH - 260, 45)
+        self.draw_text(f"Beard: {str(beard_length)}", FONT_LOG, WHITE, SCREEN_WIDTH - 260, 70)
 
     def draw_ascii_art(self, art_lines, x, y, color=WHITE):
         line_height = FONT_ASCII.get_linesize()

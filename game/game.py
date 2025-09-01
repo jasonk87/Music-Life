@@ -517,7 +517,25 @@ class Game:
             self.check_for_scheduled_events()
 
             self.ui.clear_screen()
-            self.ui.draw_hud(get_current_time_str(date_only=True), str(self.player.money), self.player.hair_length, self.player.beard_length)
+
+            # Gather HUD information
+            date_str = get_current_time_str(date_only=True)
+            money_str = str(self.player.money)
+
+            if self.player.current_poi:
+                location_str = f"{self.player.current_poi.name}"
+            elif self.player.current_location:
+                location_str = self.player.current_location.name
+            else:
+                location_str = "On the road"
+
+            upcoming_events = self.player.schedule.get_upcoming_events(current_game_time, limit=1)
+            if upcoming_events:
+                next_event_str = str(upcoming_events[0])
+            else:
+                next_event_str = "Nothing scheduled"
+
+            self.ui.draw_hud(date_str, location_str, next_event_str, money_str, self.player.hair_length, self.player.beard_length)
             self.ui.draw_log()
 
             if self.game_state == "main_menu":

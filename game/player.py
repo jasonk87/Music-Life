@@ -72,7 +72,7 @@ class Player:
         self.total_music_income_to_date = 0
 
         # Label deal tracking
-        self.active_label_offers = [] # List of offer dictionaries
+        self.pending_contracts = []
         self.signed_label_deal = None # Stores details of the accepted contract
         self.label_history = [] # List to store past (fulfilled, breached, dropped) contracts
 
