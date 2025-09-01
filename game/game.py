@@ -1523,8 +1523,7 @@ class Game:
             else:
                 fame_gain = 5
                 self.player.fame += fame_gain
-                self.GAME_LOG.add_log_message(f"You were a bit nervous and stumbled on a few questions. Still, exposure is exposure. (+
-{fame_gain} Fame)")
+                self.GAME_LOG.add_log_message(f"You were a bit nervous and stumbled on a few questions. Still, exposure is exposure. (+{fame_gain} Fame)")
 
             self.player.active_opportunities[opp_id]['status'] = "completed"
 

@@ -2,7 +2,8 @@ class Venue:
     def __init__(self, venue_id, name, description="A place to perform or hang out.",
                  venue_type="CLUB", category="VENUE_GENERAL",
                  capacity=100, prestige=1, parent_location_id=None,
-                 can_rent_gear=False, gear_rental_fee=0, available_rental_gear_ids=None):
+                 can_rent_gear=False, gear_rental_fee=0, available_rental_gear_ids=None,
+                 interaction_options=None):
         self.venue_id = venue_id
         self.name = name
         self.description = description
@@ -12,6 +13,7 @@ class Venue:
         self.prestige = prestige
         self.events_hosted = []
         self.owner_npc_id = None
+        self.interaction_options = interaction_options if interaction_options is not None else []
         self.parent_location_id = parent_location_id
 
         self.can_rent_gear = can_rent_gear
