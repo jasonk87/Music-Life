@@ -55,22 +55,29 @@ class Game:
         self.OPPORTUNITY_CATALOG = {
             "radio_interview_local": {
                 "name": "Local Radio Interview",
-                "trigger": lambda p: p.fame >= 50 and any(s.is_released and s.song_quality >= 0.6 for s in p.songs_written),
+                "trigger": lambda p, g: p.fame >= 50 and any(s.is_released and s.song_quality >= 0.6 for s in p.songs_written),
                 "action_text": "Call K-ROK Radio for interview",
                 "type": "phone"
             },
             "music_blog_feature": {
                 "name": "IndiePulse Music Blog Feature",
-                "trigger": lambda p: p.fame >= 75 and any(s.is_released for s in p.songs_written),
+                "trigger": lambda p, g: p.fame >= 75 and any(s.is_released for s in p.songs_written),
                 "action_text": "Respond to email from IndiePulse blog",
                 "type": "phone"
             },
             "battle_of_the_bands_local": {
                 "name": "Hometown Battle of the Bands",
-                "trigger": lambda p: p.fame >= 100 and len(p.songs_written) >= 2,
+                "trigger": lambda p, g: p.fame >= 100 and len(p.songs_written) >= 2,
                 "action_text": "Sign up for Battle of the Bands",
                 "type": "venue_event",
                 "venue_id": "hometown_community_hall"
+            },
+            "autograph_signing": {
+                "name": "Autograph Signing",
+                "trigger": lambda p, g: p.current_tour_id is not None and any(poi.category == "SHOP_MUSIC" for poi in g.player.current_location.points_of_interest),
+                "action_text": "Hold an autograph signing session",
+                "type": "poi_interaction",
+                "poi_id_getter": lambda g: next((poi.poi_id for poi in g.player.current_location.points_of_interest if poi.category == "SHOP_MUSIC"), None)
             }
         }
 
@@ -82,6 +89,7 @@ class Game:
         self.ACTIVE_CHARTS = []
         self.LAST_CHART_UPDATE_DAY = -1
         self.last_opportunity_check_day = -1
+        self.TOURS = []
 
         self._poi_venue_id_map = {}
 
@@ -260,6 +268,16 @@ class Game:
         if self.GAME_LOG:
             self.GAME_LOG.add_log_message(f"Initialized {len(self.ACTIVE_CHARTS)} charts.")
             self.GAME_LOG.add_log_message(f"World setup complete. Loaded {len(self.WORLD_MAP)} locations and {len(self.NPC_REGISTRY)} NPCs.")
+
+        tours_json_path = os.path.join(self.SCRIPT_DIR, "..", "game_data", "tours.json")
+        try:
+            with open(tours_json_path, 'r') as f:
+                self.TOURS = json.load(f)
+            if self.GAME_LOG:
+                self.GAME_LOG.add_log_message(f"Loaded {len(self.TOURS)} tour packages.")
+        except Exception as e:
+            self.GAME_LOG.add_message(f"ERROR loading {tours_json_path}: {e}")
+
         return True
 
     def initialize_player(self):
@@ -285,8 +303,16 @@ class Game:
         # Check for static opportunities from the catalog
         for opp_id, opp_data in self.OPPORTUNITY_CATALOG.items():
             if opp_id not in self.player.active_opportunities:
-                if opp_data['trigger'](self.player):
-                    self.player.active_opportunities[opp_id] = "available"
+                if opp_data['trigger'](self.player, self):
+                    opp_details = {"status": "available"}
+                    if "poi_id_getter" in opp_data:
+                        poi_id = opp_data["poi_id_getter"](self)
+                        if poi_id:
+                            opp_details["poi_id"] = poi_id
+                        else:
+                            continue # Can't trigger if there's no valid POI for it
+
+                    self.player.active_opportunities[opp_id] = opp_details
                     self.GAME_LOG.add_log_message(f"A new opportunity has arisen: {opp_data['name']}!")
                     self.GAME_LOG.add_log_message("Check your phone for more details.")
 
@@ -298,9 +324,22 @@ class Game:
                 if random.random() < 0.05: # 5% chance
                     opp_id = f"guest_feature_{npc.npc_id}"
                     if opp_id not in self.player.active_opportunities:
-                        self.player.active_opportunities[opp_id] = "available"
+                        self.player.active_opportunities[opp_id] = {"status": "available"}
                         self.GAME_LOG.add_log_message(f"{npc.name} was impressed with your work and wants you to feature on their new track!")
                         self.GAME_LOG.add_log_message("Check your phone for more details.")
+
+        # Check for manager-driven tour opportunities
+        if self.player.has_manager and not self.player.current_tour_id:
+            # Simple logic: offer a tour if fame is high enough and not already on tour.
+            for tour in self.TOURS:
+                if tour['min_fame'] <= self.player.fame <= tour['max_fame']:
+                    if tour['tour_id'] not in self.player.completed_tour_ids:
+                        opp_id = f"tour_offer_{tour['tour_id']}"
+                        if opp_id not in self.player.active_opportunities:
+                            self.player.active_opportunities[opp_id] = "available"
+                            self.GAME_LOG.add_log_message(f"Your manager found a potential tour for you: '{tour['name']}'!")
+                            self.GAME_LOG.add_log_message("Check your phone for the offer.")
+                            break # Only offer one tour at a time
 
     def check_for_scheduled_events(self):
         # We need to iterate over a copy, as we might remove items
@@ -313,6 +352,62 @@ class Game:
     def handle_label_response(self, event):
         label_id = event.details.get('label_id')
         song_id = event.details.get('song_id')
+
+    def schedule_tour(self, tour_id):
+        tour_data = next((t for t in self.TOURS if t['tour_id'] == tour_id), None)
+        if not tour_data:
+            self.GAME_LOG.add_log_message(f"Error: Could not find data for tour ID {tour_id}")
+            return
+
+        self.player.current_tour_id = tour_id
+        self.player.tour_ledgers[tour_id] = {
+            "name": tour_data['name'],
+            "expenses": 0,
+            "income": 0,
+            "status": "ongoing",
+            "completed_gigs": []
+        }
+        self.GAME_LOG.add_log_message(f"Your manager starts booking the '{tour_data['name']}' tour.")
+
+        last_gig_date = current_game_time.copy()
+
+        for i, gig_template in enumerate(tour_data['gig_templates']):
+            # Determine gig date
+            offset = random.randint(gig_template['days_offset_min'], gig_template['days_offset_max'])
+            gig_date = last_gig_date.copy()
+            gig_date.add_days(offset)
+
+            # Find a venue
+            city_name = random.choice(gig_template['city_options'])
+            city_venues = [v for v in self.WORLD_MAP[city_name].venues if v.venue_type in gig_template['venue_type_options']]
+            if not city_venues:
+                self.GAME_LOG.add_log_message(f"Manager couldn't find a suitable venue in {city_name} for leg {i+1}. Tour booking failed.")
+                self.player.current_tour_id = None
+                return
+
+            venue = random.choice(city_venues)
+
+            # Create a temporary event for this gig
+            gig_event = Event(
+                name=f"{tour_data['name']} @ {venue.name}",
+                event_type=gig_template['event_type'],
+                location=venue,
+                is_tour_gig=True
+            )
+            # Add to the venue's events for the duration of the gig
+            # This is a simplification; a real implementation might need a more robust temporary event system
+            venue.events_hosted.append(gig_event)
+
+            # Schedule it for the player
+            gig_start_time = gig_date
+            gig_start_time.hour = 19 # Gigs are in the evening
+            gig_end_time = gig_start_time.copy()
+            gig_end_time.add_hours(3)
+
+            self.player.schedule.add_event(gig_start_time, gig_end_time, gig_event.name, "Gig (Tour)", {'event_id': gig_event.event_id})
+            self.GAME_LOG.add_log_message(f"Booked: {gig_event.name} on {gig_start_time.get_time_string_for_schedule()}")
+
+            last_gig_date = gig_date
 
         label = self.get_poi_or_venue_by_id(label_id)
         song = next((s for s in self.player.songs_written if s.song_id == song_id), None)
@@ -452,6 +547,14 @@ class Game:
                 self.ui.draw_ascii_art(art_to_display, 450, 120)
 
                 interaction_options = {str(i): option for i, option in enumerate(self.selected_poi.get_interactions())}
+
+                # Add dynamic opportunities for this POI
+                for opp_id, opp_details in self.player.active_opportunities.items():
+                    if opp_details["status"] == "available":
+                        opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
+                        if opp_data and opp_data.get("type") == "poi_interaction" and opp_details.get("poi_id") == poi_id:
+                             interaction_options[opp_id] = opp_data["action_text"]
+
                 interaction_options["back"] = "Back"
 
                 choice = self.ui.present_choices(interaction_options, f"Interact with {self.selected_poi.name}")
@@ -1029,11 +1132,21 @@ class Game:
     def rest(self, hours=8):
         self.GAME_LOG.add_log_message(f"You rest for {hours} hours.")
         minutes_to_advance = hours * 60
+
+        # Get rest quality from current POI, default to 0.5
+        rest_quality = getattr(self.player.current_poi, 'rest_quality', 0.5)
+
+        # Energy and stress recovery are now based on rest quality
+        energy_gain = int(hours * 5 * (1 + rest_quality)) # Base 5/hr, max 10/hr at quality 1.0
+        stress_reduction = int(hours * 3 * (1 + rest_quality)) # Base 3/hr, max 6/hr
+
+        self.player.energy = min(100, self.player.energy + energy_gain)
+        self.player.stress = max(0, self.player.stress - stress_reduction)
+
+        self.GAME_LOG.add_log_message(f"You recovered {energy_gain} energy and lost {stress_reduction} stress.")
+
         advance_game_time(minutes_to_advance)
         self.process_time_based_player_needs(self.player, minutes_to_advance)
-        # Simplified energy/stress recovery
-        self.player.energy = min(100, self.player.energy + hours * 10)
-        self.player.stress = max(0, self.player.stress - hours * 5)
 
     def process_time_based_player_needs(self, player, minutes_just_passed):
         if minutes_just_passed <= 0: return
@@ -1111,13 +1224,18 @@ class Game:
             if self.player.pending_contracts:
                 phone_menu_opts["label_offers"] = f"View Record Deal Offer ({len(self.player.pending_contracts)})"
 
-            for opp_id, status in self.player.active_opportunities.items():
-                if status == "available":
+            for opp_id, opp_details in self.player.active_opportunities.items():
+                if opp_details["status"] == "available":
                     if opp_id.startswith('guest_feature_'):
                         npc_id = opp_id.replace('guest_feature_', '')
                         npc = self.NPC_REGISTRY.get(npc_id)
                         if npc:
                             phone_menu_opts[opp_id] = f"Accept feature request from {npc.name}"
+                    elif opp_id.startswith('tour_offer_'):
+                        tour_id = opp_id.replace('tour_offer_', '')
+                        tour_data = next((t for t in self.TOURS if t['tour_id'] == tour_id), None)
+                        if tour_data:
+                            phone_menu_opts[opp_id] = f"Accept tour offer: '{tour_data['name']}'"
                     else:
                         opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
                         if opp_data and opp_data.get("type") == "phone":
@@ -1134,7 +1252,7 @@ class Game:
                 self.music_menu_state = "main"
             elif choice == "label_offers":
                 self.phone_menu_state = "label_offers"
-            elif choice in self.OPPORTUNITY_CATALOG:
+            elif choice in self.OPPORTUNITY_CATALOG or choice.startswith('guest_feature_') or choice.startswith('tour_offer_'):
                 # Handle the selected opportunity
                 self.handle_opportunity(choice)
                 self.phone_menu_state = "main" # Return to phone menu
@@ -1143,7 +1261,8 @@ class Game:
         elif self.phone_menu_state == "contacts":
             self.handle_contacts_menu()
         elif self.phone_menu_state == "schedule":
-            self.ui.draw_schedule_screen(self.player)
+            upcoming_events = self.player.schedule.get_upcoming_events(current_game_time, limit=5)
+            self.ui.draw_schedule_screen(upcoming_events)
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.phone_menu_state = "main"
@@ -1233,9 +1352,10 @@ class Game:
             else:
                 fame_gain = 5
                 self.player.fame += fame_gain
-                self.GAME_LOG.add_log_message(f"You were a bit nervous and stumbled on a few questions. Still, exposure is exposure. (+{fame_gain} Fame)")
+                self.GAME_LOG.add_log_message(f"You were a bit nervous and stumbled on a few questions. Still, exposure is exposure. (+
+{fame_gain} Fame)")
 
-            self.player.active_opportunities[opp_id] = "completed"
+            self.player.active_opportunities[opp_id]['status'] = "completed"
 
         elif opp_id == "music_blog_feature":
             # Time cost: 1 hour
@@ -1243,7 +1363,7 @@ class Game:
             fame_gain = 15
             self.player.fame += fame_gain
             self.GAME_LOG.add_log_message(f"IndiePulse runs a great feature on your music! (+{fame_gain} Fame)")
-            self.player.active_opportunities[opp_id] = "completed"
+            self.player.active_opportunities[opp_id]['status'] = "completed"
 
         elif opp_id.startswith('guest_feature_'):
             npc_id = opp_id.replace('guest_feature_', '')
@@ -1267,8 +1387,20 @@ class Game:
 
                 self.player.money += money_gain
                 self.player.fame += fame_gain
-                self.player.active_opportunities[opp_id] = "completed"
+                self.player.active_opportunities[opp_id]['status'] = "completed"
+        elif opp_id.startswith('tour_offer_'):
+            tour_id = opp_id.replace('tour_offer_', '')
+            self.schedule_tour(tour_id)
+            self.player.active_opportunities[opp_id]['status'] = "completed"
             self.ui.draw_schedule_screen(self.player)
+        elif opp_id == "autograph_signing":
+            advance_game_time(120) # 2 hours
+            fame_gain = 10 + random.randint(0, 10)
+            money_gain = 50 + random.randint(0, 50)
+            self.player.fame += fame_gain
+            self.player.money += money_gain
+            self.GAME_LOG.add_log_message(f"The autograph signing was a success! (+${money_gain}, +{fame_gain} Fame)")
+            self.player.active_opportunities[opp_id]['status'] = "completed"
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.phone_menu_state = "main"
@@ -1611,7 +1743,11 @@ class Game:
             self.GAME_LOG.add_log_message(f"Performance complete! You earned ${money_gain} and {fame_gain} fame.")
 
             # Cleanup
-            if self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
+            if self.active_performance.is_tour_gig:
+                if self.player.current_tour_id:
+                    self.player.tour_ledgers[self.player.current_tour_id]['completed_gigs'].append(self.active_performance.event_id)
+                    self.player.tour_ledgers[self.player.current_tour_id]['income'] += money_gain
+            elif self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
                 self.player.active_opportunities["battle_of_the_bands_local"] = "completed"
             self.active_performance = None
             self.performance_log = []

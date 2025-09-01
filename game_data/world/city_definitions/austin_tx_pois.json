@@ -76,6 +76,18 @@
       "category": "REHEARSAL_STUDIO",
       "interaction_options": ["Book Rehearsal Slot (1 hour, $25)"],
       "properties": {}
+    },
+    {
+      "poi_id": "austin_hotel_four_seasons",
+      "name": "Four Seasons Hotel Austin",
+      "description": "A luxury hotel overlooking the lake. Staying here is a great way to recover from the road.",
+      "category": "ACCOMMODATION_LUXURY",
+      "interaction_options": ["Rent Room ($450/night)", "Sleep (8 hours, if rented)"],
+      "properties": {
+        "rest_quality": 0.95,
+        "stress_modifier_hourly": -20,
+        "comfort_modifier_hourly": 15
+      }
     }
   ],
   "venues": [

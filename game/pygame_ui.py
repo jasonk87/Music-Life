@@ -98,18 +98,18 @@ class PygameUI:
 
         self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
 
-    def draw_schedule_screen(self, player):
-        self.draw_text("Schedule", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+    def draw_schedule_screen(self, scheduled_items):
+        self.draw_text("Upcoming Schedule", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
 
         y_pos = 120
-        if not player.schedule.scheduled_items:
+        if not scheduled_items:
             self.draw_text("Your schedule is empty.", FONT_DEFAULT, WHITE, 100, y_pos)
         else:
-            for item in player.schedule.scheduled_items:
+            for item in scheduled_items:
                 self.draw_text(str(item), FONT_DEFAULT, WHITE, 100, y_pos)
                 y_pos += 40
 
-        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def draw_inventory_screen(self, player):
         self.draw_text("Inventory", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
