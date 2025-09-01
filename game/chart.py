@@ -237,25 +237,28 @@ class Chart:
         self._sort_and_trim_entries()
 
         feedback_events = []
-        # Only generate feedback for the player's songs
         for entry in self.entries:
-            if entry['artist_name'] != player_obj.name:
-                continue
-
             song_id = entry['song_id']
             prev_entry_details = previous_chart_state.get(song_id)
+
+            chart_details = entry.copy()
+            chart_details['chart_name'] = self.name # Add chart name to details
 
             is_new_debut = prev_entry_details is None or prev_entry_details.get('weeks_on_chart', 0) == 0
 
             if is_new_debut:
                 feedback_events.append({
-                    "type": "chart_debut", "song_id": song_id, "song_obj": entry['song_obj'],
-                    "chart_details": entry.copy()
+                    "type": "chart_debut",
+                    "song_id": song_id,
+                    "song_obj": entry['song_obj'],
+                    "chart_details": chart_details
                 })
-            elif entry['current_position'] == 1 and prev_entry_details.get('current_position') != 1:
+            elif entry['current_position'] == 1 and (prev_entry_details is None or prev_entry_details.get('current_position') != 1):
                 feedback_events.append({
-                    "type": "hit_number_one", "song_id": song_id, "song_obj": entry['song_obj'],
-                    "chart_details": entry.copy()
+                    "type": "hit_number_one",
+                    "song_id": song_id,
+                    "song_obj": entry['song_obj'],
+                    "chart_details": chart_details
                 })
 
         # print(f"Chart '{self.name}' update complete. {len(self.entries)} songs.")

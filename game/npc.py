@@ -29,6 +29,8 @@ class NPC:
         self.gift_preferences = {} # e.g., {"category": "FOOD", "value": 5}
         self.career_stage = "inactive" # e.g., 'unsigned', 'signed', 'inactive'
         self.songs_written = []
+        self.on_tour = False
+        self.tour_end_date = None
 
     def __str__(self):
         return f"NPC: {self.name} (ID: {self.npc_id}, Personality: {self.personality_key}, Relationship: {self.relationship_with_player.name} ({self.relationship_score}))"

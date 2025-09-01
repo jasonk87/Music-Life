@@ -12,12 +12,13 @@ class Event:
     def __init__(self, name, location, event_type="OPEN_MIC", required_skills=None,
                  required_gear_types=None,
                  description="", specific_fame_reward=None, specific_payout=None,
-                 is_tour_gig=False, is_player_organized=False, required_fame=0): # Added is_player_organized
+                 is_tour_gig=False, is_player_organized=False, required_fame=0, is_npc_gig=False): # Added is_player_organized
         self.name = name
         self.location = location
         self.event_type = event_type
         self.required_fame = required_fame
         self.is_player_organized = is_player_organized
+        self.is_npc_gig = is_npc_gig
         self.required_gear_types = required_gear_types if required_gear_types else []
 
         type_details = Event.EVENT_TYPES.get(event_type, Event.EVENT_TYPES["OPEN_MIC"])

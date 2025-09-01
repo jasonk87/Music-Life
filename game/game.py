@@ -470,8 +470,10 @@ class Game:
                 # Update charts with all songs
                 total_fame_gain = 0
                 total_money_gain = 0
+                all_feedback_events = []
                 for chart in self.ACTIVE_CHARTS:
-                    chart.update_weekly(all_released_songs, self.player, current_game_time)
+                    feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time)
+                    all_feedback_events.extend(feedback_events)
                     # Calculate fame and money from chart positions for the PLAYER only
                     for entry in chart.entries:
                         if entry['artist_name'] == self.player.name:
@@ -484,6 +486,26 @@ class Game:
                     self.player.money += total_money_gain
                     self.player.fame += total_fame_gain
                     self.GAME_LOG.add_log_message(f"Your songs earned you ${total_money_gain} and {total_fame_gain} fame this week.")
+
+                # Process chart feedback events for log messages
+                for event in all_feedback_events:
+                    details = event['chart_details']
+                    artist = details['artist_name']
+                    song = details['song_title']
+                    chart_name = details['chart_name']
+                    position = details['current_position']
+
+                    if artist == self.player.name:
+                        if event['type'] == 'chart_debut':
+                            self.GAME_LOG.add_log_message(f"Your song '{song}' has debuted on the {chart_name} chart at #{position}!")
+                        elif event['type'] == 'hit_number_one':
+                            self.GAME_LOG.add_log_message(f"You've done it! '{song}' is the #1 song on the {chart_name} chart!")
+                    else:
+                        # Less intrusive gossip for NPCs
+                        if event['type'] == 'chart_debut' and position <= 10: # Only report significant debuts
+                             self.GAME_LOG.add_log_message(f"GOSSIP: {artist}'s new song '{song}' entered the {chart_name} chart at #{position}.")
+                        elif event['type'] == 'hit_number_one':
+                             self.GAME_LOG.add_log_message(f"GOSSIP: Wow, {artist} hit #1 on the {chart_name} chart with '{song}'!")
 
                 self.LAST_CHART_UPDATE_DAY = current_game_time.day
 
@@ -1211,6 +1233,17 @@ class Game:
     def update_npc_locations(self, gt_obj):
         time_slot_key = self._get_time_slot_key(gt_obj)
         for npc in self.NPC_REGISTRY.values():
+            # Check for tour completion first
+            if npc.on_tour and gt_obj >= npc.tour_end_date:
+                npc.on_tour = False
+                npc.tour_end_date = None
+                self.GAME_LOG.add_log_message(f"GOSSIP: {npc.name} has returned from their tour.")
+
+            # If on tour, they are not at a specific location and don't follow a schedule
+            if npc.on_tour:
+                npc.current_location = None
+                continue
+
             dest_ref = npc.schedule.get(time_slot_key)
             dest = None
             if isinstance(dest_ref, (PointOfInterest, Venue, Location)): dest = dest_ref
@@ -1224,16 +1257,97 @@ class Game:
                     if scheduled_loc_for_open_mic == comm_hall: dest = comm_hall
             if npc.current_location != dest: npc.current_location = dest
 
+    def _calculate_npc_fame(self, npc):
+        """Calculates a fame score for an NPC to determine which venues they can book."""
+        if not npc.skills:
+            return 0
+
+        # 1. Fame from skills
+        skill_fame = sum(npc.skills.get(s, 0) for s in ['songwriting', 'guitar', 'vocals', 'stage_presence'])
+
+        # 2. Fame from chart performance
+        chart_fame = 0
+        for chart in self.ACTIVE_CHARTS:
+            for entry in chart.entries:
+                if entry['artist_name'] == npc.name:
+                    # More points for higher positions on the chart
+                    chart_fame += (chart.max_size - entry['current_position'] + 1) * 5
+
+        total_fame = skill_fame + chart_fame
+        return total_fame
+
+    def _schedule_npc_tour(self, npc, tour_data):
+        """Schedules a tour for an NPC, adding events to venues in different cities."""
+        self.GAME_LOG.add_log_message(f"GOSSIP: Looks like {npc.name} is going on the '{tour_data['name']}' tour!")
+        npc.on_tour = True
+
+        # Calculate tour duration to set an end date
+        total_days = 0
+        for gig_template in tour_data['gig_templates']:
+            total_days += gig_template['days_offset_max']
+
+        tour_end_date = current_game_time.copy()
+        tour_end_date.add_days(total_days + 7) # Add an extra week for buffer
+        npc.tour_end_date = tour_end_date
+
+        last_gig_date = current_game_time.copy()
+        for i, gig_template in enumerate(tour_data['gig_templates']):
+            offset = random.randint(gig_template['days_offset_min'], gig_template['days_offset_max'])
+            gig_date = last_gig_date.copy()
+            gig_date.add_days(offset)
+
+            city_name = random.choice(gig_template['city_options'])
+            city_venues = [v for v in self.WORLD_MAP[city_name].venues if v.venue_type in gig_template['venue_type_options']]
+            if not city_venues:
+                continue # Skip if no suitable venue
+
+            venue = random.choice(city_venues)
+            gig_name = f"TOUR: {npc.name} at {venue.name} ({gig_date.get_time_string_for_schedule(date_only=True)})"
+
+            new_gig = Event(
+                name=gig_name,
+                event_type=gig_template['event_type'],
+                location=venue,
+                is_npc_gig=True
+            )
+            venue.add_event(new_gig)
+            last_gig_date = gig_date
+
     def update_npc_careers(self):
         """
         Weekly check to update the careers of NPCs, especially musicians.
+        This includes releasing new songs and booking gigs.
         """
-        # self.GAME_LOG.add_log_message("Updating NPC careers...") # This might be too spammy
         for npc in self.NPC_REGISTRY.values():
             if npc.career_stage == "active_musician" and npc.skills:
                 # 25% chance per week to release a new song
                 if random.random() < 0.25:
                     self.generate_npc_song(npc)
+
+                npc_fame = self._calculate_npc_fame(npc)
+
+                # 15% chance per week to try and book a local gig
+                if random.random() < 0.15:
+                    if npc_fame > 20: # Must have a minimum level of fame to book gigs
+                        home_location = self.WORLD_MAP.get(npc.home_location.parent_location_id if hasattr(npc.home_location, 'parent_location_id') else npc.home_location.name)
+                        if home_location:
+                            suitable_venues = [v for v in home_location.venues if v.allows_player_booking and v.prestige <= (npc_fame / 10)]
+                            if suitable_venues:
+                                venue_to_book = random.choice(suitable_venues)
+                                gig_date = current_game_time.copy()
+                                gig_date.add_days(random.randint(14, 28))
+                                gig_name = f"Show: {npc.name} ({gig_date.get_time_string_for_schedule(date_only=True)})"
+                                if not any(gig_name in e.name for e in venue_to_book.events_hosted):
+                                    new_gig = Event(name=gig_name, event_type="CLUB_GIG", location=venue_to_book, is_npc_gig=True)
+                                    venue_to_book.add_event(new_gig)
+                                    self.GAME_LOG.add_log_message(f"GOSSIP: You see a flyer that {npc.name} is playing a show at {venue_to_book.name} soon.")
+
+                # 5% chance for high-fame NPCs to start a tour
+                if npc_fame > 200 and not npc.on_tour and random.random() < 0.05:
+                    suitable_tours = [t for t in self.TOURS if t['min_fame'] <= npc_fame]
+                    if suitable_tours:
+                        tour_to_take = random.choice(suitable_tours)
+                        self._schedule_npc_tour(npc, tour_to_take)
 
     def generate_npc_song(self, npc):
         """
