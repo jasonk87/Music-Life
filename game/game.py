@@ -13,6 +13,7 @@ from game.poi import PointOfInterest
 from game.event import Event
 from game.npc import RelationshipStatus
 from game.game_time import current_game_time, advance_game_time, get_current_time_str, calculate_player_age, GameTime
+from game.contract import Contract
 from game.dialogue import generate_npc_response, NPC_PERSONALITIES
 from game.random_events import check_for_random_event, check_for_post_gig_random_event
 from game.song import Song
@@ -301,6 +302,48 @@ class Game:
                         self.GAME_LOG.add_log_message(f"{npc.name} was impressed with your work and wants you to feature on their new track!")
                         self.GAME_LOG.add_log_message("Check your phone for more details.")
 
+    def check_for_scheduled_events(self):
+        # We need to iterate over a copy, as we might remove items
+        for event in self.player.schedule.scheduled_items[:]:
+            if event.start_time <= current_game_time:
+                if event.category == "LABEL_RESPONSE":
+                    self.handle_label_response(event)
+                    self.player.schedule.scheduled_items.remove(event)
+
+    def handle_label_response(self, event):
+        label_id = event.details.get('label_id')
+        song_id = event.details.get('song_id')
+
+        label = self.get_poi_or_venue_by_id(label_id)
+        song = next((s for s in self.player.songs_written if s.song_id == song_id), None)
+
+        if not label or not song:
+            return # Should not happen
+
+        self.GAME_LOG.add_log_message(f"You've received a response from {label.name} about '{song.title}'.")
+
+        # Evaluation logic
+        score = (song.song_quality * 50) + (song.recording_quality * 30) + (self.player.fame / 10)
+
+        if score > 70: # Threshold for an offer
+            self.GAME_LOG.add_log_message("They're interested! They've sent over a contract offer.")
+
+            # Generate contract based on score
+            advance = int(score * 10)
+            royalty = min(0.25, 0.05 + (score / 1000.0)) # 5% base, up to 25%
+            marketing = int(score * 5)
+
+            contract = Contract(
+                label_name=label.name,
+                advance_money=advance,
+                royalty_rate=royalty,
+                marketing_budget_per_release=marketing
+            )
+            self.player.pending_contracts.append(contract)
+        else:
+            self.GAME_LOG.add_log_message("Unfortunately, they've decided to pass at this time.")
+
+
     def run(self):
         if not self.setup_world():
             print("World setup failed. Check log.")
@@ -341,6 +384,8 @@ class Game:
             if current_game_time.day != self.last_opportunity_check_day:
                 self.check_for_new_opportunities()
                 self.last_opportunity_check_day = current_game_time.day
+
+            self.check_for_scheduled_events()
 
             self.ui.clear_screen()
             self.ui.draw_hud(get_current_time_str(date_only=True), str(self.player.money), str(self.player.hair_length), str(self.player.beard_length))
@@ -646,6 +691,47 @@ class Game:
                 self.player.songs_written.append(remix_song)
                 self.GAME_LOG.add_log_message(f"You finished the remix! Final Quality: {remix_song.song_quality:.2f}")
                 self.explore_menu_state = "poi"
+        elif self.explore_menu_state == "submit_demo":
+            if self.selected_poi and self.selected_poi.category == "OFFICE_RECORD_LABEL":
+                recorded_songs = [s for s in self.player.songs_written if s.is_recorded]
+                if not recorded_songs:
+                    self.GAME_LOG.add_log_message("You have no recorded songs to submit as a demo.")
+                    self.explore_menu_state = "poi"
+                    return
+
+                song_options = {str(i): f"'{s.title}' (Rec Q: {s.recording_quality:.2f})" for i, s in enumerate(recorded_songs)}
+                song_options["back"] = "Cancel"
+
+                choice = self.ui.present_choices(song_options, "Which song would you like to submit?")
+
+                if choice == "back":
+                    self.explore_menu_state = "poi"
+                else:
+                    selected_song = recorded_songs[int(choice)]
+                    cost = 20 # Mailing cost
+                    if self.player.money < cost:
+                        self.GAME_LOG.add_log_message("You can't afford to mail the demo.")
+                        self.explore_menu_state = "poi"
+                        return
+
+                    self.player.money -= cost
+                    advance_game_time(60) # 1 hour to prepare and mail
+
+                    # Schedule the response
+                    response_time = current_game_time.copy()
+                    response_time.add_days(3)
+                    self.player.schedule.add_event(
+                        start_time=response_time,
+                        end_time=response_time,
+                        description=f"Response from {self.selected_poi.name} re: '{selected_song.title}'",
+                        category="LABEL_RESPONSE",
+                        details={'song_id': selected_song.song_id, 'label_id': self.selected_poi.poi_id}
+                    )
+                    self.GAME_LOG.add_log_message(f"You mail a demo of '{selected_song.title}' to {self.selected_poi.name}.")
+                    self.GAME_LOG.add_log_message("You expect to hear back in a few days.")
+                    self.explore_menu_state = "poi"
+            else:
+                self.explore_menu_state = "poi"
         elif self.explore_menu_state == "record_song":
             if self.selected_poi and self.selected_poi.category == "STUDIO_RECORDING":
                 unrecorded_songs = [s for s in self.player.songs_written if not s.is_recorded]
@@ -822,6 +908,12 @@ class Game:
                 self.explore_menu_state = "shop"
             else:
                 self.GAME_LOG.add_log_message("Nothing for sale currently.")
+        elif interaction_text.startswith("Submit Demo"):
+            min_fame = self.selected_poi.min_fame_to_submit
+            if self.player.fame >= min_fame:
+                self.explore_menu_state = "submit_demo"
+            else:
+                self.GAME_LOG.add_log_message(f"You need at least {min_fame} fame to submit a demo here.")
         elif interaction_text == "Write a new song":
             self.explore_menu_state = "write_song_menu"
             self.songwriting_stage = "choose_genre"
@@ -1016,6 +1108,9 @@ class Game:
                 "web": "Web",
             }
             # Add dynamic opportunities
+            if self.player.pending_contracts:
+                phone_menu_opts["label_offers"] = f"View Record Deal Offer ({len(self.player.pending_contracts)})"
+
             for opp_id, status in self.player.active_opportunities.items():
                 if status == "available":
                     if opp_id.startswith('guest_feature_'):
@@ -1037,6 +1132,8 @@ class Game:
             elif choice == "music":
                 self.game_state = "music_menu"
                 self.music_menu_state = "main"
+            elif choice == "label_offers":
+                self.phone_menu_state = "label_offers"
             elif choice in self.OPPORTUNITY_CATALOG:
                 # Handle the selected opportunity
                 self.handle_opportunity(choice)
@@ -1052,6 +1149,41 @@ class Game:
                     self.phone_menu_state = "main"
         elif self.phone_menu_state == "web":
             self.handle_web_menu()
+        elif self.phone_menu_state == "label_offers":
+            # For now, we only handle one offer at a time.
+            if not self.player.pending_contracts:
+                self.GAME_LOG.add_log_message("You have no pending contract offers.")
+                self.phone_menu_state = "main"
+                return
+
+            contract = self.player.pending_contracts[0]
+            offer_options = {
+                "accept": "Accept Offer",
+                "decline": "Decline Offer",
+                "back": "Decide later"
+            }
+
+            # This is a bit of a hack. We should have a dedicated screen.
+            # For now, we'll just print the contract to the log.
+            self.GAME_LOG.add_log_message("--- Contract Offer ---")
+            for line in str(contract).split('\n'):
+                self.GAME_LOG.add_log_message(line)
+
+            choice = self.ui.present_choices(offer_options, f"Offer from {contract.label_name}")
+
+            if choice == "accept":
+                self.player.label_deal = contract
+                self.player.money += contract.advance_money
+                self.GAME_LOG.add_log_message(f"You signed with {contract.label_name}! You received an advance of ${contract.advance_money}.")
+                self.player.pending_contracts.clear()
+                self.phone_menu_state = "main"
+            elif choice == "decline":
+                self.GAME_LOG.add_log_message(f"You declined the offer from {contract.label_name}.")
+                self.player.pending_contracts.clear()
+                self.phone_menu_state = "main"
+            elif choice == "back":
+                self.phone_menu_state = "main"
+
 
     def handle_web_menu(self):
         if self.web_menu_state == "main":
