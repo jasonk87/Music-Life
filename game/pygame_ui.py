@@ -61,10 +61,12 @@ class PygameUI:
 
         # Top-right: Portrait and indicators
         portrait_rect = pygame.Rect(SCREEN_WIDTH - 120, 10, 80, 80)
+        # The portrait draw method requires integers
         self.portrait.draw(portrait_rect.x, portrait_rect.y, portrait_rect.width, portrait_rect.height, hair_length, beard_length)
         pygame.draw.rect(self.screen, WHITE, portrait_rect, 2)
-        self.draw_text(f"Hair: {hair_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 20)
-        self.draw_text(f"Beard: {beard_length}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 50)
+        # The draw_text method requires strings
+        self.draw_text(f"Hair: {str(hair_length)}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 20)
+        self.draw_text(f"Beard: {str(beard_length)}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 240, 50)
 
     def draw_ascii_art(self, art_lines, x, y, color=WHITE):
         line_height = FONT_ASCII.get_linesize()

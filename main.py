@@ -12,7 +12,7 @@ def main():
 
     game.initialize_player()
     game.ui.clear_screen()
-    game.ui.draw_hud(game.ui.get_current_time_str(date_only=True), str(game.player.money), str(game.player.hair_length), str(game.player.beard_length))
+    game.ui.draw_hud(game.ui.get_current_time_str(date_only=True), str(game.player.money), game.player.hair_length, game.player.beard_length)
     game.ui.draw_log()
     game.handle_main_menu()
     pygame.image.save(game.ui.screen, "jules-scratch/verification/screenshot.png")
