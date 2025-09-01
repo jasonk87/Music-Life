@@ -177,84 +177,88 @@ class Chart:
                 'chart_score': chart_score
             })
 
-    def update_weekly(self, all_player_songs, player_obj, current_game_time_obj): # Changed signature
+    def update_weekly(self, all_songs, player_obj, current_game_time_obj):
         """
         Main weekly update logic for the chart.
         - Decays scores of existing songs.
-        - Considers new releases from the player.
+        - Considers new releases from all artists (player and NPCs).
         - Re-sorts and trims the chart.
         """
-        print(f"\nUpdating chart: {self.name} for week of {current_game_time_obj.get_time_string_for_schedule()}...")
-        # Decay existing entries and increment weeks on chart
-        for entry in self.entries:
-            entry['chart_score'] *= 0.85 # Decay factor
-            entry['weeks_on_chart'] += 1
-            # Mark for removal if score is too low or too many weeks (e.g. > 20 weeks)
-            if entry['chart_score'] < 10 or entry['weeks_on_chart'] > 52: # Example thresholds
-                entry['chart_score'] = -1 # Mark for removal by sort_and_trim
+        # print(f"\nUpdating chart: {self.name} for week of {current_game_time_obj.get_time_string_for_schedule()}...")
 
-        # Consider player's released songs as candidates
-        # A song is a candidate if it was released recently or is already on the chart
-        # Recency window: e.g., released in the last 8 weeks.
+        # 1. Decay existing entries and increment weeks on chart
+        for entry in self.entries:
+            # Don't decay brand new entries from AI artists that have 0 weeks on chart
+            if entry['weeks_on_chart'] > 0:
+                entry['chart_score'] *= 0.85  # Decay factor
+
+            entry['weeks_on_chart'] += 1
+
+            # Mark for removal if score is too low or too many weeks
+            if entry['chart_score'] < 10 or entry['weeks_on_chart'] > 52:
+                entry['chart_score'] = -1  # Mark for removal
+
+        # 2. Consider all released songs as candidates
         RECENCY_WINDOW_DAYS = 8 * 7
 
-        for song in all_player_songs:
-            if song.is_released:
-                is_on_chart = any(e['song_id'] == song.song_id for e in self.entries if e['chart_score'] > 0)
+        for song in all_songs:
+            if not song.is_released:
+                continue
 
-                days_since_release = float('inf')
-                if song.release_date and hasattr(current_game_time_obj, 'days_difference') and hasattr(song.release_date, 'year'): # Check if release_date is GameTime like
-                    try:
-                        days_since_release = current_game_time_obj.days_difference(song.release_date)
-                    except ValueError:
-                        print(f"Warning: Could not calculate days_difference for song '{song.title}' release_date.")
-                        # Keep days_since_release as float('inf') or handle as very old
+            is_on_chart = any(e['song_id'] == song.song_id for e in self.entries if e['chart_score'] > 0)
 
-                if is_on_chart or (days_since_release <= RECENCY_WINDOW_DAYS):
-                    # If already on chart, its score was decayed. Re-calculate to see if it stays.
-                    # If new and recent, calculate its initial score.
-                    # This requires player_obj to be passed to update_weekly
-                    # For now, player_name and player_fame are passed, but not the full object.
-                    # This needs to be refactored: update_weekly should accept player_obj.
-                    # Let's assume player_obj is passed to update_weekly for now.
-                    # The actual change to method signature and call site in main.py will be next.
-                    current_chart_score = self.calculate_song_chart_score(song, player_obj) # player_obj instead of player_fame
-                    self._add_or_update_song_entry(song, current_chart_score, player_obj.name) # player_obj.name instead of player_name
+            days_since_release = float('inf')
+            if song.release_date:
+                try:
+                    days_since_release = current_game_time_obj.days_difference(song.release_date)
+                except (ValueError, AttributeError): # Catch issues if release_date is not a valid GameTime object
+                     pass # Keep days_since_release as inf
 
+            # A song is a candidate if it's already on the chart or was released recently.
+            if is_on_chart or (days_since_release <= RECENCY_WINDOW_DAYS):
+                chart_score = 0
+                artist_name = song.author
 
-        # Store pre-update state for feedback generation
+                if artist_name == player_obj.name:
+                    # It's a player song, calculate score with fame/label bonuses
+                    chart_score = self.calculate_song_chart_score(song, player_obj)
+                else:
+                    # It's an NPC/AI song. Use a simplified scoring logic.
+                    chart_score = (song.song_quality * 75) + (song.recording_quality * 50)
+                    if self.chart_genre_preference and song.genre == self.chart_genre_preference:
+                        chart_score += 25
+                    # Add some random buzz to make the charts more dynamic
+                    chart_score += random.uniform(0, 20)
+
+                self._add_or_update_song_entry(song, chart_score, artist_name)
+
+        # 3. Finalize chart positions and generate feedback
         previous_chart_state = {e['song_id']: e.copy() for e in self.entries}
+        self._sort_and_trim_entries()
 
-        self._sort_and_trim_entries() # This updates positions and weeks for songs that remain
-
-        # After sorting and trimming, generate feedback for new entries or significant changes
-        # This needs access to the player object to add feedback.
-        # For now, this method will return a list of events that main can process into feedback.
         feedback_events = []
-
+        # Only generate feedback for the player's songs
         for entry in self.entries:
+            if entry['artist_name'] != player_obj.name:
+                continue
+
             song_id = entry['song_id']
             prev_entry_details = previous_chart_state.get(song_id)
 
-            if prev_entry_details is None or \
-               (prev_entry_details.get('current_position') is None and entry['current_position'] is not None) or \
-               (prev_entry_details.get('weeks_on_chart', 0) == 0 and entry['weeks_on_chart'] == 1) : # Check if it's a new entry this week
-                feedback_events.append({
-                    "type": "chart_debut",
-                    "song_id": song_id,
-                    "song_obj": entry['song_obj'], # Pass song_obj for feedback generator
-                    "chart_details": entry.copy()
-                })
-            elif entry['current_position'] == 1 and (prev_entry_details is None or prev_entry_details.get('current_position') != 1): # Hit #1
-                feedback_events.append({
-                    "type": "hit_number_one",
-                    "song_id": song_id,
-                    "song_obj": entry['song_obj'],
-                    "chart_details": entry.copy()
-                })
-            # Add other significant jump checks if desired
+            is_new_debut = prev_entry_details is None or prev_entry_details.get('weeks_on_chart', 0) == 0
 
-        print(f"Chart '{self.name}' update complete. {len(self.entries)} songs.")
+            if is_new_debut:
+                feedback_events.append({
+                    "type": "chart_debut", "song_id": song_id, "song_obj": entry['song_obj'],
+                    "chart_details": entry.copy()
+                })
+            elif entry['current_position'] == 1 and prev_entry_details.get('current_position') != 1:
+                feedback_events.append({
+                    "type": "hit_number_one", "song_id": song_id, "song_obj": entry['song_obj'],
+                    "chart_details": entry.copy()
+                })
+
+        # print(f"Chart '{self.name}' update complete. {len(self.entries)} songs.")
         return feedback_events
 
 

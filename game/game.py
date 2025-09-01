@@ -224,6 +224,8 @@ class Game:
                 npc.skills = npc_data["skills"]
             if "gift_preferences" in npc_data:
                 npc.gift_preferences = npc_data["gift_preferences"]
+            if "career_stage" in npc_data:
+                npc.career_stage = npc_data["career_stage"]
             self.NPC_REGISTRY[npc.npc_id] = npc
 
         for loc in self.WORLD_MAP.values():
@@ -455,12 +457,22 @@ class Game:
                     self.running = False
 
             if (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
-                self.GAME_LOG.add_log_message("--- Weekly Chart Update ---")
+                self.GAME_LOG.add_log_message("--- Weekly World Update ---")
+
+                # NPCs progress in their careers
+                self.update_npc_careers()
+
+                # Gather all released songs in the world
+                all_released_songs = list(self.player.songs_written)
+                for npc in self.NPC_REGISTRY.values():
+                    all_released_songs.extend(npc.songs_written)
+
+                # Update charts with all songs
                 total_fame_gain = 0
                 total_money_gain = 0
                 for chart in self.ACTIVE_CHARTS:
-                    chart.update_weekly(self.player.songs_written, self.player, current_game_time)
-                    # Calculate fame and money from chart positions
+                    chart.update_weekly(all_released_songs, self.player, current_game_time)
+                    # Calculate fame and money from chart positions for the PLAYER only
                     for entry in chart.entries:
                         if entry['artist_name'] == self.player.name:
                             fame_gain = max(0, (chart.max_size - entry['current_position'] + 1))
@@ -1211,6 +1223,51 @@ class Game:
                     if isinstance(scheduled_loc_for_open_mic, str): scheduled_loc_for_open_mic = self.get_poi_or_venue_by_id(scheduled_loc_for_open_mic)
                     if scheduled_loc_for_open_mic == comm_hall: dest = comm_hall
             if npc.current_location != dest: npc.current_location = dest
+
+    def update_npc_careers(self):
+        """
+        Weekly check to update the careers of NPCs, especially musicians.
+        """
+        # self.GAME_LOG.add_log_message("Updating NPC careers...") # This might be too spammy
+        for npc in self.NPC_REGISTRY.values():
+            if npc.career_stage == "active_musician" and npc.skills:
+                # 25% chance per week to release a new song
+                if random.random() < 0.25:
+                    self.generate_npc_song(npc)
+
+    def generate_npc_song(self, npc):
+        """
+        Generates a new song for an NPC based on their skills.
+        """
+        # Simplified song generation for NPCs
+        songwriting_skill = npc.skills.get('songwriting', 0)
+        # Use their best instrument skill
+        instrument_skills = {k: v for k, v in npc.skills.items() if k not in ['songwriting', 'stage_presence', 'vocals']}
+        best_instrument_skill = max(instrument_skills.values()) if instrument_skills else 0
+
+        # Simple quality calculation based on skills. Max possible is ~1.0
+        base_quality = (songwriting_skill * 0.6 + best_instrument_skill * 0.4) / 50.0
+        random_factor = random.uniform(0.8, 1.2)
+        song_quality = min(1.0, base_quality * random_factor)
+
+        # Recording quality is derived from their overall skill level
+        recording_quality = min(1.0, song_quality * random.uniform(0.7, 1.1))
+
+        # Create the song
+        title = f"{npc.name}'s Tune #{len(npc.songs_written) + 1}"
+        genre = random.choice(self.SONG_GENRES)
+
+        new_song = Song(
+            title=title,
+            author=npc.name,
+            genre=genre,
+            song_quality=song_quality
+        )
+        new_song.mark_as_recorded(recording_quality)
+        new_song.mark_as_released(current_game_time)
+
+        npc.songs_written.append(new_song)
+        self.GAME_LOG.add_log_message(f"GOSSIP: You hear that {npc.name} just dropped a new track called '{title}'.")
 
     def handle_phone_menu(self):
         if self.phone_menu_state == "main":

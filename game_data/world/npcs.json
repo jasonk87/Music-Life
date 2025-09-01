@@ -27,7 +27,8 @@
     },
     "gift_preferences": {
       "FOOD": 5
-    }
+    },
+    "career_stage": "unsigned"
   },
   {
     "npc_id": "vic001",
@@ -61,7 +62,8 @@
     "gift_preferences": {
       "ACCESSORY": 10,
       "INSTRUMENT": 5
-    }
+    },
+    "career_stage": "unsigned"
   },
   {
     "npc_id": "casey001",
@@ -144,5 +146,23 @@
       "Weekday_Evening": "citycenter_trendy_salon",
       "Weekend_Afternoon": "citycenter_trendy_salon"
     }
+  },
+  {
+    "npc_id": "britney001",
+    "name": "Britney Spears",
+    "personality_key": "pop_superstar",
+    "home_location_poi_id": "citycenter_dailygrind_cafe",
+    "initial_current_location_poi_id": "citycenter_dailygrind_cafe",
+    "schedule": {
+      "Weekday_Afternoon": "citycenter_starlight_studio",
+      "Weekend_Evening": "citycenter_grandetheater"
+    },
+    "skills": {
+      "vocals": 95,
+      "stage_presence": 98,
+      "songwriting": 70,
+      "musicianship": 80
+    },
+    "career_stage": "signed_major_label"
   }
 ]
