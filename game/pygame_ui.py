@@ -91,14 +91,14 @@ class PygameUI:
         pygame.draw.rect(self.screen, WHITE, (0, SCREEN_HEIGHT - 140, SCREEN_WIDTH, 140), 2)
 
     def draw_skills_screen(self, player):
-        self.draw_text("Skills", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+        self.draw_text("Skills", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
 
         y_pos = 120
         for skill, value in player.skills.items():
             self.draw_text(f"{skill.capitalize()}: {value:.1f}", FONT_DEFAULT, WHITE, 100, y_pos)
             y_pos += 40
 
-        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def draw_schedule_screen(self, scheduled_items):
         self.draw_text("Upcoming Schedule", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
@@ -114,7 +114,7 @@ class PygameUI:
         self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def draw_inventory_screen(self, player):
-        self.draw_text("Inventory", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+        self.draw_text("Inventory", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
 
         y_pos = 120
         if not player.gear_inventory:
@@ -124,11 +124,11 @@ class PygameUI:
                 self.draw_text(f"- {item.name} (Size: {item.size})", FONT_DEFAULT, WHITE, 100, y_pos)
                 y_pos += 40
 
-        self.draw_text(f"Capacity: {player.get_current_gear_load()}/{player.get_current_gear_capacity()}", FONT_DEFAULT, WHITE, 100, self.SCREEN_HEIGHT - 100)
-        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+        self.draw_text(f"Capacity: {player.get_current_gear_load()}/{player.get_current_gear_capacity()}", FONT_DEFAULT, WHITE, 100, SCREEN_HEIGHT - 100)
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def draw_character_stats(self, player):
-        self.draw_text("Character Stats", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+        self.draw_text("Character Stats", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
 
         y_pos = 120
         stats = {
@@ -147,7 +147,7 @@ class PygameUI:
             self.draw_text(f"{key}: {value}", FONT_DEFAULT, WHITE, 100, y_pos)
             y_pos += 40
 
-        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def draw_band_screen(self, band):
         self.draw_text(band.name, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
@@ -171,7 +171,7 @@ class PygameUI:
             self.draw_text(f"{skill.capitalize()}: {value:.1f}", FONT_DEFAULT, WHITE, 620, y_pos)
             y_pos += 40
 
-        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 50, centered=True)
+        self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)
 
     def draw_contact_details_screen(self, npc):
         self.draw_text(npc.name, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
@@ -209,20 +209,20 @@ class PygameUI:
                         text += event.unicode
 
             self.clear_screen()
-            self.draw_text(prompt, FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 100, centered=True)
-            self.draw_text(text, FONT_DEFAULT, WHITE, self.SCREEN_WIDTH // 2, 200, centered=True)
+            self.draw_text(prompt, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 100, centered=True)
+            self.draw_text(text, FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, 200, centered=True)
             self.update_display()
         return text
 
     def draw_dialogue_screen(self, npc_name, conversation_history, player_input):
-        self.draw_text(f"Talking to {npc_name}", FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 50, centered=True)
+        self.draw_text(f"Talking to {npc_name}", FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 50, centered=True)
 
         y_pos = 120
         for line in conversation_history:
             self.draw_text(line, FONT_DEFAULT, WHITE, 100, y_pos)
             y_pos += 40
 
-        self.draw_text(f"> {player_input}", FONT_DEFAULT, WHITE, 100, self.SCREEN_HEIGHT - 100)
+        self.draw_text(f"> {player_input}", FONT_DEFAULT, WHITE, 100, SCREEN_HEIGHT - 100)
 
     def draw_text_viewer(self, text_content):
         self.clear_screen()
@@ -240,7 +240,7 @@ class PygameUI:
         selected_index = 0
         buttons = []
         for i, (key, text) in enumerate(options.items()):
-            button_rect = pygame.Rect(self.SCREEN_WIDTH // 2 - 150, 200 + i * 60, 300, 50)
+            button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 200 + i * 60, 300, 50)
             buttons.append(button_rect)
 
         while True:
@@ -262,7 +262,7 @@ class PygameUI:
 
 
             self.clear_screen()
-            self.draw_text(title, FONT_TITLE, WHITE, self.SCREEN_WIDTH // 2, 100, centered=True)
+            self.draw_text(title, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 100, centered=True)
 
             for i, (key, text) in enumerate(options.items()):
                 button_rect = buttons[i]
