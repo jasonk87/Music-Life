@@ -26,6 +26,7 @@ from game.chart import Chart
 from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
 from game.sound import SoundManager
 from game.ascii_art import ART
+from game.performance import PerformanceManager
 
 class Game:
     def __init__(self, ui):
@@ -41,6 +42,7 @@ class Game:
         self.web_menu_state = "main"
         self.text_to_view = ""
         self.active_performance = None
+        self.performance_manager = None # Added manager
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
@@ -1082,7 +1084,7 @@ class Game:
                 else:
                     # Regular, hardcoded event
                     event = self.selected_poi.events_hosted[int(choice)]
-                    if event.event_type == "OPEN_MIC":
+                    if event.event_type == "OPEN_MIC" or event.event_type == "CLUB_GIG":
                         self.active_performance = event
                         self.game_state = "performance"
                         self.performance_stage = "choose_song"
@@ -1980,6 +1982,7 @@ class Game:
                     self.web_menu_state = "main"
 
     def handle_performance_scene(self):
+        # 1. Selection Phase
         if self.performance_stage == "choose_song":
             if not self.player.songs_written:
                 self.GAME_LOG.add_log_message("You have no songs to perform!")
@@ -1994,105 +1997,52 @@ class Game:
                 self.game_state = "explore"
             else:
                 selected_song = self.player.songs_written[int(choice)]
-                self.active_performance.song_to_perform = selected_song # Store it
-                self.performance_stage = "intro"
-                self.performance_log = [f"You take the stage at {self.active_performance.location.name} for {self.active_performance.name}...",
-                                        f"You've decided to play '{selected_song.title}'."]
+                self.active_performance.song_to_perform = selected_song
+                # Initialize Manager
+                self.performance_manager = PerformanceManager(self, self.active_performance, selected_song, self.ui)
+                self.performance_manager.state = "player_input" # Start game
+                self.performance_stage = "playing"
 
-        elif self.performance_stage == "intro":
-            # This is a timed, non-interactive stage
-            self.ui.clear_screen()
-            venue_id = self.active_performance.location.venue_id
-            art_to_display = ART.get(venue_id, ART['default'])
-            self.ui.draw_ascii_art(art_to_display, 300, 150)
-            # Display the log
-            for i, line in enumerate(self.performance_log):
-                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
-            self.ui.update_display()
-            pygame.time.wait(2000) # Pause for 2 seconds
+        # 2. Playing Phase (Delegated to Manager)
+        elif self.performance_stage == "playing":
+            if self.performance_manager.state == "player_input":
+                # Present choices via main loop's UI helper
+                actions = {
+                    "safe": "Play it Safe (Low Risk)",
+                    "hype": "Hype the Crowd (Med Risk, High Hype)",
+                    "solo": "Improvise Solo (High Risk, High Reward)"
+                }
+                self.performance_manager.draw_screen()
+                choice = self.ui.present_choices(actions, f"Action for {self.performance_manager.get_current_section()}:")
+                self.performance_manager.handle_input(choice)
 
-            # Skill check for the intro
-            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
-            performance_score = 0
-            if skills_to_use.get('stage_presence', 0) > 5:
-                self.performance_log.append("The band looks confident on stage.")
-                performance_score += 10
-            else:
-                self.performance_log.append("You nervously approach the mic.")
-                performance_score -= 5
-            self.performance_stage = "verse_1"
+            elif self.performance_manager.state == "resolution":
+                self.performance_manager.draw_screen()
+                # Wait for user acknowledgment
+                # We can use a simple wait loop or a present_choice with just "Continue"
+                self.ui.present_choices({"ok": "Continue"}, "Result")
+                self.performance_manager.handle_input("ok") # Advance state
 
-        elif self.performance_stage == "verse_1":
-            self.ui.clear_screen()
-            venue_id = self.active_performance.location.venue_id
-            art_to_display = ART.get(venue_id, ART['default'])
-            self.ui.draw_ascii_art(art_to_display, 300, 150)
-            # Display the log
-            for i, line in enumerate(self.performance_log):
-                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
-            self.ui.update_display()
-            pygame.time.wait(2000)
+            elif self.performance_manager.state == "summary":
+                self.performance_manager.draw_screen()
+                self.ui.present_choices({"finish": "Finish Show"}, "Performance Complete")
+                self.performance_stage = "finish"
 
-            # Skill check for vocals
-            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
-            song = self.active_performance.song_to_perform
-            if (skills_to_use.get('vocals', 0) + song.song_quality * 50) > 30:
-                self.performance_log.append("The vocals are clear and hit all the right notes.")
-                performance_score += 20
-            else:
-                self.performance_log.append("The vocals are a bit shaky, but the band pushes through.")
-                performance_score += 5
+        # 3. Completion Phase
+        elif self.performance_stage == "finish":
+            # Calculate Rewards based on final hype
+            final_hype = self.performance_manager.crowd_hype
+            money_gain = int(final_hype * 2) + 50
+            fame_gain = int(final_hype / 5)
 
-            self.active_performance.performance_score = performance_score # Store score
-            self.performance_stage = "outro"
-
-        elif self.performance_stage == "outro":
-            self.ui.clear_screen()
-            venue_id = self.active_performance.location.venue_id
-            art_to_display = ART.get(venue_id, ART['default'])
-            self.ui.draw_ascii_art(art_to_display, 300, 150)
-            # Display the log
-            for i, line in enumerate(self.performance_log):
-                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
-            self.ui.update_display()
-            pygame.time.wait(2000)
-
-            # Final skill check
-            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
-            performance_score = self.active_performance.performance_score
-            if (skills_to_use.get('guitar', 0) + skills_to_use.get('stage_presence', 0)) > 10:
-                self.performance_log.append("The band finishes with a flourish! The crowd applauds.")
-                performance_score += 15
-            else:
-                self.performance_log.append("The song ends. A few people clap politely.")
-                performance_score += 5
-
-            # Final rewards
-            if self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
-                if performance_score > 40:
-                    self.GAME_LOG.add_log_message("You won the Battle of the Bands!")
-                    fame_gain = 50
-                    money_gain = 500
-                else:
-                    self.GAME_LOG.add_log_message("You didn't win, but you put on a good show.")
-                    fame_gain = 15
-                    money_gain = 50
-            else: # Default for Open Mic
-                fame_gain = int(performance_score / 5)
-                money_gain = int(performance_score / 2)
-
-            self.player.fame += fame_gain
             self.player.money += money_gain
-            self.GAME_LOG.add_log_message(f"Performance complete! You earned ${money_gain} and {fame_gain} fame.")
+            self.player.fame += fame_gain
+
+            self.GAME_LOG.add_log_message(f"Show over! The crowd hype reached {final_hype}/100.")
+            self.GAME_LOG.add_log_message(f"You earned ${money_gain} and {fame_gain} Fame.")
 
             # Cleanup
-            if self.active_performance.is_tour_gig:
-                if self.player.current_tour_id:
-                    self.player.tour_ledgers[self.player.current_tour_id]['completed_gigs'].append(self.active_performance.event_id)
-                    self.player.tour_ledgers[self.player.current_tour_id]['income'] += money_gain
-            elif self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
-                self.player.active_opportunities["battle_of_the_bands_local"] = "completed"
+            self.performance_manager = None
             self.active_performance = None
-            self.performance_log = []
             self.performance_stage = None
             self.game_state = "explore"
