@@ -29,6 +29,7 @@ from game.sound import SoundManager
 from game.ascii_art import ART
 from game.performance import PerformanceManager
 from game.trends import TrendManager
+from game.band_drama import check_for_band_drama, resolve_weekly_wages
 
 class Game:
     def __init__(self, ui):
@@ -470,6 +471,13 @@ class Game:
             if (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
                 self.GAME_LOG.add_log_message("--- Weekly World Update ---")
 
+                # Band Wages
+                wage_report = resolve_weekly_wages(self.player, self.player.band)
+                if wage_report:
+                     self.GAME_LOG.add_log_message("--- Band Wages ---")
+                     for line in wage_report.split('\n'):
+                         self.GAME_LOG.add_log_message(line)
+
                 # NPCs progress in their careers
                 self.update_npc_careers()
 
@@ -508,6 +516,11 @@ class Game:
                             if gift_item:
                                 self.player.add_gear(gift_item)
                                 self.GAME_LOG.add_log_message(f"MSG from {npc.name}: 'Hey, saw this and thought of you!' (Received {gift_item.name})")
+
+                # Check for Band Drama (Daily)
+                drama_result = check_for_band_drama(self.player, self.player.band)
+                if drama_result['event_triggered']:
+                    self.GAME_LOG.add_log_message(f"BAND DRAMA: {drama_result['message']}")
 
                 # Gather all released songs in the world
                 all_released_songs = list(self.player.songs_written)
@@ -1479,22 +1492,10 @@ class Game:
                             cost_override = travel_details['cost']
 
                         # Player.travel now handles the cost deduction for ticket or fuel
-                        success = self.player.travel(dest_loc_obj, estimated_distance, transport_mode, cost_override)
+                        success, actual_time_hours = self.player.travel(dest_loc_obj, estimated_distance, transport_mode, cost_override)
 
                         if success:
-                            # Time calculation might differ from original fixed time if using vehicle
-                            # Player.travel prints time taken, but we need to advance game time here.
-                            # Ideally Player.travel should return time taken or advance it itself?
-                            # For now, let's use the time derived from distance and actual speed
-
-                            actual_speed = selected_vehicle.speed if selected_vehicle else 60.0
-                            if transport_mode == "plane": actual_speed = 800.0
-                            elif transport_mode == "train": actual_speed = 100.0
-
-                            actual_time_hours = estimated_distance / actual_speed
-                            # Add some random variance as per simulation
-                            actual_time_hours *= random.uniform(0.9, 1.1)
-
+                            # Use the actual time taken from the simulation (includes delays)
                             advance_game_time(actual_time_hours * 60)
                             self.update_npc_locations(current_game_time)
                             self.process_time_based_player_needs(self.player, actual_time_hours * 60)
@@ -2033,11 +2034,20 @@ class Game:
                         self.band_menu_state = "recruit"
                 else:
                     self.ui.draw_band_screen(self.player.band)
-                    for event in pygame.event.get():
-                        if event.type == pygame.KEYDOWN:
-                            if event.key == pygame.K_ESCAPE:
-                                self.character_menu_state = "main"
-                                self.band_menu_state = "main"
+                    # Show menu options for band management
+                    band_opts = {
+                        "interact": "Manage Members (Interact/Fire)",
+                        "recruit": "Recruit New Member",
+                        "back": "Back"
+                    }
+                    choice = self.ui.present_choices(band_opts, f"Band: {self.player.band.name} (Chem: {self.player.band.chemistry})")
+
+                    if choice == "back":
+                        self.character_menu_state = "main"
+                    elif choice == "recruit":
+                        self.band_menu_state = "recruit"
+                    elif choice == "interact":
+                        self.band_menu_state = "interact"
 
             elif self.band_menu_state == "recruit":
                 recruitable_npcs = {npc.npc_id: npc for npc in self.NPC_REGISTRY.values() if npc.skills and npc not in (self.player.band.members if self.player.band else [])}
@@ -2062,11 +2072,60 @@ class Game:
                                 band_name = f"{self.player.name} and the Noise"
                             self.player.band = Band(band_name, self.player)
 
+                        # Set initial wage demand based on fame/skill
+                        npc_to_recruit.wage_demand = 50 + int(self._calculate_npc_fame(npc_to_recruit) / 2)
+
                         self.player.band.add_member(npc_to_recruit)
-                        self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} agreed to join your band!")
+                        self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} agreed to join your band! (Wage demand: ${npc_to_recruit.wage_demand}/week)")
                     else:
                         self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} isn't interested. Maybe when you're more famous.")
                     self.band_menu_state = "main"
+
+            elif self.band_menu_state == "interact":
+                # Interaction menu for band members
+                if not self.player.band or len(self.player.band.members) <= 1:
+                    self.band_menu_state = "main"
+                    return
+
+                member_options = {member.npc_id: f"{member.name} (Sat: {member.satisfaction})" for member in self.player.band.members if member != self.player}
+                member_options["back"] = "Back"
+
+                choice = self.ui.present_choices(member_options, "Interact with band member:")
+
+                if choice == "back":
+                    self.band_menu_state = "main"
+                else:
+                     target_member = next((m for m in self.player.band.members if m.npc_id == choice), None)
+                     if target_member:
+                         action_opts = {
+                             "praise": "Praise (+Satisfaction, +Chemistry)",
+                             "critique": "Critique (-Satisfaction, +Skill/Quality?)",
+                             "bonus": "Give Bonus $100 (+Satisfaction)",
+                             "fire": "Fire from Band"
+                         }
+                         action = self.ui.present_choices(action_opts, f"Action for {target_member.name}:")
+
+                         if action == "praise":
+                             target_member.satisfaction = min(100, target_member.satisfaction + 5)
+                             self.player.band.update_chemistry(2)
+                             self.GAME_LOG.add_log_message(f"You praised {target_member.name}. They seem happy.")
+                         elif action == "critique":
+                             target_member.satisfaction = max(0, target_member.satisfaction - 5)
+                             self.player.band.update_chemistry(-1)
+                             self.GAME_LOG.add_log_message(f"You critiqued {target_member.name}. It was harsh but necessary.")
+                         elif action == "bonus":
+                             if self.player.money >= 100:
+                                 self.player.money -= 100
+                                 target_member.satisfaction = min(100, target_member.satisfaction + 15)
+                                 self.GAME_LOG.add_log_message(f"You gave {target_member.name} a bonus. They love it!")
+                             else:
+                                 self.GAME_LOG.add_log_message("You can't afford a bonus.")
+                         elif action == "fire":
+                             self.player.band.members.remove(target_member)
+                             self.player.band.recalculate_skills()
+                             target_member.satisfaction = 0
+                             self.GAME_LOG.add_log_message(f"You fired {target_member.name}. The atmosphere is awkward.")
+                             self.band_menu_state = "main"
         elif self.character_menu_state == "skills":
             self.ui.draw_skills_screen(self.player)
             for event in pygame.event.get():

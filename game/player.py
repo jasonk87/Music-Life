@@ -393,7 +393,7 @@ class Player:
         if vehicle:
             print(f"Vehicle: {vehicle}")
 
-        return True
+        return True, total_time_taken
 
 
     def travel_within_city(self, destination_poi, time_taken): # New method for intra-city

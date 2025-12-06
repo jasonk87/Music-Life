@@ -3,12 +3,19 @@ class Band:
         self.name = name
         self.members = [leader] # The player is the leader and first member
         self.band_skills = self.calculate_band_skills()
+        self.chemistry = 50 # 0-100
+        self.funds = 0 # Independent band fund (optional, could just use player money)
 
     def add_member(self, new_member):
         if new_member not in self.members:
             self.members.append(new_member)
             self.recalculate_skills()
+            # Initial chemistry impact: usually drops slightly when adding new person
+            self.chemistry = max(0, self.chemistry - 10)
             print(f"{new_member.name} has joined {self.name}!")
+
+    def update_chemistry(self, amount):
+        self.chemistry = max(0, min(100, self.chemistry + amount))
 
     def recalculate_skills(self):
         self.band_skills = self.calculate_band_skills()
