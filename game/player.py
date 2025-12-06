@@ -3,6 +3,7 @@ from game.player_schedule import PlayerSchedule # Import PlayerSchedule
 from game.game_time import current_game_time # Import global game time for start_date
 from game.vehicle import Vehicle
 from game.band import Band
+from game.traits import TRAIT_CATALOG
 
 class Player:
     def __init__(self, name):
@@ -34,6 +35,9 @@ class Player:
         self.pr_manager_fame_requirement_to_hire = 60 # Renamed for clarity with active hiring
         self.has_bodyguard = False
         self.bodyguard_cost = 100
+
+        self.traits = [] # List of Trait objects
+        self.inspiration = 0 # 0-100
 
         self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
 
@@ -171,11 +175,25 @@ class Player:
         print(f"{new_vehicle.name} added to your garage.")
         return True
 
+    def has_trait(self, trait_id):
+        return any(t.id == trait_id for t in self.traits)
+
+    def get_trait_multiplier(self, effect_type, default=1.0):
+        mult = default
+        for t in self.traits:
+            if t.effect_type == effect_type:
+                mult *= t.effect_value
+        return mult
+
     def practice_skill(self, skill_name, hours):
         if skill_name not in self.skills:
             self.skills[skill_name] = 0
+
+        # Apply Trait Multiplier
+        gain_mult = self.get_trait_multiplier("skill_gain_mult")
+
         # Arbitrary skill gain formula, can be refined
-        self.skills[skill_name] += hours * 0.1
+        self.skills[skill_name] += hours * 0.1 * gain_mult
         print(f"{self.name} practiced {skill_name} for {hours} hours. Skill level is now {self.skills[skill_name]:.1f}.")
 
         # Gear wear from practice

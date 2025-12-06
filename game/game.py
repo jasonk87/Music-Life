@@ -22,6 +22,7 @@ from game.pygame_ui import PygameUI
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 from game_data.vehicle_catalog import VEHICLE_CATALOG
+from game.traits import TRAIT_CATALOG
 from game.chart import Chart
 from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
 from game.sound import SoundManager
@@ -483,6 +484,19 @@ class Game:
                         self.player.has_bodyguard = False
                         self.GAME_LOG.add_log_message("Couldn't pay bodyguard. They quit!")
 
+                # Check for NPC Favors (Allies)
+                for npc_id in self.player.contacts:
+                    npc = self.NPC_REGISTRY.get(npc_id)
+                    if npc and npc.relationship_with_player == RelationshipStatus.ALLY:
+                        if random.random() < 0.1: # 10% chance per day per Ally
+                            # Send a gift
+                            possible_gifts = ["food_energy_bar", "guitar_strings_basic", "guitar_picks_assorted"]
+                            gift_id = random.choice(possible_gifts)
+                            gift_item = GEAR_CATALOG.get(gift_id)
+                            if gift_item:
+                                self.player.add_gear(gift_item)
+                                self.GAME_LOG.add_log_message(f"MSG from {npc.name}: 'Hey, saw this and thought of you!' (Received {gift_item.name})")
+
                 # Gather all released songs in the world
                 all_released_songs = list(self.player.songs_written)
                 for npc in self.NPC_REGISTRY.values():
@@ -612,27 +626,32 @@ class Game:
             self.player.skills['vocals'] = 10
             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
             self.player.add_gear(GEAR_CATALOG.get("guitar_picks_assorted"))
+            self.player.traits.append(TRAIT_CATALOG["resilient"])
         elif bg_choice == "pop_star":
             self.player.skills['vocals'] = 15
             self.player.skills['stage_presence'] = 10
             self.player.add_gear(GEAR_CATALOG.get("microphone_basic"))
             self.player.money += 200 # Extra starting cash for clothes/style
+            self.player.traits.append(TRAIT_CATALOG["charismatic"])
         elif bg_choice == "indie":
             self.player.skills['songwriting'] = 15
             self.player.skills['guitar'] = 10
             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
             self.player.add_gear(GEAR_CATALOG.get("notebook_lyrics"))
+            self.player.traits.append(TRAIT_CATALOG["virtuoso"])
         elif bg_choice == "electronic":
             self.player.skills['electronic'] = 15
             self.player.skills['songwriting'] = 10
             self.player.add_gear(GEAR_CATALOG.get("laptop_basic"))
             self.player.add_gear(GEAR_CATALOG.get("headphones_studio"))
+            self.player.traits.append(TRAIT_CATALOG["night_owl"])
         elif bg_choice == "busker":
             self.player.skills['stage_presence'] = 15
             self.player.skills['guitar'] = 5
             self.player.energy = 100 # High stamina
             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
             self.player.money += 50 # Humble beginnings
+            self.player.traits.append(TRAIT_CATALOG["resilient"])
 
         # Fallback if catalog items missing or not assigned above
         if not self.player.gear_inventory and GEAR_CATALOG.get("worn_acoustic_guitar"):
@@ -697,6 +716,12 @@ class Game:
                 elif choice == "wander":
                     self.GAME_LOG.add_log_message("You take a moment to look around...")
                     advance_game_time(15)
+
+                    # Gain Inspiration
+                    insp_gain = random.randint(2, 5)
+                    self.player.inspiration = min(100, self.player.inspiration + insp_gain)
+                    self.GAME_LOG.add_log_message(f"You feel inspired by the surroundings. (+{insp_gain} Inspiration)")
+
                     event_result = check_for_random_event(self.player, current_poi_name=self.selected_poi.name, chance=0.8, ui=self.ui, logger=self.GAME_LOG)
                     if not event_result["event_triggered"]:
                         self.GAME_LOG.add_log_message("It seems quiet right now.")
@@ -787,12 +812,28 @@ class Game:
             elif self.songwriting_stage == "confirm_start":
                 title = self.song_in_progress.get('title', 'Untitled')
                 genre = self.song_in_progress.get('genre', 'Unknown')
-                confirm_options = {
-                    "yes": f"Start writing '{title}' ({genre}) (Will take ~8 hours)",
-                    "no": "Cancel"
-                }
-                choice = self.ui.present_choices(confirm_options, "Ready to start writing?")
-                if choice == "yes":
+
+                insp_cost = 50
+                can_use_insp = self.player.inspiration >= insp_cost
+
+                start_label = f"Start writing '{title}' ({genre}) (Will take ~8 hours)"
+                start_insp_label = f"Start with Inspiration (Cost {insp_cost} Insp, Quality++)"
+
+                confirm_options = {"yes": start_label}
+                if can_use_insp:
+                    confirm_options["yes_insp"] = start_insp_label
+                confirm_options["no"] = "Cancel"
+
+                choice = self.ui.present_choices(confirm_options, f"Ready to write? (Inspiration: {self.player.inspiration}/100)")
+
+                if choice == "yes" or choice == "yes_insp":
+                    if choice == "yes_insp":
+                        self.player.inspiration -= insp_cost
+                        self.song_in_progress['inspiration_bonus'] = 0.2 # 20% quality boost
+                        self.GAME_LOG.add_log_message("You channel your inspiration into the song!")
+                    else:
+                        self.song_in_progress['inspiration_bonus'] = 0.0
+
                     self.songwriting_stage = "writing_components"
                     # This will fall through to the next stage in the same frame
                 else:
@@ -804,23 +845,27 @@ class Game:
                 # This is a non-interactive stage, so we do the work and then change state.
                 self.GAME_LOG.add_log_message("You spend a long day writing...")
 
+                insp_bonus = self.song_in_progress.get('inspiration_bonus', 0.0)
+
                 # Lyrics (2 hours)
-                lyrical_depth = self._calculate_song_component_quality('songwriting')
-                self.song_in_progress['lyrical_depth'] = lyrical_depth
+                lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
+                self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
                 advance_game_time(120)
                 self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
 
                 # Melody (3 hours)
-                catchiness = self._calculate_song_component_quality('songwriting', 'guitar')
-                self.song_in_progress['catchiness'] = catchiness
+                catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
+                self.song_in_progress['catchiness'] = min(1.0, catchiness)
                 advance_game_time(180)
                 self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
 
                 # Arrangement / Complexity (3 hours)
-                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7)
-                self.song_in_progress['music_complexity'] = music_complexity
-                originality = self._calculate_song_component_quality('songwriting') # Originality is based on songwriting
-                self.song_in_progress['originality'] = originality
+                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
+                self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
+
+                originality = self._calculate_song_component_quality('songwriting') + insp_bonus
+                self.song_in_progress['originality'] = min(1.0, originality)
+
                 advance_game_time(180)
                 self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
 
@@ -1220,6 +1265,11 @@ class Game:
         self.player.practice_skill(primary_instrument_skill, xp * 5) # Scale factor
         npc.update_relationship(rel_gain)
 
+        # Gain Inspiration from Jamming
+        insp_gain = random.randint(5, 10)
+        self.player.inspiration = min(100, self.player.inspiration + insp_gain)
+        self.GAME_LOG.add_log_message(f"Jamming gave you new ideas! (+{insp_gain} Inspiration)")
+
         self.player.energy -= 10
         self.player.stress = max(0, self.player.stress - 15) # Jamming relieves stress
         self.GAME_LOG.add_log_message(f"Jam session finished. Stress -15.")
@@ -1240,6 +1290,11 @@ class Game:
                 self.explore_menu_state = "shop"
             else:
                 self.GAME_LOG.add_log_message("Nothing for sale currently.")
+        elif interaction_text == "Look around (Trigger Events)": # Renaming or handling if text differs
+             pass # Handled by choice logic earlier, but if passed here:
+             # Actually, "wander" key handles it directly in loop.
+             # But if we want it to give inspiration:
+             pass
         elif interaction_text == "Hire Bodyguard ($100/day)":
             if self.player.has_bodyguard:
                 self.GAME_LOG.add_log_message("You already have a bodyguard.")

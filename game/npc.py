@@ -31,6 +31,7 @@ class NPC:
         self.songs_written = []
         self.on_tour = False
         self.tour_end_date = None
+        self.traits = [] # List of Trait objects
 
     def __str__(self):
         return f"NPC: {self.name} (ID: {self.npc_id}, Personality: {self.personality_key}, Relationship: {self.relationship_with_player.name} ({self.relationship_score}))"
