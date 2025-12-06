@@ -15,6 +15,13 @@ class PerformanceManager:
 
         # Stats
         self.crowd_hype = 50 # 0-100
+        # Apply Genre Bias
+        bias_mult = 1.0
+        if hasattr(self.event.location, 'genre_bias'):
+            bias_mult = self.event.location.genre_bias.get(self.song.genre, 1.0)
+
+        self.crowd_hype = int(self.crowd_hype * bias_mult)
+
         self.band_energy = 100 # 0-100
         self.performance_quality = 0 # Accumulator
 
@@ -105,6 +112,13 @@ class PerformanceManager:
                 self.crowd_hype -= 5
                 self.band_energy -= 10
                 self.turn_result = f"You fumbled the solo in the {section}. Ouch."
+        # Trend Bonus Check
+        # Assuming we can access trend manager via self.game.trend_manager
+        if hasattr(self.game, 'trend_manager'):
+            trend_mult = self.game.trend_manager.get_popularity(self.song.genre)
+            if trend_mult > 1.2 and action == "hype":
+                self.crowd_hype += 5 # Extra boost for playing trendy music
+                self.turn_result += " (Trend Bonus!)"
 
         self.crowd_hype = max(0, min(100, self.crowd_hype))
         self.band_energy = max(0, min(100, self.band_energy))

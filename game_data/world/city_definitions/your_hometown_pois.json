@@ -45,7 +45,7 @@
       "name": "Corner Bodega",
       "description": "A small grocery store with basic necessities.",
       "category": "SHOP_FOOD",
-      "interaction_options": ["Buy Food Items", "Chat with Clerk"],
+      "interaction_options": ["Buy Food Items", "Chat with Clerk", "Work Shift: Stock Shelves ($20 / 4h)"],
       "properties": {
         "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag"]
       }
@@ -55,7 +55,7 @@
       "name": "Greasy Spoon Diner",
       "description": "Cheap, fast, and... food-like substances.",
       "category": "FOOD_FASTFOOD",
-      "interaction_options": [], "properties": {
+      "interaction_options": ["Work Shift: Dishwashing ($25 / 4h)"], "properties": {
         "menu_items": [
           {"display_text": "Order Greasy Breakfast ($8)", "item_id": "food_greasy_breakfast", "cost": 8, "effects": {"hunger": -50, "energy": 15, "comfort": 1}},
           {"display_text": "Order Cheap Burger ($5)", "item_id": "food_cheap_burger", "cost": 5, "effects": {"hunger": -35, "energy": 10, "comfort": -2}},

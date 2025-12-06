@@ -28,6 +28,7 @@ from game.feedback_generator import generate_feedback_for_song, SOURCES, generat
 from game.sound import SoundManager
 from game.ascii_art import ART
 from game.performance import PerformanceManager
+from game.trends import TrendManager
 
 class Game:
     def __init__(self, ui):
@@ -55,6 +56,7 @@ class Game:
         self.songwriting_stage = None
         self.song_in_progress = {}
         self.SONG_GENRES = ["Rock", "Pop", "Folk", "Indie", "Electronic", "Blues"]
+        self.trend_manager = TrendManager(self.SONG_GENRES)
         self.OPPORTUNITY_CATALOG = {
             "radio_interview_local": {
                 "name": "Local Radio Interview",
@@ -190,10 +192,11 @@ class Game:
                 owner_npc_id_temp_venue = props.pop("owner_npc_id", None)
                 booking_fee_prop = props.pop("booking_fee", 50)
                 allows_player_booking_prop = props.pop("allows_player_booking", True)
+                genre_bias_prop = props.pop("genre_bias", {})
                 venue = Venue(venue_id=venue_data["venue_id"], name=venue_data["name"], description=venue_data["description"],
                             venue_type=venue_data["venue_type"], category=venue_data["category"],
                             capacity=venue_data["capacity"], prestige=venue_data["prestige"],
-                            parent_location_id=location_obj.name, **props)
+                            parent_location_id=location_obj.name, genre_bias=genre_bias_prop, **props)
                 if owner_npc_id_temp_venue: venue.owner_npc_id = owner_npc_id_temp_venue
                 venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
                 venue.booking_fee = booking_fee_prop; venue.allows_player_booking = allows_player_booking_prop
@@ -470,6 +473,15 @@ class Game:
                 # NPCs progress in their careers
                 self.update_npc_careers()
 
+                # Update Trends
+                shift_happened = self.trend_manager.update_weekly()
+                if shift_happened:
+                    top_genre = self.trend_manager.get_top_genre()
+                    self.GAME_LOG.add_log_message(f"--- NEWS: A cultural shift! {top_genre} is the new wave! ---")
+                else:
+                    top_genre = self.trend_manager.get_top_genre()
+                    self.GAME_LOG.add_log_message(f"Trends: {top_genre} is currently popular.")
+
             # Daily Upkeep (e.g. Bodyguard)
             # This check runs every frame, so we need a "last_upkeep_day" tracker.
             # Using last_opportunity_check_day is decent but strictly for opportunities.
@@ -507,7 +519,8 @@ class Game:
                 total_money_gain = 0
                 all_feedback_events = []
                 for chart in self.ACTIVE_CHARTS:
-                    feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time)
+                    # Pass trend_manager to chart update
+                    feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time, self.trend_manager)
                     all_feedback_events.extend(feedback_events)
                     # Calculate fame and money from chart positions for the PLAYER only
                     for entry in chart.entries:
@@ -1304,6 +1317,28 @@ class Game:
                 self.GAME_LOG.add_log_message("You hired a bodyguard! Daily upkeep is $100.")
             else:
                 self.GAME_LOG.add_log_message("You can't afford the initial fee.")
+        elif interaction_text.startswith("Work Shift:"):
+            # Parse earnings and time from text, e.g. "Work Shift: Stock Shelves ($20 / 4h)"
+            try:
+                parts = interaction_text.split("($")
+                earnings_part = parts[1].split("/")[0].strip()
+                time_part = parts[1].split("/")[1].split("h")[0].strip()
+
+                earnings = int(earnings_part)
+                hours = int(time_part)
+
+                self.GAME_LOG.add_log_message(f"You work a {hours} hour shift...")
+                advance_game_time(hours * 60)
+
+                # Apply fatigue
+                self.player.energy = max(0, self.player.energy - (10 * hours))
+                self.player.stress = min(100, self.player.stress + (5 * hours))
+                self.player.hunger = min(100, self.player.hunger + (5 * hours)) # Work makes you hungry
+
+                self.player.money += earnings
+                self.GAME_LOG.add_log_message(f"Shift complete. You earned ${earnings}. (Energy -{10*hours}, Stress +{5*hours})")
+            except Exception as e:
+                self.GAME_LOG.add_log_message(f"Error starting shift: {e}")
         elif interaction_text == "Repair Instrument":
             # Simple repair all for now or submenu? Let's do simple repair mechanics.
             # Find broken/damaged instruments
