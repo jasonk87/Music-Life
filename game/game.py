@@ -1485,12 +1485,26 @@ class Game:
             dest_choice = self.ui.present_choices(dest_opts, f"Departures from {self.player.current_poi.name}")
             if dest_choice != "back":
                 travel_details = connections[dest_choice]
-                # Check money for public transport here, but let Player.travel handle the deduction/final check
-                # For private vehicle, cost is fuel, handled in Player.travel
+
+                # Ticket Class Selection
+                ticket_class = "economy"
+                if not selected_vehicle and self.player.current_poi.category in ["TRANSPORT_AIRPORT", "TRANSPORT_BUS"]:
+                    class_opts = {
+                        "economy": f"Economy (${travel_details['cost']})",
+                        "business": f"Business (${travel_details['cost']*2}) - Less Stress",
+                        "first": f"First Class (${travel_details['cost']*5}) - Comfort"
+                    }
+                    ticket_class = self.ui.present_choices(class_opts, "Select Ticket Class")
+
+                # Check money for public transport here (approx check)
+                base_cost = travel_details['cost']
+                multiplier = 1
+                if ticket_class == "business": multiplier = 2
+                elif ticket_class == "first": multiplier = 5
 
                 can_afford_ticket = True
                 if not selected_vehicle:
-                     if self.player.money < travel_details['cost']:
+                     if self.player.money < base_cost * multiplier:
                          can_afford_ticket = False
 
                 if can_afford_ticket:
@@ -1500,13 +1514,17 @@ class Game:
                         estimated_distance = travel_details['time_hours'] * 60.0
 
                         transport_mode = selected_vehicle if selected_vehicle else "bus" # Default to bus if no vehicle
+                        if "method" in travel_details:
+                            transport_mode = travel_details["method"].lower() if not selected_vehicle else selected_vehicle
+                        elif self.player.current_poi.category == "TRANSPORT_AIRPORT" and not selected_vehicle:
+                            transport_mode = "plane"
 
                         cost_override = None
                         if not selected_vehicle:
                             cost_override = travel_details['cost']
 
                         # Player.travel now handles the cost deduction for ticket or fuel
-                        success, actual_time_hours = self.player.travel(dest_loc_obj, estimated_distance, transport_mode, cost_override)
+                        success, actual_time_hours = self.player.travel(dest_loc_obj, estimated_distance, transport_mode, cost_override, ticket_class)
 
                         if success:
                             # Use the actual time taken from the simulation (includes delays)
@@ -1750,6 +1768,9 @@ class Game:
                 "contacts": "Contacts",
                 "web": "Web",
             }
+            if self.player.has_manager:
+                phone_menu_opts["agent"] = "Call Agent"
+
             # Add dynamic opportunities
             if self.player.pending_contracts:
                 phone_menu_opts["label_offers"] = f"View Record Deal Offer ({len(self.player.pending_contracts)})"
@@ -1786,8 +1807,12 @@ class Game:
                 # Handle the selected opportunity
                 self.handle_opportunity(choice)
                 self.phone_menu_state = "main" # Return to phone menu
+            elif choice == "agent":
+                self.phone_menu_state = "agent"
             else:
                 self.phone_menu_state = choice
+        elif self.phone_menu_state == "agent":
+            self.handle_agent_menu()
         elif self.phone_menu_state == "contacts":
             self.handle_contacts_menu()
         elif self.phone_menu_state == "schedule":
@@ -1833,6 +1858,36 @@ class Game:
             elif choice == "back":
                 self.phone_menu_state = "main"
 
+
+    def handle_agent_menu(self):
+        opts = {
+            "find_gig": "Find Gig (Immediate)",
+            "plan_tour": "Plan Tour (Start Wizard)",
+            "back": "Hang Up"
+        }
+        choice = self.ui.present_choices(opts, "Agent on the line: 'What can I do for you?'")
+
+        if choice == "back":
+            self.phone_menu_state = "main"
+        elif choice == "find_gig":
+            # Simplified gig finding logic
+            self.GAME_LOG.add_log_message("Agent: 'Let me make some calls...'")
+            advance_game_time(60) # 1 hour
+
+            if random.random() < 0.5 + (self.player.fame / 500.0):
+                self.GAME_LOG.add_log_message("Agent: 'I found a slot at a club for tomorrow night!'")
+                # Add event logic here (simplified)
+                # Ideally, add to schedule.
+                gig_time = current_game_time.copy()
+                gig_time.add_days(1)
+                gig_time.hour = 20
+                self.player.schedule.add_event(gig_time, gig_time, "Agent Booked Gig", "Gig")
+            else:
+                self.GAME_LOG.add_log_message("Agent: 'Sorry, nothing available right now.'")
+
+        elif choice == "plan_tour":
+            self.GAME_LOG.add_log_message("Agent: 'I'll look for routing options. Check back later.'")
+            # Placeholder for complex tour logic
 
     def handle_web_menu(self):
         if self.web_menu_state == "main":
@@ -2234,7 +2289,7 @@ class Game:
 
         elif self.character_menu_state == "inventory_storage":
             # Show stash/retrieve options
-            mode_opts = {"stash": "Stash Item (to Home)", "retrieve": "Retrieve Item (from Home)", "back": "Back"}
+            mode_opts = {"stash": "Stash Item (to Home)", "retrieve": "Retrieve Item (from Home)", "auto_pack": "Auto-Pack (Requires Roadie)", "back": "Back"}
             mode = self.ui.present_choices(mode_opts, "Storage")
 
             if mode == "back":
@@ -2261,6 +2316,9 @@ class Game:
                         item = self.player.home_storage[int(c)]
                         success, msg = self.player.retrieve_item(item)
                         self.GAME_LOG.add_log_message(msg)
+            elif mode == "auto_pack":
+                msg = self.player.auto_pack()
+                self.GAME_LOG.add_log_message(msg)
 
     def save_game(self, filename="savegame.dat"):
         save_data = {

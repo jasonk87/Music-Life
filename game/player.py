@@ -213,6 +213,37 @@ class Player:
                 return False, "Cannot carry item."
         return False, "Item not in storage."
 
+    def auto_pack(self):
+        """Uses Roadies to pack best gear up to capacity."""
+        if not any(s.role == "Roadie" for s in self.staff):
+            return "You need a Roadie to auto-pack."
+
+        # 1. Stash everything first to start clean (or keep what we have? Clean is safer to ensure optimality)
+        # Actually, let's just try to retrieve valuable stuff from home that fits.
+        # But if inv is full of junk, we might want to dump junk.
+        # Let's dump all to home first.
+        self.home_storage.extend(self.gear_inventory)
+        self.gear_inventory.clear()
+
+        # 2. Sort all items (now in home_storage) by value
+        sorted_items = sorted(self.home_storage, key=lambda x: x.cost, reverse=True)
+
+        # 3. Fill inventory
+        cap = self.get_current_gear_capacity()
+        current_load = 0
+        to_move = []
+
+        for item in sorted_items:
+            if current_load + item.size <= cap:
+                to_move.append(item)
+                current_load += item.size
+
+        for item in to_move:
+            self.home_storage.remove(item)
+            self.gear_inventory.append(item)
+
+        return f"Roadie auto-packed {len(to_move)} items. Load: {current_load}/{cap}"
+
     def has_trait(self, trait_id):
         return any(t.id == trait_id for t in self.traits)
 
@@ -269,11 +300,12 @@ class Player:
                 # Consider reducing skill gain effectiveness here in the future
 
 
-    def travel(self, destination_location, distance_km, transport_mode="bus", cost_override=None):
+    def travel(self, destination_location, distance_km, transport_mode="bus", cost_override=None, ticket_class="economy"):
         """
         Simulates inter-city travel with vehicles and logistics.
         transport_mode: can be a Vehicle object (owned by player) or string 'bus', 'train', 'plane'.
         cost_override: if provided, overrides the calculated cost for public transport.
+        ticket_class: 'economy', 'business', 'first' (affects cost and stress)
         """
         print(f"\n{self.name} is preparing to travel from {self.current_location.name if self.current_location else 'Unknown'} to {destination_location.name}...")
 
@@ -290,6 +322,16 @@ class Player:
         travel_speed = 60 # Default km/h for bus
         cost = 0
         vehicle = None
+
+        # Class multipliers
+        class_cost_mult = 1.0
+        class_stress_mult = 1.0
+        if ticket_class == "business":
+            class_cost_mult = 2.0
+            class_stress_mult = 0.5
+        elif ticket_class == "first":
+            class_cost_mult = 5.0
+            class_stress_mult = 0.0
 
         if isinstance(transport_mode, Vehicle):
             # Check ownership - using identity or name comparison isn't enough because `add_vehicle` copies logic.
@@ -317,17 +359,17 @@ class Player:
             print(f"Driving own vehicle: {vehicle.name}")
 
         elif transport_mode == "bus":
-            cost = distance_km * 0.5 # 50 cents per km
+            cost = distance_km * 0.5 * class_cost_mult
             travel_speed = 60
         elif transport_mode == "train":
-            cost = distance_km * 1.0
+            cost = distance_km * 1.0 * class_cost_mult
             travel_speed = 100
         elif transport_mode == "plane":
-            cost = distance_km * 5.0
+            cost = distance_km * 5.0 * class_cost_mult
             travel_speed = 800
 
         if cost_override is not None and not isinstance(transport_mode, Vehicle):
-            cost = cost_override
+            cost = cost_override * class_cost_mult
 
         if cost > self.money:
             print(f"TRAVEL BLOCKED: You cannot afford the ticket (${cost}). You have ${self.money}.")
@@ -335,7 +377,7 @@ class Player:
 
         self.money -= cost
         if cost > 0:
-            print(f"Ticket purchased for ${cost}.")
+            print(f"Ticket purchased for ${cost} ({ticket_class}).")
 
         # 3. Simulate Journey
         # We break the journey into 1-hour chunks (or segments)
@@ -380,11 +422,18 @@ class Player:
                          continue
 
             # Event Check
-            event_desc, delay, stress_mod, money_mod, stop = generate_road_event(self, vehicle, dist_leg)
+            # Pass transport_mode (string or object) to generate_road_event
+            mode_str = "car"
+            if isinstance(transport_mode, str):
+                mode_str = transport_mode
+            elif isinstance(transport_mode, Vehicle):
+                mode_str = "car" # Default for any personal vehicle for now, or check vehicle type if expanded
+
+            event_desc, delay, stress_mod, money_mod, stop = generate_road_event(self, vehicle, dist_leg, transport_mode=mode_str)
             if event_desc:
                 print(f"EVENT: {event_desc}")
                 total_time_taken += delay
-                total_stress_gain += stress_mod
+                total_stress_gain += stress_mod * class_stress_mult
                 self.money += money_mod
                 if stop:
                     print("Travel halted by event.")
@@ -395,7 +444,8 @@ class Player:
             total_time_taken += (dist_leg / current_speed)
 
             # Stress from travel duration
-            total_stress_gain += 0.5 # Low base stress per hour
+            stress_per_hour = 0.5 * class_stress_mult
+            total_stress_gain += stress_per_hour
 
         # 4. Finalize
         self.current_location = destination_location

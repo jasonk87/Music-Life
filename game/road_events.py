@@ -1,17 +1,22 @@
 import random
 
-def generate_road_event(player, vehicle, distance_segment):
+def generate_road_event(player, vehicle, distance_segment, transport_mode="car"):
     """
     Generates a random event during travel.
     Returns (event_description, time_delay_hours, stress_change, money_change, stop_travel)
     """
 
     # Base chance of an event per segment (e.g. per 100km or per hour)
+    # Reduced chance for planes/trains
     event_chance = 0.3
+    if transport_mode == "plane": event_chance = 0.1
+    if transport_mode == "train": event_chance = 0.15
+
     if random.random() > event_chance:
         return None, 0, 0, 0, False
 
-    events = [
+    # Define Event Pools
+    car_events = [
         {
             "name": "Traffic Jam",
             "desc": "You got stuck in heavy traffic due to construction.",
@@ -42,7 +47,7 @@ def generate_road_event(player, vehicle, distance_segment):
             "desc": "Pop! A flat tire. You have to change it on the side of the road.",
             "time": 2,
             "stress": 20,
-            "money": 0, # Could cost money if no spare? Assumed manual fix.
+            "money": 0,
             "stop": False
         },
         {
@@ -55,6 +60,61 @@ def generate_road_event(player, vehicle, distance_segment):
             "effect": lambda p: setattr(p, 'inspiration', min(100, p.inspiration + 5))
         }
     ]
+
+    plane_events = [
+        {
+            "name": "Turbulence",
+            "desc": "Rough air! The flight is bumpy.",
+            "time": 0,
+            "stress": 10,
+            "money": 0,
+            "stop": False
+        },
+        {
+            "name": "Flight Delay",
+            "desc": "The flight is circling due to weather.",
+            "time": 1,
+            "stress": 5,
+            "money": 0,
+            "stop": False
+        },
+        {
+            "name": "Great View",
+            "desc": "A beautiful view from the clouds inspires you.",
+            "time": 0,
+            "stress": -5,
+            "money": 0,
+            "stop": False,
+            "effect": lambda p: setattr(p, 'inspiration', min(100, p.inspiration + 5))
+        }
+    ]
+
+    train_events = [
+        {
+            "name": "Signal Failure",
+            "desc": "Train stopped due to signal failure.",
+            "time": random.uniform(0.5, 2),
+            "stress": 5,
+            "money": 0,
+            "stop": False
+        },
+        {
+            "name": "Quiet Cabin",
+            "desc": "The train is peaceful. You get some rest.",
+            "time": 0,
+            "stress": -10,
+            "money": 0,
+            "stop": False
+        }
+    ]
+
+    events = car_events
+    if transport_mode == "plane":
+        events = plane_events
+    elif transport_mode == "train":
+        events = train_events
+    elif transport_mode == "bus":
+        events = car_events # Bus shares road events mostly, maybe filter speed trap? keeping simple.
 
     event = random.choice(events)
 
