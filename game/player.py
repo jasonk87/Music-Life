@@ -4,6 +4,9 @@ from game.game_time import current_game_time # Import global game time for start
 from game.vehicle import Vehicle
 from game.band import Band
 from game.traits import TRAIT_CATALOG
+from game.road_events import generate_road_event
+import math
+import random
 
 class Player:
     def __init__(self, name):
@@ -85,6 +88,9 @@ class Player:
 
     def get_current_gear_capacity(self, travel_mode=None):
         """Calculates current gear capacity based on situation or travel mode."""
+        if isinstance(travel_mode, Vehicle):
+             return travel_mode.get_max_cargo()
+
         if travel_mode == "walk":
             return max(1, int(self.base_gear_capacity / 2)) # Walking reduces capacity, min 1
         elif travel_mode == "bike":
@@ -170,7 +176,12 @@ class Player:
             print(f"Error: Cannot add '{vehicle}'. Not a valid Vehicle.")
             return False
         # Create a new instance to ensure player's vehicle has its own state (e.g. fuel)
-        new_vehicle = Vehicle(vehicle.name, vehicle.cost, vehicle.speed, vehicle.fuel_capacity, vehicle.fuel_efficiency)
+        if hasattr(vehicle, 'clone'):
+            new_vehicle = vehicle.clone()
+        else:
+            # Fallback if clone not available (e.g. older definition loaded)
+            new_vehicle = Vehicle(vehicle.name, vehicle.cost, vehicle.speed, vehicle.fuel_capacity, vehicle.fuel_efficiency, vehicle.cargo_capacity, vehicle.reliability, vehicle.condition)
+
         self.vehicles.append(new_vehicle)
         print(f"{new_vehicle.name} added to your garage.")
         return True
@@ -231,41 +242,158 @@ class Player:
                 # Consider reducing skill gain effectiveness here in the future
 
 
-    def travel(self, destination_location, travel_time): # This is for inter-city travel
-        print(f"{self.name} is travelling from {self.current_location.name if self.current_location else 'Unknown'} to {destination_location.name}...")
-        # Simulate time passing
-        print(f"Travel took {travel_time} hours.")
+    def travel(self, destination_location, distance_km, transport_mode="bus", cost_override=None):
+        """
+        Simulates inter-city travel with vehicles and logistics.
+        transport_mode: can be a Vehicle object (owned by player) or string 'bus', 'train', 'plane'.
+        cost_override: if provided, overrides the calculated cost for public transport.
+        """
+        print(f"\n{self.name} is preparing to travel from {self.current_location.name if self.current_location else 'Unknown'} to {destination_location.name}...")
+
+        # 1. Capacity Check
+        capacity = self.get_current_gear_capacity(transport_mode)
+        current_load = self.get_current_gear_load()
+
+        if current_load > capacity:
+            print(f"TRAVEL BLOCKED: Your gear load ({current_load}) exceeds the capacity of {transport_mode if isinstance(transport_mode, str) else transport_mode.name} ({capacity}).")
+            print("You must sell or store items before traveling.")
+            return False
+
+        # 2. Setup Travel Variables
+        travel_speed = 60 # Default km/h for bus
+        cost = 0
+        vehicle = None
+
+        if isinstance(transport_mode, Vehicle):
+            # Check ownership - using identity or name comparison isn't enough because `add_vehicle` copies logic.
+            # `add_vehicle` creates a NEW instance. So the object passed here might be the "blueprint" or the actual player's instance.
+            # If the user passes the object they just added, it works.
+            # BUT, `add_vehicle` clones it. So `self.vehicles` contains a DIFFERENT object than what is passed if the user passes the blueprint.
+            # We need to find the matching vehicle in `self.vehicles`.
+
+            owned_vehicle = None
+            if transport_mode in self.vehicles:
+                owned_vehicle = transport_mode
+            else:
+                # Try to find by name/stats if object identity fails (e.g. testing)
+                for v in self.vehicles:
+                    if v.name == transport_mode.name: # Simple name check for now
+                        owned_vehicle = v
+                        break
+
+            if not owned_vehicle:
+                print("Error: You don't own this vehicle.")
+                return False
+
+            vehicle = owned_vehicle
+            travel_speed = vehicle.speed
+            print(f"Driving own vehicle: {vehicle.name}")
+
+        elif transport_mode == "bus":
+            cost = distance_km * 0.5 # 50 cents per km
+            travel_speed = 60
+        elif transport_mode == "train":
+            cost = distance_km * 1.0
+            travel_speed = 100
+        elif transport_mode == "plane":
+            cost = distance_km * 5.0
+            travel_speed = 800
+
+        if cost_override is not None and not isinstance(transport_mode, Vehicle):
+            cost = cost_override
+
+        if cost > self.money:
+            print(f"TRAVEL BLOCKED: You cannot afford the ticket (${cost}). You have ${self.money}.")
+            return False
+
+        self.money -= cost
+        if cost > 0:
+            print(f"Ticket purchased for ${cost}.")
+
+        # 3. Simulate Journey
+        # We break the journey into 1-hour chunks (or segments)
+        remaining_distance = distance_km
+        total_time_taken = 0
+        total_stress_gain = 0
+
+        print("Journey started...")
+
+        while remaining_distance > 0:
+            # Distance covered in this 'turn' (1 hour or remaining)
+            # Add some variance to speed
+            current_speed = travel_speed * random.uniform(0.8, 1.2)
+            dist_leg = min(remaining_distance, current_speed)
+
+            # Vehicle Logic (Fuel & Breakdown)
+            if vehicle:
+                result = vehicle.travel(dist_leg)
+                if not result['success']:
+                    if result['message'] == "Not enough fuel to complete the trip.":
+                         print(f"WARNING: Ran out of fuel with {remaining_distance:.1f}km to go!")
+                         print("You had to call a tow truck service (Cost: $200, Delay: 4 hours).")
+                         self.money -= 200
+                         total_time_taken += 4
+                         total_stress_gain += 20
+                         vehicle.refuel(5) # Give a little gas to get to station
+                         # Assume we find a gas station eventually
+                         refuel_cost = vehicle.refuel(vehicle.fuel_capacity) * 1.5 # Cost per liter
+                         self.money -= refuel_cost
+                         print(f"Refueled full tank for ${refuel_cost:.2f}.")
+                         continue # Retry leg
+
+                    if result['breakdown']:
+                         print(f"CRITICAL: {result['message']}")
+                         print("You are stranded on the side of the road.")
+                         repair_cost = random.randint(100, 500)
+                         print(f"Emergency repairs cost ${repair_cost} and took 6 hours.")
+                         self.money -= repair_cost
+                         total_time_taken += 6
+                         total_stress_gain += 30
+                         vehicle.repair(20) # Patch up
+                         continue
+
+            # Event Check
+            event_desc, delay, stress_mod, money_mod, stop = generate_road_event(self, vehicle, dist_leg)
+            if event_desc:
+                print(f"EVENT: {event_desc}")
+                total_time_taken += delay
+                total_stress_gain += stress_mod
+                self.money += money_mod
+                if stop:
+                    print("Travel halted by event.")
+                    break
+
+            # Progress
+            remaining_distance -= dist_leg
+            total_time_taken += (dist_leg / current_speed)
+
+            # Stress from travel duration
+            total_stress_gain += 0.5 # Low base stress per hour
+
+        # 4. Finalize
         self.current_location = destination_location
 
-        # Attempt to set current_poi to a relevant transport hub in the new city
-        # This assumes inter-city travel implies arriving at such a hub.
-        # The mode of travel isn't passed here, so we make a best guess.
+        # Arrival Logic (copied/adapted from original)
         arrival_poi = None
         if destination_location and (hasattr(destination_location, 'points_of_interest') or hasattr(destination_location, 'venues')):
             all_pois_in_dest = destination_location.points_of_interest + destination_location.venues
-
             # Prioritize Airport if it exists, then Bus Station
-            for poi_category_priority in ["TRANSPORT_AIRPORT", "TRANSPORT_BUS"]:
-                for poi in all_pois_in_dest:
-                    if hasattr(poi, 'category') and poi.category == poi_category_priority:
-                        arrival_poi = poi
-                        break
-                if arrival_poi:
+            target_cat = "TRANSPORT_AIRPORT" if transport_mode == "plane" else "TRANSPORT_BUS"
+            for poi in all_pois_in_dest:
+                if hasattr(poi, 'category') and poi.category == target_cat:
+                    arrival_poi = poi
                     break
+        self.current_poi = arrival_poi
 
-        self.current_poi = arrival_poi # Could be None if no suitable hub found
+        self.stress = min(100, self.stress + total_stress_gain)
+        self.energy = max(0, self.energy - (total_time_taken * 2)) # Energy drain
 
-        # Update energy and stress due to travel
-        # travel_time is in hours for inter-city
-        stress_increase = travel_time * 2 # Example: +2 stress per hour
-        energy_decrease = travel_time * 3 # Example: -3 energy per hour
+        print(f"\nArrived in {destination_location.name} after {total_time_taken:.1f} hours.")
+        print(f"Status: Money: ${self.money:.2f}, Stress: {self.stress:.0f}, Energy: {self.energy:.0f}")
+        if vehicle:
+            print(f"Vehicle: {vehicle}")
 
-        self.stress = min(100, self.stress + stress_increase)
-        self.energy = max(0, self.energy - energy_decrease)
-
-        arrival_poi_name = f"at {arrival_poi.name}" if arrival_poi else "at the city outskirts"
-        print(f"{self.name} has arrived in {destination_location.name} ({arrival_poi_name}).")
-        print(f"The journey was tiring. (Stress: +{stress_increase}, Energy: -{energy_decrease})")
+        return True
 
 
     def travel_within_city(self, destination_poi, time_taken): # New method for intra-city
@@ -377,6 +505,8 @@ if __name__ == '__main__':
     class MockLocation: # Represents a City
         def __init__(self, name):
             self.name = name
+            self.points_of_interest = []
+            self.venues = []
 
     class MockPOI: # Represents a Point of Interest
         def __init__(self, name):
@@ -385,9 +515,21 @@ if __name__ == '__main__':
     hometown = MockLocation("Hometown")
     citycenter = MockLocation("City Center")
     p.current_location = hometown
-    p.travel(citycenter, 5) # Inter-city travel
+
+    # Updated Travel Test
+    # p.travel(citycenter, 5) # Old signature
+    p.travel(citycenter, 300, "bus") # New signature: 300km by bus
     assert p.current_location == citycenter
-    assert p.current_poi is None
+
+    # Test Vehicle Travel
+    my_van = Vehicle("Tour Van", 2000, 80, 50, 10, 50) # efficient: 10km/l
+    p.add_vehicle(my_van)
+    p.current_location = hometown # Reset
+    p.travel(citycenter, 400, my_van) # 400km trip. Should use 40L fuel.
+    assert p.current_location == citycenter
+    # Need to find the vehicle in player's inventory because add_vehicle clones it
+    owned_van = p.vehicles[0]
+    assert owned_van.fuel <= 10 # Started with 50, used ~40.
 
     home_poi = MockPOI("Player's Apartment")
     shop_poi = MockPOI("Music Shop")
@@ -408,6 +550,11 @@ if __name__ == '__main__':
     p.has_bike = True
     assert p.get_current_gear_capacity("bike") == 10 # With bike, it's base_gear_capacity
     assert p.get_current_gear_capacity("taxi") == 30 # base_gear_capacity * 3
+
+    # Test Vehicle Capacity
+    # p.add_vehicle clones the vehicle, so we need to use the owned instance or ensure the test vehicle is considered valid
+    # In get_current_gear_capacity, it just reads the object passed.
+    assert p.get_current_gear_capacity(my_van) == 50
 
     strings = GearItem("s001", "Strings", "Guitar strings", "ACCESSORY", 1, 10)
     guitar = GearItem("g001", "Basic Guitar", "An acoustic guitar", "INSTRUMENT", 5, 100)

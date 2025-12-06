@@ -1458,19 +1458,47 @@ class Game:
             dest_choice = self.ui.present_choices(dest_opts, f"Departures from {self.player.current_poi.name}")
             if dest_choice != "back":
                 travel_details = connections[dest_choice]
-                if self.player.money >= travel_details['cost']:
-                    self.player.money -= travel_details['cost']
+                # Check money for public transport here, but let Player.travel handle the deduction/final check
+                # For private vehicle, cost is fuel, handled in Player.travel
+
+                can_afford_ticket = True
+                if not selected_vehicle:
+                     if self.player.money < travel_details['cost']:
+                         can_afford_ticket = False
+
+                if can_afford_ticket:
                     dest_loc_obj = self.WORLD_MAP.get(dest_choice)
                     if dest_loc_obj:
-                        travel_time = travel_details['time_hours']
-                        if selected_vehicle:
-                            travel_time /= selected_vehicle.speed
+                        # Estimate distance from time (assuming 60km/h average for generic "time_hours" in data)
+                        estimated_distance = travel_details['time_hours'] * 60.0
 
-                        self.player.travel(dest_loc_obj, travel_time)
-                        advance_game_time(travel_time * 60)
-                        self.update_npc_locations(current_game_time)
-                        self.process_time_based_player_needs(self.player, travel_time * 60)
-                        self.GAME_LOG.add_log_message(f"You travelled to {dest_choice}.")
+                        transport_mode = selected_vehicle if selected_vehicle else "bus" # Default to bus if no vehicle
+
+                        cost_override = None
+                        if not selected_vehicle:
+                            cost_override = travel_details['cost']
+
+                        # Player.travel now handles the cost deduction for ticket or fuel
+                        success = self.player.travel(dest_loc_obj, estimated_distance, transport_mode, cost_override)
+
+                        if success:
+                            # Time calculation might differ from original fixed time if using vehicle
+                            # Player.travel prints time taken, but we need to advance game time here.
+                            # Ideally Player.travel should return time taken or advance it itself?
+                            # For now, let's use the time derived from distance and actual speed
+
+                            actual_speed = selected_vehicle.speed if selected_vehicle else 60.0
+                            if transport_mode == "plane": actual_speed = 800.0
+                            elif transport_mode == "train": actual_speed = 100.0
+
+                            actual_time_hours = estimated_distance / actual_speed
+                            # Add some random variance as per simulation
+                            actual_time_hours *= random.uniform(0.9, 1.1)
+
+                            advance_game_time(actual_time_hours * 60)
+                            self.update_npc_locations(current_game_time)
+                            self.process_time_based_player_needs(self.player, actual_time_hours * 60)
+                            self.GAME_LOG.add_log_message(f"You travelled to {dest_choice}.")
                 else:
                     self.GAME_LOG.add_log_message("You can't afford to travel.")
             self.game_state = "main_menu"
