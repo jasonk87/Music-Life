@@ -32,6 +32,8 @@ class Player:
         self.manager_unlocked_fame_threshold = 200
         self.has_pr_manager = False
         self.pr_manager_fame_requirement_to_hire = 60 # Renamed for clarity with active hiring
+        self.has_bodyguard = False
+        self.bodyguard_cost = 100
 
         self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
 
@@ -135,6 +137,29 @@ class Player:
         else:
             print(f"Item '{str(item_id_or_instance)}' not found in inventory.")
             return False
+
+    def consume_item(self, item):
+        if item not in self.gear_inventory:
+            return False, "Item not in inventory."
+
+        if item.gear_type != "FOOD":
+            return False, "You can't eat that!"
+
+        self.gear_inventory.remove(item)
+
+        # Apply effects
+        old_hunger = self.hunger
+        old_energy = self.energy
+
+        self.hunger = max(0, self.hunger - item.hunger_reduction)
+        self.energy = min(100, self.energy + item.energy_boost)
+
+        # Apply comfort if present
+        comfort_effect = item.properties.get("comfort_effect", 0)
+        self.comfort = max(0, min(100, self.comfort + comfort_effect))
+
+        msg = f"You ate {item.name}. (Hunger -{old_hunger - self.hunger}, Energy +{self.energy - old_energy})"
+        return True, msg
 
     def add_vehicle(self, vehicle):
         if not isinstance(vehicle, Vehicle):

@@ -16,7 +16,7 @@
       "name": "Sharp PR Solutions",
       "description": "A modern office for a boutique PR agency. They look like they mean business.",
       "category": "OFFICE_PR_AGENCY",
-      "interaction_options": ["Inquire about PR representation"],
+      "interaction_options": ["Inquire about PR representation", "Hire Bodyguard ($100/day)"],
       "properties": {
         "comfort_modifier_hourly": 0,
         "owner_npc_id": "ms_sharp_pr001"

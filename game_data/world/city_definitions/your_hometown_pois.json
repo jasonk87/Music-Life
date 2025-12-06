@@ -6,7 +6,7 @@
       "name": "Old Timer's Music Shop",
       "description": "Sells basic gear and instruments.",
       "category": "SHOP_MUSIC",
-      "interaction_options": ["Browse items for sale", "Repair Gear", "Talk to Old Timer Joe"],
+      "interaction_options": ["Browse items for sale", "Repair Instrument", "Talk to Old Timer Joe"],
       "properties": {
         "shop_inventory_item_ids": ["worn_acoustic_guitar", "guitar_strings_basic", "guitar_picks_assorted"],
         "owner_npc_id": "joe001"

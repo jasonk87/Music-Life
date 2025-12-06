@@ -163,6 +163,21 @@ def check_for_random_event(player, current_poi_name="an unknown place", chance=0
     event_result = {"event_triggered": False, "minutes_passed": 0}
 
     if random.random() < chance:
+        # Check for High Fame "Mob" event
+        if player.fame > 100 and not player.has_bodyguard and random.random() < 0.3:
+            # Fan Mob Event
+            if logger: logger.add_log_message("\n--- RANDOM EVENT ---")
+            if logger: logger.add_log_message("A mob of fans surrounds you! They won't let you leave without autographs.")
+            if logger: logger.add_log_message("You spend 30 minutes signing items and taking selfies.")
+            event_result["minutes_passed"] = 30
+            event_result["event_triggered"] = True
+            player.stress = min(100, player.stress + 10)
+            return event_result
+        elif player.fame > 100 and player.has_bodyguard and random.random() < 0.3:
+             if logger: logger.add_log_message("\nA fan tries to grab you, but your bodyguard intercepts them.")
+             event_result["event_triggered"] = True # Flavor text only, no time loss
+             return event_result
+
         eligible_events = [
             event for event in event_pool
             if player.fame >= event.fame_threshold_min and player.fame <= event.fame_threshold_max

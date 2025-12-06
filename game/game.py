@@ -469,6 +469,20 @@ class Game:
                 # NPCs progress in their careers
                 self.update_npc_careers()
 
+            # Daily Upkeep (e.g. Bodyguard)
+            # This check runs every frame, so we need a "last_upkeep_day" tracker.
+            # Using last_opportunity_check_day is decent but strictly for opportunities.
+            # Let's re-use it or add a specific daily update block.
+            if current_game_time.day != self.last_opportunity_check_day:
+                # Daily Logic
+                if self.player.has_bodyguard:
+                    if self.player.money >= self.player.bodyguard_cost:
+                        self.player.money -= self.player.bodyguard_cost
+                        self.GAME_LOG.add_log_message(f"Paid bodyguard upkeep (${self.player.bodyguard_cost}).")
+                    else:
+                        self.player.has_bodyguard = False
+                        self.GAME_LOG.add_log_message("Couldn't pay bodyguard. They quit!")
+
                 # Gather all released songs in the world
                 all_released_songs = list(self.player.songs_written)
                 for npc in self.NPC_REGISTRY.values():
@@ -1151,10 +1165,16 @@ class Game:
         self.GAME_LOG.add_log_message(f"You ask {npc.name} to jam with you.")
 
         # Check if player has an instrument
-        player_instruments = [item for item in self.player.gear_inventory if item.gear_type.startswith("INSTRUMENT")]
+        player_instruments = [item for item in self.player.gear_inventory if item.gear_type.startswith("INSTRUMENT") and not item.is_broken]
         if not player_instruments:
-            self.GAME_LOG.add_log_message("You don't have an instrument with you!")
+            self.GAME_LOG.add_log_message("You don't have a working instrument with you!")
             return
+
+        # Apply durability to one random instrument used
+        used_instrument = random.choice(player_instruments)
+        used_instrument.take_damage(random.randint(5, 15)) # Jamming is hard work
+        if used_instrument.is_broken:
+             self.GAME_LOG.add_log_message(f"CRACK! Your {used_instrument.name} broke during the jam!")
 
         # Check if NPC is musical
         if not npc.skills:
@@ -1220,6 +1240,33 @@ class Game:
                 self.explore_menu_state = "shop"
             else:
                 self.GAME_LOG.add_log_message("Nothing for sale currently.")
+        elif interaction_text == "Hire Bodyguard ($100/day)":
+            if self.player.has_bodyguard:
+                self.GAME_LOG.add_log_message("You already have a bodyguard.")
+            elif self.player.money >= 100:
+                self.player.money -= 100
+                self.player.has_bodyguard = True
+                self.GAME_LOG.add_log_message("You hired a bodyguard! Daily upkeep is $100.")
+            else:
+                self.GAME_LOG.add_log_message("You can't afford the initial fee.")
+        elif interaction_text == "Repair Instrument":
+            # Simple repair all for now or submenu? Let's do simple repair mechanics.
+            # Find broken/damaged instruments
+            damaged = [i for i in self.player.gear_inventory if i.durability < 100 and "INSTRUMENT" in i.gear_type]
+            if not damaged:
+                self.GAME_LOG.add_log_message("You don't have any damaged instruments.")
+            else:
+                # Calculate total cost
+                total_cost = sum([int((100 - i.durability) * 0.5) for i in damaged]) # $0.5 per point
+                if total_cost == 0: total_cost = 5 # Minimum bench fee
+
+                if self.player.money >= total_cost:
+                    self.player.money -= total_cost
+                    for i in damaged:
+                        i.repair()
+                    self.GAME_LOG.add_log_message(f"Repaired {len(damaged)} instruments for ${total_cost}.")
+                else:
+                    self.GAME_LOG.add_log_message(f"Repair costs ${total_cost}. You can't afford it.")
         elif interaction_text.startswith("Submit Demo"):
             min_fame = self.selected_poi.min_fame_to_submit
             if self.player.fame >= min_fame:
@@ -1386,6 +1433,10 @@ class Game:
             stress_from_starvation_hourly_rate = 2.0
             player.stress = min(100, player.stress + (hours_passed_float * stress_from_starvation_hourly_rate))
             player.stress = int(round(player.stress))
+            # Starvation saps energy rapidly
+            energy_loss_starvation = 5.0 * hours_passed_float
+            player.energy = max(0, player.energy - energy_loss_starvation)
+            player.energy = int(round(player.energy))
 
         POINTS_PER_DAY_HAIR = 10.0; POINTS_PER_DAY_BEARD = 12.5
         hair_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_HAIR
@@ -1904,10 +1955,27 @@ class Game:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
         elif self.character_menu_state == "inventory":
-            self.ui.draw_inventory_screen(self.player)
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.character_menu_state = "main"
+            # Pass game state logic to draw_inventory to handle input
+            # Or handle input here.
+            # Ideally UI just draws. Let's make a new state for "using" items if needed.
+            # For now, let's allow selecting an item to use.
+
+            # Simple list of items
+            inventory_options = {str(i): f"{item.name} ({item.gear_type})" for i, item in enumerate(self.player.gear_inventory)}
+            inventory_options["back"] = "Back"
+
+            choice = self.ui.present_choices(inventory_options, "Inventory - Select item to use/inspect:")
+
+            if choice == "back":
+                self.character_menu_state = "main"
+            else:
+                selected_item = self.player.gear_inventory[int(choice)]
+                if selected_item.gear_type == "FOOD":
+                    self.GAME_LOG.add_log_message(f"Using {selected_item.name}...")
+                    success, msg = self.player.consume_item(selected_item)
+                    self.GAME_LOG.add_log_message(msg)
+                else:
+                    self.GAME_LOG.add_log_message(f"You inspect {selected_item.name}. It looks fine.")
 
     def save_game(self, filename="savegame.dat"):
         save_data = {

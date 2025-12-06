@@ -48,8 +48,37 @@ class PerformanceManager:
             self.state = "player_input"
 
     def resolve_action(self, action):
+        # Find best working guitar
+        inventory = self.game.player.gear_inventory
+        best_guitar = None
+        best_quality = 0
+        for item in inventory:
+            if "INSTRUMENT" in item.gear_type and not item.is_broken:
+                q = item.properties.get("quality", 0.1)
+                if q > best_quality:
+                    best_quality = q
+                    best_guitar = item
+
+        # Apply durability damage
+        if best_guitar:
+            damage = random.randint(1, 5) # 1-5% damage per section
+            best_guitar.take_damage(damage)
+            if best_guitar.is_broken:
+                self.turn_result = f"SNAP! Your {best_guitar.name} broke during the {self.get_current_section()}! Disaster!"
+                self.crowd_hype -= 20
+                self.band_energy -= 30
+                self.log.insert(0, self.turn_result)
+                return # Skip normal resolution, turn is a failure due to break
+
         # Basic logic for actions
-        base_skill = self.game.player.skills.get('guitar', 0) + self.game.player.skills.get('vocals', 0)
+        # Skill + Gear Quality Bonus (up to +20 for quality 1.0)
+        gear_bonus = best_quality * 20
+        base_skill = self.game.player.skills.get('guitar', 0) + self.game.player.skills.get('vocals', 0) + gear_bonus
+
+        if not best_guitar:
+            base_skill -= 30 # Huge penalty for no instrument
+            self.turn_result = "You're trying to perform without an instrument!" # Warning in log
+
         roll = random.randint(0, 100) + base_skill
 
         section = self.get_current_section()
