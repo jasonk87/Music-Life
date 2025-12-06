@@ -283,8 +283,8 @@ class Game:
         return True
 
     def initialize_player(self):
-        player_name = "Player" # Placeholder, will need a pygame input box
-        self.player = Player(player_name)
+        # Initial creation of player object, but details will be filled in character creation
+        self.player = Player("Player")
         hometown_loc = self.WORLD_MAP.get("Your Hometown")
         player_home_obj = self.get_poi_or_venue_by_id(self.PLAYER_HOME_POI_ID_GLOBAL) if self.PLAYER_HOME_POI_ID_GLOBAL else None
         if hometown_loc and player_home_obj:
@@ -294,10 +294,15 @@ class Game:
             print("Error setting start home.")
             self.running = False
 
+        # Set initial state to character creation
+        self.game_state = "character_creation"
+
         self.update_npc_locations(current_game_time)
         self.process_time_based_player_needs(self.player, 0)
-        if GEAR_CATALOG.get("worn_acoustic_guitar"): self.player.add_gear(GEAR_CATALOG["worn_acoustic_guitar"])
-        if GEAR_CATALOG.get("guitar_picks_assorted"): self.player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
+
+        # Gear will be added after character creation based on background
+        # if GEAR_CATALOG.get("worn_acoustic_guitar"): self.player.add_gear(GEAR_CATALOG["worn_acoustic_guitar"])
+        # if GEAR_CATALOG.get("guitar_picks_assorted"): self.player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
 
         self.LAST_CHART_UPDATE_DAY = current_game_time.day
 
@@ -538,7 +543,9 @@ class Game:
             self.ui.draw_hud(date_str, location_str, next_event_str, money_str, self.player.hair_length, self.player.beard_length)
             self.ui.draw_log()
 
-            if self.game_state == "main_menu":
+            if self.game_state == "character_creation":
+                self.handle_character_creation()
+            elif self.game_state == "main_menu":
                 self.handle_main_menu()
             elif self.game_state == "explore":
                 self.handle_explore_menu()
@@ -560,6 +567,63 @@ class Game:
             self.ui.update_display()
 
         pygame.quit()
+
+    def handle_character_creation(self):
+        self.ui.clear_screen()
+        self.ui.draw_text("New Character", self.ui.FONT_TITLE, (255, 255, 255), 640, 50, centered=True)
+        self.ui.update_display()
+
+        # 1. Get Name
+        name = self.ui.get_text_input("Enter your Stage Name:")
+        if not name:
+            name = "The Unknown Artist"
+        self.player.name = name
+
+        # 2. Choose Background
+        backgrounds = {
+            "rocker": "The Rocker (Guitar++, Vocals+)",
+            "pop_star": "The Pop Star (Vocals++, Stage Presence+)",
+            "indie": "The Indie Artist (Songwriting++, Guitar+)",
+            "electronic": "The Producer (Electronic++, Songwriting+)",
+            "busker": "The Busker (Performance+, Stamina+)"
+        }
+
+        bg_choice = self.ui.present_choices(backgrounds, "Choose your starting background:")
+
+        # Apply Background Stats/Gear
+        if bg_choice == "rocker":
+            self.player.skills['guitar'] = 15
+            self.player.skills['vocals'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+            self.player.add_gear(GEAR_CATALOG.get("guitar_picks_assorted"))
+        elif bg_choice == "pop_star":
+            self.player.skills['vocals'] = 15
+            self.player.skills['stage_presence'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("microphone_basic"))
+            self.player.money += 200 # Extra starting cash for clothes/style
+        elif bg_choice == "indie":
+            self.player.skills['songwriting'] = 15
+            self.player.skills['guitar'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+            self.player.add_gear(GEAR_CATALOG.get("notebook_lyrics"))
+        elif bg_choice == "electronic":
+            self.player.skills['electronic'] = 15
+            self.player.skills['songwriting'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("laptop_basic"))
+            self.player.add_gear(GEAR_CATALOG.get("headphones_studio"))
+        elif bg_choice == "busker":
+            self.player.skills['stage_presence'] = 15
+            self.player.skills['guitar'] = 5
+            self.player.energy = 100 # High stamina
+            self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+            self.player.money += 50 # Humble beginnings
+
+        # Fallback if catalog items missing or not assigned above
+        if not self.player.gear_inventory and GEAR_CATALOG.get("worn_acoustic_guitar"):
+             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+
+        self.GAME_LOG.add_log_message(f"Welcome, {self.player.name}! Your journey begins now.")
+        self.game_state = "main_menu"
 
     def handle_main_menu(self):
         main_menu_opts = {
@@ -607,12 +671,19 @@ class Game:
                         if opp_data and opp_data.get("type") == "poi_interaction" and opp_details.get("poi_id") == poi_id:
                              interaction_options[opp_id] = opp_data["action_text"]
 
+                interaction_options["wander"] = "Look around (Trigger Events)"
                 interaction_options["back"] = "Back"
 
                 choice = self.ui.present_choices(interaction_options, f"Interact with {self.selected_poi.name}")
                 if choice == "back":
                     self.explore_menu_state = "location"
                     self.selected_poi = None
+                elif choice == "wander":
+                    self.GAME_LOG.add_log_message("You take a moment to look around...")
+                    advance_game_time(15)
+                    event_result = check_for_random_event(self.player, current_poi_name=self.selected_poi.name, chance=0.8, ui=self.ui, logger=self.GAME_LOG)
+                    if not event_result["event_triggered"]:
+                        self.GAME_LOG.add_log_message("It seems quiet right now.")
                 else:
                     self.handle_interaction(interaction_options[choice])
                     if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership"]:
@@ -940,7 +1011,7 @@ class Game:
                 npc_options = {npc.npc_id: npc.name for npc in npcs_here}
                 npc_options["back"] = "Back"
 
-                choice = self.ui.present_choices(npc_options, "Talk to who?")
+                choice = self.ui.present_choices(npc_options, "Interact with who?")
                 if choice == "back":
                     self.explore_menu_state = "poi"
                 else:
@@ -950,9 +1021,35 @@ class Game:
                         self.player.contacts.append(self.selected_npc.npc_id)
                         self.GAME_LOG.add_log_message(f"You added {self.selected_npc.name} to your contacts.")
 
+                    self.explore_menu_state = "npc_interaction_menu"
+
+        elif self.explore_menu_state == "npc_interaction_menu":
+            if self.selected_npc:
+                interaction_opts = {
+                    "chat": "Chat",
+                    "gift": "Give Gift",
+                    "jam": "Jam Session (Requires Instrument)",
+                    "back": "Back"
+                }
+
+                choice = self.ui.present_choices(interaction_opts, f"Interaction: {self.selected_npc.name}")
+
+                if choice == "back":
+                    self.explore_menu_state = "talk"
+                    self.selected_npc = None
+                elif choice == "chat":
                     self.explore_menu_state = "dialogue"
                     self.conversation_history = []
                     self.player_input = ""
+                elif choice == "gift":
+                    self.explore_menu_state = "gifting"
+                elif choice == "jam":
+                    self.handle_jam_session(self.selected_npc)
+                    # Stay in menu or go back? Let's go back to see the result log clearly.
+                    self.explore_menu_state = "poi"
+            else:
+                self.explore_menu_state = "poi"
+
         elif self.explore_menu_state == "view_events":
             if self.selected_poi and isinstance(self.selected_poi, Venue):
                 if not self.selected_poi.events_hosted:
@@ -1047,6 +1144,64 @@ class Game:
                             self.player_input += event.unicode
             else:
                 self.explore_menu_state = "poi"
+
+    def handle_jam_session(self, npc):
+        self.GAME_LOG.add_log_message(f"You ask {npc.name} to jam with you.")
+
+        # Check if player has an instrument
+        player_instruments = [item for item in self.player.gear_inventory if item.gear_type.startswith("INSTRUMENT")]
+        if not player_instruments:
+            self.GAME_LOG.add_log_message("You don't have an instrument with you!")
+            return
+
+        # Check if NPC is musical
+        if not npc.skills:
+            self.GAME_LOG.add_log_message(f"{npc.name} doesn't seem to play any instruments.")
+            return
+
+        advance_game_time(60) # 1 hour jam
+
+        # Calculate compatibility/quality
+        # Player skill: Max of their instrument skills
+        player_skill_level = 0
+        for skill in ['guitar', 'bass', 'drums', 'keyboard', 'electronic']:
+             player_skill_level = max(player_skill_level, self.player.skills.get(skill, 0))
+
+        # NPC skill: Max of their skills
+        npc_skill_level = max(npc.skills.values()) if npc.skills else 0
+
+        # Skill difference
+        diff = abs(player_skill_level - npc_skill_level)
+
+        if player_skill_level < 5 and npc_skill_level < 5:
+            self.GAME_LOG.add_log_message("It's a bit rough, but you both have fun making noise.")
+            xp = 0.5
+            rel_gain = 2
+        elif player_skill_level > npc_skill_level + 20:
+            self.GAME_LOG.add_log_message(f"You show {npc.name} a few tricks. They seem impressed.")
+            xp = 0.2
+            rel_gain = 5
+        elif npc_skill_level > player_skill_level + 20:
+            self.GAME_LOG.add_log_message(f"You struggle to keep up, but you learn a lot from {npc.name}.")
+            xp = 2.0
+            rel_gain = 3
+        else:
+            self.GAME_LOG.add_log_message("You lock into a great groove! The chemistry is undeniable.")
+            xp = 1.0
+            rel_gain = 8
+
+        # Apply rewards
+        primary_instrument_skill = "guitar" # Simplified: Assume guitar for now or pick based on inventory
+        if any(i.name.lower().find("drum") != -1 for i in player_instruments): primary_instrument_skill = "drums"
+        # ... logic to pick specific skill to upgrade could be better
+
+        self.player.practice_skill(primary_instrument_skill, xp * 5) # Scale factor
+        npc.update_relationship(rel_gain)
+
+        self.player.energy -= 10
+        self.player.stress = max(0, self.player.stress - 15) # Jamming relieves stress
+        self.GAME_LOG.add_log_message(f"Jam session finished. Stress -15.")
+
 
     def handle_interaction(self, interaction_text, time_cost=15):
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
