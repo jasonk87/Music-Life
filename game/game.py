@@ -30,6 +30,7 @@ from game.ascii_art import ART
 from game.performance import PerformanceManager
 from game.trends import TrendManager
 from game.band_drama import check_for_band_drama, resolve_weekly_wages
+from game.staff import StaffMember
 
 class Game:
     def __init__(self, ui):
@@ -343,6 +344,8 @@ class Game:
                         self.GAME_LOG.add_log_message("Check your phone for more details.")
 
         # Check for manager-driven tour opportunities
+        # TODO: Refactor has_manager to check staff list for 'Manager' role if desired,
+        # but maintaining compatibility with existing boolean for now.
         if self.player.has_manager and not self.player.current_tour_id:
             # Simple logic: offer a tour if fame is high enough and not already on tour.
             for tour in self.TOURS:
@@ -477,6 +480,17 @@ class Game:
                      self.GAME_LOG.add_log_message("--- Band Wages ---")
                      for line in wage_report.split('\n'):
                          self.GAME_LOG.add_log_message(line)
+
+                # Staff Wages
+                total_staff_wages = sum(s.wage_per_week for s in self.player.staff)
+                if total_staff_wages > 0:
+                    if self.player.money >= total_staff_wages:
+                        self.player.money -= total_staff_wages
+                        self.GAME_LOG.add_log_message(f"Paid staff wages: ${total_staff_wages}")
+                    else:
+                        # Unpaid staff leave?
+                        self.GAME_LOG.add_log_message(f"Could not pay staff (${total_staff_wages}). They have quit!")
+                        self.player.staff = []
 
                 # NPCs progress in their careers
                 self.update_npc_careers()
@@ -2010,6 +2024,7 @@ class Game:
                 "skills": "Skills",
                 "inventory": "Inventory",
                 "band": "Band",
+                "staff": "Staff (Roadies/Security)",
                 "back": "Back"
             }
             choice = self.ui.present_choices(character_menu_opts, "Character")
@@ -2022,6 +2037,53 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
+
+        elif self.character_menu_state == "staff":
+            if not self.player.staff:
+                info = "You have no staff."
+            else:
+                info = "Staff:\n" + "\n".join([str(s) for s in self.player.staff])
+
+            opts = {
+                "hire_roadie": "Hire Roadie (Lvl 1, $200/wk)",
+                "hire_bodyguard": "Hire Bodyguard (Lvl 1, $300/wk)",
+                "fire": "Fire Staff",
+                "back": "Back"
+            }
+
+            # Simple text display via log or header?
+            # Using present_choices header
+            choice = self.ui.present_choices(opts, info)
+
+            if choice == "back":
+                self.character_menu_state = "main"
+            elif choice == "hire_roadie":
+                if self.player.money >= 200:
+                    new_staff = StaffMember(f"Roadie #{len(self.player.staff)+1}", "Roadie", 200, 1)
+                    self.player.staff.append(new_staff)
+                    self.GAME_LOG.add_log_message("Hired a Roadie!")
+                else:
+                    self.GAME_LOG.add_log_message("Cannot afford hiring cost (1st week wage).")
+            elif choice == "hire_bodyguard":
+                if self.player.money >= 300:
+                    new_staff = StaffMember(f"Guard #{len(self.player.staff)+1}", "Bodyguard", 300, 1)
+                    self.player.staff.append(new_staff)
+                    self.player.has_bodyguard = True # Sync with old boolean
+                    self.GAME_LOG.add_log_message("Hired a Bodyguard!")
+                else:
+                    self.GAME_LOG.add_log_message("Cannot afford hiring cost.")
+            elif choice == "fire":
+                if not self.player.staff:
+                    self.GAME_LOG.add_log_message("No staff to fire.")
+                else:
+                    fire_opts = {str(i): s.name for i, s in enumerate(self.player.staff)}
+                    fire_opts["back"] = "Back"
+                    c = self.ui.present_choices(fire_opts, "Fire who?")
+                    if c != "back":
+                        removed = self.player.staff.pop(int(c))
+                        self.GAME_LOG.add_log_message(f"Fired {removed.name}.")
+                        if removed.role == "Bodyguard" and not any(s.role == "Bodyguard" for s in self.player.staff):
+                            self.player.has_bodyguard = False
 
         elif self.character_menu_state == "band":
             if self.band_menu_state == "main":
@@ -2132,19 +2194,35 @@ class Game:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
         elif self.character_menu_state == "inventory":
-            # Pass game state logic to draw_inventory to handle input
-            # Or handle input here.
-            # Ideally UI just draws. Let's make a new state for "using" items if needed.
-            # For now, let's allow selecting an item to use.
+            # Check if at home
+            at_home = self.player.current_poi and self.PLAYER_HOME_POI_ID_GLOBAL and self.player.current_poi.poi_id == self.PLAYER_HOME_POI_ID_GLOBAL
 
-            # Simple list of items
-            inventory_options = {str(i): f"{item.name} ({item.gear_type})" for i, item in enumerate(self.player.gear_inventory)}
-            inventory_options["back"] = "Back"
+            opts = {
+                "inspect": "Inspect/Use Items",
+                "storage": "Home Storage (Stash/Retrieve)" if at_home else "Home Storage (Must be at home)",
+                "back": "Back"
+            }
 
-            choice = self.ui.present_choices(inventory_options, "Inventory - Select item to use/inspect:")
+            choice = self.ui.present_choices(opts, "Inventory Management")
 
             if choice == "back":
                 self.character_menu_state = "main"
+            elif choice == "inspect":
+                self.character_menu_state = "inventory_inspect"
+            elif choice == "storage":
+                if at_home:
+                    self.character_menu_state = "inventory_storage"
+                else:
+                    self.GAME_LOG.add_log_message("You must be at home to access storage.")
+
+        elif self.character_menu_state == "inventory_inspect":
+            inventory_options = {str(i): f"{item.name} ({item.gear_type})" for i, item in enumerate(self.player.gear_inventory)}
+            inventory_options["back"] = "Back"
+
+            choice = self.ui.present_choices(inventory_options, "Select item to use/inspect:")
+
+            if choice == "back":
+                self.character_menu_state = "inventory"
             else:
                 selected_item = self.player.gear_inventory[int(choice)]
                 if selected_item.gear_type == "FOOD":
@@ -2153,6 +2231,36 @@ class Game:
                     self.GAME_LOG.add_log_message(msg)
                 else:
                     self.GAME_LOG.add_log_message(f"You inspect {selected_item.name}. It looks fine.")
+
+        elif self.character_menu_state == "inventory_storage":
+            # Show stash/retrieve options
+            mode_opts = {"stash": "Stash Item (to Home)", "retrieve": "Retrieve Item (from Home)", "back": "Back"}
+            mode = self.ui.present_choices(mode_opts, "Storage")
+
+            if mode == "back":
+                self.character_menu_state = "inventory"
+            elif mode == "stash":
+                if not self.player.gear_inventory:
+                    self.GAME_LOG.add_log_message("Nothing to stash.")
+                else:
+                    inv_opts = {str(i): item.name for i, item in enumerate(self.player.gear_inventory)}
+                    inv_opts["back"] = "Back"
+                    c = self.ui.present_choices(inv_opts, "Select item to stash:")
+                    if c != "back":
+                        item = self.player.gear_inventory[int(c)]
+                        success, msg = self.player.stash_item(item)
+                        self.GAME_LOG.add_log_message(msg)
+            elif mode == "retrieve":
+                if not self.player.home_storage:
+                    self.GAME_LOG.add_log_message("Storage is empty.")
+                else:
+                    store_opts = {str(i): item.name for i, item in enumerate(self.player.home_storage)}
+                    store_opts["back"] = "Back"
+                    c = self.ui.present_choices(store_opts, "Select item to retrieve:")
+                    if c != "back":
+                        item = self.player.home_storage[int(c)]
+                        success, msg = self.player.retrieve_item(item)
+                        self.GAME_LOG.add_log_message(msg)
 
     def save_game(self, filename="savegame.dat"):
         save_data = {

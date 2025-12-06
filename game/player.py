@@ -19,7 +19,9 @@ class Player:
         self.money = 500 # Starting money
 
         self.gear_inventory = [] # List of GearItem objects
+        self.home_storage = [] # List of GearItem objects stored at home
         self.vehicles = []
+        self.staff = [] # List of StaffMember objects
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
@@ -88,22 +90,30 @@ class Player:
 
     def get_current_gear_capacity(self, travel_mode=None):
         """Calculates current gear capacity based on situation or travel mode."""
+        base_cap = self.base_gear_capacity
+
+        # Roadie Bonus (Staff)
+        roadie_bonus = 0
+        for s in self.staff:
+            if s.role == "Roadie":
+                roadie_bonus += s.skill_level * 2 # e.g., Skill 10 -> +20 capacity
+
         if isinstance(travel_mode, Vehicle):
-             return travel_mode.get_max_cargo()
+             return travel_mode.get_max_cargo() + roadie_bonus
 
         if travel_mode == "walk":
-            return max(1, int(self.base_gear_capacity / 2)) # Walking reduces capacity, min 1
+            return max(1, int(base_cap / 2) + int(roadie_bonus / 2)) # Walking reduces capacity, min 1
         elif travel_mode == "bike":
             if self.has_bike:
-                return self.base_gear_capacity
+                return self.base_gear_capacity + int(roadie_bonus / 2)
             else: # Cannot use bike mode if no bike
                 return 0 # Or handle error upstream
         elif travel_mode == "taxi": # Taxis can usually carry a good amount of gear
-            return self.base_gear_capacity * 3
+            return (self.base_gear_capacity * 3) + roadie_bonus
         # Default capacity when not specifically traveling or using high-capacity transport (e.g. at home, in a venue)
         # This could also be a very large number if we assume no limit when 'static'.
         # For now, let's assume default is like having access to your "stuff" nearby.
-        return self.base_gear_capacity * 2
+        return (self.base_gear_capacity * 2) + roadie_bonus
 
 
     def get_current_gear_load(self):
@@ -185,6 +195,23 @@ class Player:
         self.vehicles.append(new_vehicle)
         print(f"{new_vehicle.name} added to your garage.")
         return True
+
+    def stash_item(self, item):
+        if item in self.gear_inventory:
+            self.gear_inventory.remove(item)
+            self.home_storage.append(item)
+            return True, f"Stashed {item.name}."
+        return False, "Item not found."
+
+    def retrieve_item(self, item):
+        if item in self.home_storage:
+            if self.can_carry_gear(item):
+                self.home_storage.remove(item)
+                self.gear_inventory.append(item)
+                return True, f"Retrieved {item.name}."
+            else:
+                return False, "Cannot carry item."
+        return False, "Item not in storage."
 
     def has_trait(self, trait_id):
         return any(t.id == trait_id for t in self.traits)

@@ -178,6 +178,28 @@ def check_for_random_event(player, current_poi_name="an unknown place", chance=0
              event_result["event_triggered"] = True # Flavor text only, no time loss
              return event_result
 
+        # Groupie Event (New)
+        elif player.fame > 80 and random.random() < 0.2:
+             if logger: logger.add_log_message("\n--- RANDOM EVENT ---")
+             if logger: logger.add_log_message("A dedicated groupie tries to follow you backstage/home.")
+
+             # Check for Bodyguard (Boolean or Staff list)
+             has_guard = player.has_bodyguard or any(s.role == "Bodyguard" for s in player.staff)
+
+             if has_guard:
+                 if logger: logger.add_log_message("Your bodyguard intercepts them. 'Move along.'")
+             else:
+                 if random.random() < 0.5:
+                     if logger: logger.add_log_message("They just want to party! You have a wild night. (Energy -20, Stress -10)")
+                     player.energy = max(0, player.energy - 20)
+                     player.stress = max(0, player.stress - 10)
+                 else:
+                     if logger: logger.add_log_message("They are obsessed! It gets creepy. (Stress +15)")
+                     player.stress = min(100, player.stress + 15)
+
+             event_result["event_triggered"] = True
+             return event_result
+
         eligible_events = [
             event for event in event_pool
             if player.fame >= event.fame_threshold_min and player.fame <= event.fame_threshold_max
