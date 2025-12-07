@@ -39,6 +39,9 @@ class NPC:
         self.wage_demand = 0 # Weekly salary expectation
         self.creative_control_desire = 50 # 0-100. Need to be involved in songwriting.
 
+        # Producer Mechanics
+        self.production_style = None # "Polished", "Raw", "Experimental" if NPC is a producer
+
     def __str__(self):
         return f"NPC: {self.name} (ID: {self.npc_id}, Personality: {self.personality_key}, Relationship: {self.relationship_with_player.name} ({self.relationship_score}))"
 

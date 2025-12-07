@@ -32,6 +32,7 @@ class Player:
         self.hunger = 0 # 0-100, 0 is full, 100 is starving
 
         self.songs_written = []
+        self.albums_released = [] # List of Album objects
         self.band = None
 
         self.has_manager = False

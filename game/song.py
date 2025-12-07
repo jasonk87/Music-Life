@@ -3,11 +3,12 @@ import uuid
 class Song:
     def __init__(self, title, author, genre,
                  originality=None, catchiness=None, lyrical_depth=None, music_complexity=None,
-                 song_quality=None): # song_quality can be an override
+                 song_quality=None, theme=None): # song_quality can be an override
         self.song_id = str(uuid.uuid4())
         self.title = title
         self.author = author
         self.genre = genre
+        self.theme = theme # Theme key from THEME_CATALOG
 
         # Component attributes (0.0 - 1.0)
         # If specific component qualities aren't provided, default them for calculation
@@ -42,7 +43,8 @@ class Song:
             f"Music: {self.music_complexity:.2f}",
             f"OverallQ: {self.song_quality:.2f}"
         ]
-        status = f"'{self.title}' by {self.author} [{self.genre}] ({', '.join(details)})"
+        theme_str = f" [Theme: {self.theme}]" if self.theme else ""
+        status = f"'{self.title}' by {self.author} [{self.genre}]{theme_str} ({', '.join(details)})"
         if self.is_recorded:
             status += f" (RecQ: {self.recording_quality:.2f})"
         else:

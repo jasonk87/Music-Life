@@ -31,6 +31,8 @@ from game.performance import PerformanceManager
 from game.trends import TrendManager
 from game.band_drama import check_for_band_drama, resolve_weekly_wages
 from game.staff import StaffMember
+from game.themes import THEME_CATALOG
+from game.album import Album
 
 class Game:
     def __init__(self, ui):
@@ -837,7 +839,17 @@ class Game:
                     self.songwriting_stage = None
                 else:
                     self.song_in_progress['genre'] = choice
-                    self.songwriting_stage = "get_title"
+                    self.songwriting_stage = "choose_theme"
+
+            elif self.songwriting_stage == "choose_theme":
+                theme_options = {k: f"{v['name']} ({v['description']})" for k, v in THEME_CATALOG.items()}
+                theme_options["none"] = "No specific theme"
+
+                choice = self.ui.present_choices(theme_options, "Choose a lyrical theme:")
+                if choice != "none":
+                    self.song_in_progress['theme'] = choice
+
+                self.songwriting_stage = "get_title"
 
             elif self.songwriting_stage == "get_title":
                 song_title = self.ui.get_text_input("Enter a title for your new song:")
@@ -940,12 +952,23 @@ class Game:
                 # This is also a non-interactive stage
                 title = self.song_in_progress.get('title', 'Untitled')
                 genre = self.song_in_progress.get('genre', 'Rock')
+                theme = self.song_in_progress.get('theme', None)
                 author = self.player.name
 
                 originality=self.song_in_progress.get('originality', 0.5)
                 catchiness=self.song_in_progress.get('catchiness', 0.5)
                 lyrical_depth=self.song_in_progress.get('lyrical_depth', 0.5)
                 music_complexity=self.song_in_progress.get('music_complexity', 0.5)
+
+                # Apply Theme Bonus
+                if theme:
+                    t_data = THEME_CATALOG.get(theme)
+                    if t_data and genre in t_data['genre_affinity']:
+                        bonus = t_data['bonus_multiplier']
+                        # Bonus applies to specific stats or overall quality. Let's boost stats.
+                        originality = min(1.0, originality * bonus)
+                        lyrical_depth = min(1.0, lyrical_depth * bonus)
+                        self.GAME_LOG.add_log_message(f"Theme '{t_data['name']}' fits {genre} perfectly! (Quality Bonus)")
 
                 featured_artist_id = self.song_in_progress.get('featured_artist_id')
                 if featured_artist_id:
@@ -966,7 +989,8 @@ class Game:
                     originality=originality,
                     catchiness=catchiness,
                     lyrical_depth=lyrical_depth,
-                    music_complexity=music_complexity
+                    music_complexity=music_complexity,
+                    theme=theme
                 )
 
                 self.player.songs_written.append(new_song)
@@ -1077,11 +1101,31 @@ class Game:
                 else:
                     selected_song = unrecorded_songs[int(choice)]
                     studio_quality = self.selected_poi.studio_quality
+
+                    # Producer Selection (Simplified: Check contacts for producers)
+                    # For now, just generate a random local producer to hire for extra cost
+                    prod_options = {
+                        "none": "Self-Produced (No Cost)",
+                        "local": "Hire Local Producer (+$200, +Quality)",
+                        "pro": "Hire Pro Producer (+$1000, ++Quality)"
+                    }
+                    prod_choice = self.ui.present_choices(prod_options, "Select Producer:")
+
+                    prod_cost = 0
+                    prod_bonus = 0.0
+
+                    if prod_choice == "local":
+                        prod_cost = 200
+                        prod_bonus = 0.1
+                    elif prod_choice == "pro":
+                        prod_cost = 1000
+                        prod_bonus = 0.25
+
                     # Let's say a session is 4 hours
-                    session_cost = self.selected_poi.hourly_rate * 4
+                    session_cost = (self.selected_poi.hourly_rate * 4) + prod_cost
 
                     if self.player.money < session_cost:
-                        self.GAME_LOG.add_log_message(f"You can't afford the ${session_cost} session fee.")
+                        self.GAME_LOG.add_log_message(f"You can't afford the ${session_cost} total cost.")
                         self.explore_menu_state = "poi"
                         return
 
@@ -1095,10 +1139,12 @@ class Game:
                     # Skill adds a bonus. Let's use 'guitar' skill for now.
                     skill_bonus = self.player.skills.get('guitar', 0) / 100.0 # e.g., 10 skill = 0.1 bonus
 
-                    final_quality = min(1.0, base_quality + skill_bonus)
+                    final_quality = min(1.0, base_quality + skill_bonus + prod_bonus)
 
                     selected_song.mark_as_recorded(final_quality)
                     self.GAME_LOG.add_log_message(f"'{selected_song.title}' is now recorded! Recording Quality: {final_quality:.2f}")
+                    if prod_choice != "none":
+                        self.GAME_LOG.add_log_message(f"Producer's touch added {prod_bonus:.2f} quality!")
                     self.explore_menu_state = "poi"
             else:
                 # Should not happen if triggered correctly
@@ -1993,7 +2039,8 @@ class Game:
         if self.music_menu_state == "main":
             music_menu_opts = {
                 "view_songs": "View Your Songs",
-                "release_song": "Release a Song",
+                "release_song": "Release a Song (Single)",
+                "create_album": "Assemble Album (Needs 3+ Songs)",
                 "back": "Back to Phone"
             }
             choice = self.ui.present_choices(music_menu_opts, "Music")
@@ -2036,6 +2083,50 @@ class Game:
                 selected_song.mark_as_released(current_game_time)
                 self.GAME_LOG.add_log_message(f"You've self-released '{selected_song.title}' to the world!")
                 # In the future, this could cost money for distribution.
+                self.music_menu_state = "main"
+
+        elif self.music_menu_state == "create_album":
+            # 1. Select unreleased, recorded songs
+            candidates = [s for s in self.player.songs_written if s.is_recorded and not s.is_released]
+
+            if len(candidates) < 3:
+                self.GAME_LOG.add_log_message("You need at least 3 recorded, unreleased songs to make an album.")
+                self.music_menu_state = "main"
+                return
+
+            # Simple selection: Select all? Or picking loop?
+            # For simplicity in this text UI, let's auto-select all candidates or offer to select subset?
+            # Let's offer a "Select All" or "Pick Top 5" approach.
+            # Real simulation would allow checkbox selection.
+
+            opts = {
+                "all": f"Use All {len(candidates)} Available Songs",
+                "back": "Cancel"
+            }
+            choice = self.ui.present_choices(opts, "Select tracks for album:")
+
+            if choice == "all":
+                album_title = self.ui.get_text_input("Enter Album Title:")
+                if not album_title: album_title = "Self-Titled"
+
+                new_album = Album(album_title, self.player.name, candidates, release_date=current_game_time)
+
+                # Release Logic
+                self.player.albums_released.append(new_album)
+                for s in candidates:
+                    s.is_released = True
+                    s.release_date = current_game_time
+
+                self.GAME_LOG.add_log_message(f"You released '{new_album.title}'!")
+                self.GAME_LOG.add_log_message(f"Critics rate it: {int(new_album.quality * 100)}/100")
+
+                # Fame Bonus
+                fame_gain = int(new_album.quality * 50) + (len(candidates) * 5)
+                self.player.fame += fame_gain
+                self.GAME_LOG.add_log_message(f"Your fame increases by {fame_gain}!")
+
+                self.music_menu_state = "main"
+            else:
                 self.music_menu_state = "main"
 
     def handle_contacts_menu(self):
