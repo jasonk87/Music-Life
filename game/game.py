@@ -35,6 +35,8 @@ from game.themes import THEME_CATALOG
 from game.album import Album
 from game.marketing import CAMPAIGN_TYPES, run_marketing_campaign
 from game.merch import MerchItem, MERCH_TEMPLATES
+from game.rivals import simulate_rivals, get_news_feed
+from game.celebrity_events import check_for_celebrity_event
 
 class Game:
     def __init__(self, ui):
@@ -498,6 +500,18 @@ class Game:
 
                 # NPCs progress in their careers
                 self.update_npc_careers()
+
+                # Rival Simulation
+                simulate_rivals(self.NPC_REGISTRY)
+
+                # Celebrity Events
+                cel_evt = check_for_celebrity_event(self.player)
+                if cel_evt:
+                    self.GAME_LOG.add_log_message(f"INVITE: {cel_evt['desc']}")
+                    # Auto-accept for now or add to opportunities?
+                    # Let's add fame immediately as 'attendance' abstractly
+                    self.player.fame += cel_evt['fame_gain']
+                    self.GAME_LOG.add_log_message(f"You attended and gained {cel_evt['fame_gain']} Fame!")
 
                 # Update Trends
                 shift_happened = self.trend_manager.update_weekly()
@@ -1177,6 +1191,7 @@ class Game:
                 interaction_opts = {
                     "chat": "Chat",
                     "gift": "Give Gift",
+                    "flirt": "Flirt",
                     "jam": "Jam Session (Requires Instrument)",
                     "back": "Back"
                 }
@@ -1192,6 +1207,16 @@ class Game:
                     self.player_input = ""
                 elif choice == "gift":
                     self.explore_menu_state = "gifting"
+                elif choice == "flirt":
+                    # Simple romance logic
+                    roll = random.random()
+                    if roll < 0.3 + (self.selected_npc.romance_interest / 100.0):
+                        self.selected_npc.romance_interest += 10
+                        self.GAME_LOG.add_log_message(f"You flirted with {self.selected_npc.name}. They blushed! (Interest: {self.selected_npc.romance_interest})")
+                        self.selected_npc.romance_status = "Dating" # Fast track for demo
+                    else:
+                        self.GAME_LOG.add_log_message(f"You flirted with {self.selected_npc.name}. They didn't seem interested.")
+                    self.explore_menu_state = "poi"
                 elif choice == "jam":
                     self.handle_jam_session(self.selected_npc)
                     # Stay in menu or go back? Let's go back to see the result log clearly.
@@ -1811,6 +1836,7 @@ class Game:
     def handle_phone_menu(self):
         if self.phone_menu_state == "main":
             phone_menu_opts = {
+                "news": "Read News Feed",
                 "schedule": "Schedule",
                 "music": "Music",
                 "contacts": "Contacts",
@@ -1857,8 +1883,20 @@ class Game:
                 self.phone_menu_state = "main" # Return to phone menu
             elif choice == "agent":
                 self.phone_menu_state = "agent"
+            elif choice == "news":
+                self.phone_menu_state = "news"
             else:
                 self.phone_menu_state = choice
+        elif self.phone_menu_state == "news":
+            feed = get_news_feed()
+            if not feed:
+                info = "No news yet."
+            else:
+                info = "--- LATEST NEWS ---\n" + "\n".join(feed[:10])
+
+            self.ui.present_choices({"back": "Back"}, info)
+            self.phone_menu_state = "main"
+
         elif self.phone_menu_state == "agent":
             self.handle_agent_menu()
         elif self.phone_menu_state == "contacts":
