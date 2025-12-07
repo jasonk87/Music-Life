@@ -33,6 +33,8 @@ from game.band_drama import check_for_band_drama, resolve_weekly_wages
 from game.staff import StaffMember
 from game.themes import THEME_CATALOG
 from game.album import Album
+from game.marketing import CAMPAIGN_TYPES, run_marketing_campaign
+from game.merch import MerchItem, MERCH_TEMPLATES
 
 class Game:
     def __init__(self, ui):
@@ -1879,6 +1881,7 @@ class Game:
             contract = self.player.pending_contracts[0]
             offer_options = {
                 "accept": "Accept Offer",
+                "negotiate": f"Negotiate Terms ({contract.label_patience} attempts left)",
                 "decline": "Decline Offer",
                 "back": "Decide later"
             }
@@ -1897,6 +1900,13 @@ class Game:
                 self.GAME_LOG.add_log_message(f"You signed with {contract.label_name}! You received an advance of ${contract.advance_money}.")
                 self.player.pending_contracts.clear()
                 self.phone_menu_state = "main"
+            elif choice == "negotiate":
+                has_charisma = self.player.has_trait("charismatic")
+                success, msg, pulled = contract.negotiate(self.player.fame, has_charisma)
+                self.GAME_LOG.add_log_message(msg)
+                if pulled:
+                    self.player.pending_contracts.pop(0)
+                    self.phone_menu_state = "main"
             elif choice == "decline":
                 self.GAME_LOG.add_log_message(f"You declined the offer from {contract.label_name}.")
                 self.player.pending_contracts.clear()
@@ -1939,6 +1949,7 @@ class Game:
         if self.web_menu_state == "main":
             web_options = {
                 "view_charts": "View Music Charts",
+                "marketing": "Digital Marketing Portal",
                 "back": "Back to Phone"
             }
             choice = self.ui.present_choices(web_options, "Web Browser")
@@ -1959,6 +1970,47 @@ class Game:
                 chart_to_view = self.ACTIVE_CHARTS[int(choice)]
                 self.text_to_view = str(chart_to_view)
                 self.game_state = "view_text"
+                self.web_menu_state = "main"
+
+        elif self.web_menu_state == "marketing":
+            # Select Campaign
+            camp_opts = {k: f"{v['name']} (${v['cost']})" for k, v in CAMPAIGN_TYPES.items()}
+            camp_opts["back"] = "Back"
+
+            choice = self.ui.present_choices(camp_opts, "Select Marketing Campaign:")
+
+            if choice == "back":
+                self.web_menu_state = "main"
+            else:
+                self.marketing_campaign_type = choice
+                self.web_menu_state = "marketing_select_song"
+
+        elif self.web_menu_state == "marketing_select_song":
+            # Select Song (Released only)
+            released = [s for s in self.player.songs_written if s.is_released]
+            if not released:
+                self.GAME_LOG.add_log_message("No released songs to market.")
+                self.web_menu_state = "marketing"
+                return
+
+            song_opts = {str(i): s.title for i, s in enumerate(released)}
+            song_opts["back"] = "Back"
+
+            choice = self.ui.present_choices(song_opts, "Select Song to Market:")
+
+            if choice == "back":
+                self.web_menu_state = "marketing"
+            else:
+                song = released[int(choice)]
+                cost = CAMPAIGN_TYPES[self.marketing_campaign_type]['cost']
+
+                if self.player.money >= cost:
+                    self.player.money -= cost
+                    buzz, msg = run_marketing_campaign(self.marketing_campaign_type, song)
+                    self.GAME_LOG.add_log_message(msg)
+                else:
+                    self.GAME_LOG.add_log_message("You cannot afford this campaign.")
+
                 self.web_menu_state = "main"
 
 
@@ -2171,6 +2223,7 @@ class Game:
                 "inventory": "Inventory",
                 "band": "Band",
                 "staff": "Staff (Roadies/Security)",
+                "merch": "Merchandise",
                 "back": "Back"
             }
             choice = self.ui.present_choices(character_menu_opts, "Character")
@@ -2230,6 +2283,51 @@ class Game:
                         self.GAME_LOG.add_log_message(f"Fired {removed.name}.")
                         if removed.role == "Bodyguard" and not any(s.role == "Bodyguard" for s in self.player.staff):
                             self.player.has_bodyguard = False
+
+        elif self.character_menu_state == "merch":
+            if not self.player.merch_stock:
+                info = "You have no merch stock."
+            else:
+                info = "Current Stock:\n" + "\n".join([str(m) for m in self.player.merch_stock])
+
+            opts = {
+                "order": "Order New Merch",
+                "back": "Back"
+            }
+            choice = self.ui.present_choices(opts, info)
+
+            if choice == "back":
+                self.character_menu_state = "main"
+            elif choice == "order":
+                self.character_menu_state = "merch_order"
+
+        elif self.character_menu_state == "merch_order":
+            order_opts = {k: f"{v['name']} (Cost: ${v['cost']}, Sell: ${v['price']})" for k, v in MERCH_TEMPLATES.items()}
+            order_opts["back"] = "Back"
+
+            choice = self.ui.present_choices(order_opts, "Select Merch to Order (Batch of 50):")
+
+            if choice == "back":
+                self.character_menu_state = "merch"
+            else:
+                template = MERCH_TEMPLATES[choice]
+                batch_size = 50
+                total_cost = template['cost'] * batch_size
+
+                if self.player.money >= total_cost:
+                    self.player.money -= total_cost
+                    # Check if player already has this item type
+                    existing_item = next((m for m in self.player.merch_stock if m.name == template['name']), None)
+                    if existing_item:
+                        existing_item.stock += batch_size
+                    else:
+                        new_item = MerchItem(template['name'], template['cost'], template['price'], batch_size)
+                        self.player.merch_stock.append(new_item)
+
+                    self.GAME_LOG.add_log_message(f"Ordered {batch_size} {template['name']}s for ${total_cost}.")
+                    self.character_menu_state = "merch"
+                else:
+                    self.GAME_LOG.add_log_message(f"Cannot afford ${total_cost}.")
 
         elif self.character_menu_state == "band":
             if self.band_menu_state == "main":
@@ -2541,7 +2639,29 @@ class Game:
             self.player.fame += fame_gain
 
             self.GAME_LOG.add_log_message(f"Show over! The crowd hype reached {final_hype}/100.")
-            self.GAME_LOG.add_log_message(f"You earned ${money_gain} and {fame_gain} Fame.")
+            self.GAME_LOG.add_log_message(f"Ticket Sales: +${money_gain} | Fame: +{fame_gain}")
+
+            # Merch Sales Logic
+            if self.player.merch_stock:
+                total_merch_sales = 0
+                for item in self.player.merch_stock:
+                    if item.stock > 0:
+                        # Buyers based on hype
+                        potential_buyers = int(final_hype / 2) # e.g. 100 hype -> 50 buyers max
+                        # Buying chance based on fame?
+                        actual_sales = 0
+                        for _ in range(potential_buyers):
+                            if item.stock > 0 and random.random() < 0.2: # 20% buy rate
+                                item.stock -= 1
+                                total_merch_sales += item.sale_price
+                                actual_sales += 1
+
+                        if actual_sales > 0:
+                            self.GAME_LOG.add_log_message(f"Sold {actual_sales} {item.name}s.")
+
+                if total_merch_sales > 0:
+                    self.player.money += total_merch_sales
+                    self.GAME_LOG.add_log_message(f"Merch Income: +${total_merch_sales}")
 
             # Cleanup
             self.performance_manager = None

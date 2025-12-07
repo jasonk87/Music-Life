@@ -22,6 +22,7 @@ class Player:
         self.home_storage = [] # List of GearItem objects stored at home
         self.vehicles = []
         self.staff = [] # List of StaffMember objects
+        self.merch_stock = [] # List of MerchItem objects
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
