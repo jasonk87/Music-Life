@@ -53,6 +53,7 @@ class Game:
         self.text_to_view = ""
         self.active_performance = None
         self.performance_manager = None # Added manager
+        self.travel_manager = None # Added travel manager
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
@@ -651,6 +652,8 @@ class Game:
                 self.handle_text_viewer()
             elif self.game_state == "performance":
                 self.handle_performance_scene()
+            elif self.game_state == "travel_active":
+                self.handle_travel_active_state()
 
             self.ui.update_display()
 
@@ -1596,18 +1599,19 @@ class Game:
                         if not selected_vehicle:
                             cost_override = travel_details['cost']
 
-                        # Player.travel now handles the cost deduction for ticket or fuel
-                        success, actual_time_hours = self.player.travel(dest_loc_obj, estimated_distance, transport_mode, cost_override, ticket_class)
+                        # Initialize Travel
+                        self.travel_manager = self.player.start_travel(dest_loc_obj, estimated_distance, transport_mode, cost_override, ticket_class)
 
-                        if success:
-                            # Use the actual time taken from the simulation (includes delays)
-                            advance_game_time(actual_time_hours * 60)
-                            self.update_npc_locations(current_game_time)
-                            self.process_time_based_player_needs(self.player, actual_time_hours * 60)
-                            self.GAME_LOG.add_log_message(f"You travelled to {dest_choice}.")
+                        if self.travel_manager:
+                            self.game_state = "travel_active"
+                            self.GAME_LOG.add_log_message(f"Departing for {dest_loc_obj.name}...")
+                        else:
+                            self.GAME_LOG.add_log_message("Travel initiation failed.")
                 else:
                     self.GAME_LOG.add_log_message("You can't afford to travel.")
-            self.game_state = "main_menu"
+
+            if self.game_state != "travel_active":
+                self.game_state = "main_menu"
 
     def rest(self, hours=8):
         self.GAME_LOG.add_log_message(f"You rest for {hours} hours.")
@@ -2618,6 +2622,105 @@ class Game:
                     self.game_state = "phone" # Go back to the phone menu
                     self.phone_menu_state = "web"
                     self.web_menu_state = "main"
+
+    def handle_travel_active_state(self):
+        tm = self.travel_manager
+        if not tm:
+            self.game_state = "main_menu"
+            return
+
+        # 1. Draw UI
+        pct = tm.get_progress_percent()
+        bar_length = 20
+        filled = int(pct * bar_length)
+        bar = "[" + "="*filled + " "*(bar_length-filled) + "]"
+
+        status_text = f"Traveling to {tm.destination.name} ({tm.transport_mode.upper()})\n"
+        status_text += f"Progress: {bar} {int(pct*100)}%\n"
+        status_text += f"Distance: {tm.distance_covered:.1f}/{tm.distance_total:.1f} km"
+
+        # 2. Get Actions
+        actions = tm.get_actions()
+
+        choice = self.ui.present_choices(actions, status_text)
+
+        # 3. Handle Input
+        if choice == "continue":
+            events, arrived = tm.advance_one_hour()
+            advance_game_time(60)
+            self.process_time_based_player_needs(self.player, 60)
+
+            for e in events:
+                self.GAME_LOG.add_log_message(e)
+
+            if arrived:
+                self.player.current_location = tm.destination
+                self.player.current_poi = None # Or arrival hub logic
+                self.GAME_LOG.add_log_message(f"Arrived at {tm.destination.name}!")
+                self.travel_manager = None
+                self.game_state = "main_menu"
+
+        elif choice == "nap":
+            # If driver/biker, stop to nap.
+            if tm.vehicle and tm.vehicle.name != "Custom Tour Bus": # Driver
+                self.GAME_LOG.add_log_message("You pull over to take a nap. (1 hour)")
+                advance_game_time(60)
+                self.player.energy = min(100, self.player.energy + 10)
+                self.process_time_based_player_needs(self.player, 60)
+            else: # Passenger or Tour Bus
+                self.GAME_LOG.add_log_message("You take a nap while traveling. (1 hour)")
+                events, arrived = tm.advance_one_hour()
+                advance_game_time(60)
+                self.player.energy = min(100, self.player.energy + 15) # Better nap
+                self.process_time_based_player_needs(self.player, 60)
+                for e in events: self.GAME_LOG.add_log_message(e)
+                if arrived:
+                    self.player.current_location = tm.destination
+                    self.player.current_poi = None
+                    self.GAME_LOG.add_log_message(f"Arrived at {tm.destination.name}!")
+                    self.travel_manager = None
+                    self.game_state = "main_menu"
+
+        elif choice == "phone":
+            # Access phone features restricted?
+            # For now, just a simplified action
+            self.GAME_LOG.add_log_message("You check your phone... (Time passes)")
+            # Maybe check news?
+            from game.rivals import get_news_feed
+            feed = get_news_feed()
+            if feed: self.GAME_LOG.add_log_message(f"NEWS: {feed[0]}")
+
+            # Still advance travel if passenger
+            if not tm.vehicle or tm.vehicle.name == "Custom Tour Bus":
+                 events, arrived = tm.advance_one_hour()
+                 if arrived:
+                    self.player.current_location = tm.destination
+                    self.player.current_poi = None
+                    self.travel_manager = None
+                    self.game_state = "main_menu"
+            else:
+                 # Distracted driving?
+                 self.GAME_LOG.add_log_message("Eyes on the road!")
+
+            advance_game_time(60)
+            self.process_time_based_player_needs(self.player, 60)
+
+        elif choice in ["meal", "drink"]:
+            if self.player.hunger > 0:
+                self.player.hunger = max(0, self.player.hunger - 30)
+                self.GAME_LOG.add_log_message("You enjoy some service. (Hunger -30)")
+            else:
+                self.GAME_LOG.add_log_message("You aren't hungry.")
+
+            # Advance travel
+            events, arrived = tm.advance_one_hour()
+            advance_game_time(60)
+            self.process_time_based_player_needs(self.player, 60)
+            if arrived:
+                self.player.current_location = tm.destination
+                self.player.current_poi = None
+                self.travel_manager = None
+                self.game_state = "main_menu"
 
     def handle_performance_scene(self):
         # 1. Selection Phase
