@@ -62,17 +62,30 @@ class PygameUI:
         self.screen.blit(hud_surface, (0, 0))
 
         # Top-left: Date, Location, Next Event
-        self.draw_text(f"Date: {date_str}", FONT_DEFAULT, WHITE, 20, 10)
-        self.draw_text(f"Location: {location_str}", FONT_LOG, LIGHT_GREY, 20, 45)
-        self.draw_text(f"Next Up: {next_event_str}", FONT_LOG, LIGHT_GREY, 20, 70)
+        self.draw_text(f"Date: {date_str}", self.FONT_DEFAULT, WHITE, 20, 10)
+        self.draw_text(f"Location: {location_str}", self.FONT_LOG, LIGHT_GREY, 20, 45)
+        self.draw_text(f"Next Up: {next_event_str}", self.FONT_LOG, LIGHT_GREY, 20, 70)
 
         # Top-right: Money, Portrait, and indicators
-        self.draw_text(f"Money: ${money_str}", FONT_DEFAULT, WHITE, SCREEN_WIDTH - 260, 10)
+        # Dynamic alignment for money/stats to avoid overlap
         portrait_rect = pygame.Rect(SCREEN_WIDTH - 120, 10, 80, 80)
+
+        money_text = f"Money: ${money_str}"
+        money_width = self.FONT_DEFAULT.size(money_text)[0]
+        # Position left of portrait with 20px padding
+        money_x = portrait_rect.left - 20 - money_width
+
+        self.draw_text(money_text, self.FONT_DEFAULT, WHITE, money_x, 10)
+
         self.portrait.draw(portrait_rect.x, portrait_rect.y, portrait_rect.width, portrait_rect.height, hair_length, beard_length)
         pygame.draw.rect(self.screen, WHITE, portrait_rect, 2)
-        self.draw_text(f"Hair: {str(hair_length)}", FONT_LOG, WHITE, SCREEN_WIDTH - 260, 45)
-        self.draw_text(f"Beard: {str(beard_length)}", FONT_LOG, WHITE, SCREEN_WIDTH - 260, 70)
+
+        hair_text = f"Hair: {str(hair_length)}"
+        beard_text = f"Beard: {str(beard_length)}"
+
+        # Align appearance stats with money X (right aligned logic roughly)
+        self.draw_text(hair_text, self.FONT_LOG, WHITE, money_x, 45)
+        self.draw_text(beard_text, self.FONT_LOG, WHITE, money_x, 70)
 
     def draw_ascii_art(self, art_lines, x, y, color=WHITE):
         line_height = FONT_ASCII.get_linesize()
@@ -245,8 +258,26 @@ class PygameUI:
     def present_choices(self, options, title):
         selected_index = 0
         buttons = []
+        keys = list(options.keys())
+        values = list(options.values())
+
+        # Calculate dynamic width
+        max_text_width = 0
+        for text in values:
+            w = self.FONT_DEFAULT.size(text)[0]
+            if w > max_text_width:
+                max_text_width = w
+
+        button_width = max(400, max_text_width + 60) # Min 400, plus padding
+        button_height = 50
+        spacing = 15
+        total_height = len(options) * (button_height + spacing)
+        start_y = max(150, (SCREEN_HEIGHT - total_height) // 2 + 50) # Center vertically roughly, offset for title
+
         for i, (key, text) in enumerate(options.items()):
-            button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, 200 + i * 60, 300, 50)
+            x = (SCREEN_WIDTH - button_width) // 2
+            y = start_y + i * (button_height + spacing)
+            button_rect = pygame.Rect(x, y, button_width, button_height)
             buttons.append(button_rect)
 
         while True:
@@ -260,20 +291,34 @@ class PygameUI:
                     elif event.key == pygame.K_DOWN:
                         selected_index = (selected_index + 1) % len(options)
                     elif event.key == pygame.K_RETURN:
-                        return list(options.keys())[selected_index]
+                        return keys[selected_index]
+                if event.type == pygame.MOUSEMOTION:
+                    for i, button_rect in enumerate(buttons):
+                        if button_rect.collidepoint(event.pos):
+                            selected_index = i
                 if event.type == pygame.MOUSEBUTTONUP:
                     for i, button_rect in enumerate(buttons):
                         if button_rect.collidepoint(event.pos):
-                            return list(options.keys())[i]
+                            return keys[i]
 
 
             self.clear_screen()
-            self.draw_text(title, FONT_TITLE, WHITE, SCREEN_WIDTH // 2, 100, centered=True)
+            self.draw_text(title, self.FONT_TITLE, WHITE, SCREEN_WIDTH // 2, start_y - 60, centered=True)
 
-            for i, (key, text) in enumerate(options.items()):
+            for i, text in enumerate(values):
                 button_rect = buttons[i]
-                color = WHITE if i == selected_index else GREY
-                pygame.draw.rect(self.screen, color, button_rect, 2)
-                self.draw_text(text, FONT_DEFAULT, color, button_rect.centerx, button_rect.centery, centered=True)
+                is_selected = (i == selected_index)
+
+                # Draw background for better contrast/smoothness
+                bg_color = (30, 30, 30) if not is_selected else (60, 60, 60)
+                pygame.draw.rect(self.screen, bg_color, button_rect)
+
+                # Draw Border
+                border_color = WHITE if is_selected else GREY
+                pygame.draw.rect(self.screen, border_color, button_rect, 2 if not is_selected else 3)
+
+                # Draw Text
+                text_color = WHITE if is_selected else LIGHT_GREY
+                self.draw_text(text, self.FONT_DEFAULT, text_color, button_rect.centerx, button_rect.centery, centered=True)
 
             self.update_display()
