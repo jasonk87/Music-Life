@@ -32,6 +32,12 @@ class PygameUI:
         self.log_messages = []
         self.portrait = Portrait(self.screen)
 
+        # Expose fonts as instance attributes
+        self.FONT_DEFAULT = FONT_DEFAULT
+        self.FONT_TITLE = FONT_TITLE
+        self.FONT_LOG = FONT_LOG
+        self.FONT_ASCII = FONT_ASCII
+
     def clear_screen(self):
         self.screen.fill(BLACK)
 
