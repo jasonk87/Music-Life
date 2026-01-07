@@ -24,13 +24,11 @@ class RandomEvent:
         self.npc_interaction = npc_interaction
         self.custom_interaction_fn_name = custom_interaction_fn_name # Store it
 
-    def trigger(self, player, current_poi_name="an unknown place"): # Added current_poi_name
+    def trigger(self, player, current_poi_name="an unknown place", ui=None, logger=None): # Added ui and logger
         default_event_time = 15 # Default minutes passed for simple events
         event_outcome_data = {"event_triggered": True, "minutes_passed": default_event_time}
 
-        print("\n--- Random Event! ---")
-        # Description template might not always be used if custom_interaction_fn handles its own intro
-        # For custom interactions, the description_template might be more of a log message or internal identifier.
+        if logger: logger.add_log_message("\n--- Random Event! ---")
 
         if self.custom_interaction_fn_name:
             if self.custom_interaction_fn_name == "handle_autograph_interaction":
@@ -39,68 +37,53 @@ class RandomEvent:
                 # Create the temporary fan NPC for the interaction
                 fan_npc_personality = self.npc_interaction.get("npc_type", "adoring_fan") if self.npc_interaction else "adoring_fan"
                 fan_npc_name = self.npc_interaction.get("npc_name", "A Fan") if self.npc_interaction else "A Fan"
-                # Event description is now printed by handle_autograph_interaction if it wants to.
-                # The self.description_template is available if needed:
-                # print(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
-
 
                 temp_fan_npc = NPC(npc_id=f"event_npc_{fan_npc_personality}", name=fan_npc_name, personality_key=fan_npc_personality)
-                interaction_result = handle_autograph_interaction(player, temp_fan_npc, interaction_context=self.name)
+
+                # Pass UI and Logger to the handler
+                interaction_result = handle_autograph_interaction(player, temp_fan_npc, interaction_context=self.name, ui=ui, logger=logger)
 
                 event_outcome_data["minutes_passed"] = interaction_result.get("minutes_passed", 1)
-                # Fame/stress etc. are handled by handle_autograph_interaction directly on player object
             else:
-                print(f"Warning: Unknown custom_interaction_fn_name: {self.custom_interaction_fn_name}")
-                # Fallback to default description if custom function not found or fails?
-                print(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
+                if logger: logger.add_log_message(f"Warning: Unknown custom_interaction_fn_name: {self.custom_interaction_fn_name}")
+                if logger: logger.add_log_message(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
 
 
-        elif self.npc_interaction: # Standard NPC interaction (old style)
-            print(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
+        elif self.npc_interaction: # Standard NPC interaction (adapted for UI)
+            if logger: logger.add_log_message(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
             npc_type = self.npc_interaction["npc_type"]
             npc_name = self.npc_interaction["npc_name"]
             initial_message = self.npc_interaction["initial_message"].format(player_name=player.name)
 
-            print(f"\n{npc_name} approaches you!")
+            if logger: logger.add_log_message(f"\n{npc_name} approaches you!")
             temp_npc_id = f"event_npc_{npc_type}"
             temp_npc = NPC(npc_id=temp_npc_id, name=npc_name, personality_key=npc_type)
-            print(f"{temp_npc.name}: \"{initial_message}\"")
+            if logger: logger.add_log_message(f"{temp_npc.name}: \"{initial_message}\"")
 
-            chat_turns = 0
-            max_chat_turns = 2 # Limit turns for generic event
-            while chat_turns < max_chat_turns:
-                player_input = input(f"{player.name} (to {temp_npc.name}, type 'end' to disengage): ")
-                if player_input.lower() == 'end':
-                    print(f"{player.name} ends the conversation with {temp_npc.name}.")
-                    break
-                if not player_input.strip():
-                    continue
-
-                npc_response = generate_npc_response(player_input, temp_npc, player_name=player.name)
-                print(f"{temp_npc.name}: {npc_response}")
-                chat_turns += 1
-                if "LLM Error" in npc_response or "An unexpected error occurred" in npc_response:
-                    break
+            # Simplified chat for non-custom events, or can be expanded if needed
+            # For now, just a simple acknowledgment from player or one-way interaction
+            if ui:
+                 ui.present_choices({"ok": "Continue"}, f"Interaction with {npc_name}")
 
             if temp_npc.personality_key == "adoring_fan" or temp_npc.personality_key == "friendly_fan":
-                print(f"{temp_npc.name} seems thrilled by the interaction!")
+                if logger: logger.add_log_message(f"{temp_npc.name} seems thrilled by the interaction!")
                 player.fame += 5
-                print(f"You gained 5 fame from the positive fan interaction. Current fame: {player.fame}")
-            event_outcome_data["minutes_passed"] = 20 # Generic chat takes a bit longer
+                if logger: logger.add_log_message(f"You gained 5 fame. Current fame: {player.fame}")
+            event_outcome_data["minutes_passed"] = 15
 
         else: # Simple event, no complex interaction
-            print(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
+            if logger: logger.add_log_message(self.description_template.format(player_name=player.name, poi_name=current_poi_name))
 
 
-        # Common actions for non-custom events (or if custom event doesn't handle them)
+        # Common actions for non-custom events
         if not self.custom_interaction_fn_name:
             for action_desc in self.actions:
-                print(action_desc)
+                if logger: logger.add_log_message(action_desc)
                 if "fame_boost_small" in action_desc:
                     player.fame += 10
-                    print(f"Your fame increased by 10! Current fame: {player.fame}")
+                    if logger: logger.add_log_message(f"Your fame increased by 10! Current fame: {player.fame}")
 
-        print("--------------------")
+        if logger: logger.add_log_message("--------------------")
         return event_outcome_data
 
 # Define some random events
@@ -169,7 +152,7 @@ if not POST_GIG_EVENTS and RANDOM_EVENTS:
     POST_GIG_EVENTS.append(RANDOM_EVENTS[-1])
 
 
-def check_for_random_event(player, current_poi_name="an unknown place", chance=0.25, event_pool=None):
+def check_for_random_event(player, current_poi_name="an unknown place", chance=0.25, event_pool=None, ui=None, logger=None):
     """
     Checks if a random event should occur based on chance and player's fame.
     Returns a dictionary: {"event_triggered": True/False, "minutes_passed": int}
@@ -180,21 +163,35 @@ def check_for_random_event(player, current_poi_name="an unknown place", chance=0
     event_result = {"event_triggered": False, "minutes_passed": 0}
 
     if random.random() < chance:
+        # Check for High Fame "Mob" event
+        if player.fame > 100 and not player.has_bodyguard and random.random() < 0.3:
+            # Fan Mob Event
+            if logger: logger.add_log_message("\n--- RANDOM EVENT ---")
+            if logger: logger.add_log_message("A mob of fans surrounds you! They won't let you leave without autographs.")
+            if logger: logger.add_log_message("You spend 30 minutes signing items and taking selfies.")
+            event_result["minutes_passed"] = 30
+            event_result["event_triggered"] = True
+            player.stress = min(100, player.stress + 10)
+            return event_result
+        elif player.fame > 100 and player.has_bodyguard and random.random() < 0.3:
+             if logger: logger.add_log_message("\nA fan tries to grab you, but your bodyguard intercepts them.")
+             event_result["event_triggered"] = True # Flavor text only, no time loss
+             return event_result
+
         eligible_events = [
             event for event in event_pool
             if player.fame >= event.fame_threshold_min and player.fame <= event.fame_threshold_max
         ]
         if eligible_events:
             event_to_trigger = random.choice(eligible_events)
-            # Pass current_poi_name to the trigger method
-            event_result = event_to_trigger.trigger(player, current_poi_name=current_poi_name)
-            event_result["event_triggered"] = True # Ensure this is set
+            # Pass current_poi_name, ui, and logger to the trigger method
+            event_result = event_to_trigger.trigger(player, current_poi_name=current_poi_name, ui=ui, logger=logger)
+            event_result["event_triggered"] = True
     return event_result
 
-def check_for_post_gig_random_event(player, performed_event_type, venue_name="the venue", chance=0.5):
+def check_for_post_gig_random_event(player, performed_event_type, venue_name="the venue", chance=0.5, ui=None, logger=None):
     """
     Specific check for events that can happen after a gig.
-    Chance might depend on the type of gig performed.
     """
     actual_chance = chance
     if performed_event_type == "CONCERT" or performed_event_type == "FESTIVAL_SLOT":
@@ -202,7 +199,7 @@ def check_for_post_gig_random_event(player, performed_event_type, venue_name="th
     elif performed_event_type == "CLUB_GIG":
         actual_chance = 0.6
 
-    return check_for_random_event(player, current_poi_name=venue_name, chance=actual_chance, event_pool=POST_GIG_EVENTS)
+    return check_for_random_event(player, current_poi_name=venue_name, chance=actual_chance, event_pool=POST_GIG_EVENTS, ui=ui, logger=logger)
 
 # Need to add 'adoring_fan' & 'grateful_fan' to dialogue personalities (in game/dialogue.py)
 def update_dialogue_personalities():

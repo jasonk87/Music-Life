@@ -6,59 +6,34 @@ from game.dialogue import generate_npc_response # Assuming this can be imported
 # from game.game_time import advance_game_time # Best to return time_passed and let caller advance
 # from main import present_choices # Avoid direct import from main.py for now
 
-# Simplified local version of present_choices to avoid circular dependency
-def _present_interaction_choices(options, title="Choose an action:"):
-    """
-    Presents a numbered list of choices to the player and gets valid input.
-    Args:
-        options (list): A list of strings.
-        title (str): The title to display before the options.
-    Returns:
-        str: The chosen option index as a string (1-based), or None.
-    """
-    print(f"\n--- {title} ---")
-    for i, option_text in enumerate(options):
-        print(f"{i+1}. {option_text}")
-
-    max_attempts = 3
-    for attempt in range(max_attempts):
-        choice = input("> ")
-        if choice.isdigit() and 1 <= int(choice) <= len(options):
-            return str(int(choice))
-        print(f"Invalid choice. Please enter a valid number. ({max_attempts - 1 - attempt} attempts left)")
-    print("Too many invalid attempts.")
-    return None
-
-
-def handle_autograph_interaction(player: Player, fan_npc: NPC, interaction_context: str = "random_encounter"):
+def handle_autograph_interaction(player: Player, fan_npc: NPC, interaction_context: str = "random_encounter", ui=None, logger=None):
     """
     Handles the interaction logic for an autograph signing encounter.
 
     Args:
         player: The player object.
         fan_npc: The NPC fan object.
-        interaction_context: String describing the context (e.g., "random_encounter", "pre_gig_signing").
+        interaction_context: String describing the context.
+        ui: The PygameUI instance.
+        logger: The logger (usually game.GAME_LOG).
 
     Returns:
-        A dictionary containing:
-            - "outcome": str (e.g., "signed_chatted", "signed_quickly", "refused", "no_choice")
-            - "minutes_passed": int
-            - "fame_gained": int (optional)
-            - "stress_change": int (optional)
-            - "comfort_change": int (optional)
+        A dictionary containing outcome data.
     """
-    print(f"\nEncounter context: {interaction_context.replace('_', ' ').capitalize()}")
-    print(f"{fan_npc.name} approaches you, looking excited!")
-    # Potentially, fan_npc could have a pre-scripted line here based on their personality or context
-    # For example: fan_npc.say_line("generic_autograph_request")
+    if logger:
+        logger.add_log_message(f"Event: {interaction_context.replace('_', ' ').capitalize()}")
+        logger.add_log_message(f"{fan_npc.name} approaches you, looking excited!")
 
-    interaction_options = [
-        "Sign autograph and chat for a moment.",
-        "Sign autograph quickly.",
-        "Politely refuse."
-    ]
+    interaction_options = {
+        "chat": "Sign autograph and chat for a moment.",
+        "quick": "Sign autograph quickly.",
+        "refuse": "Politely refuse."
+    }
 
-    choice_key = _present_interaction_choices(interaction_options, title=f"What do you do with {fan_npc.name}?")
+    if ui:
+        choice_key = ui.present_choices(interaction_options, f"What do you do with {fan_npc.name}?")
+    else:
+        choice_key = "quick" # Default if no UI
 
     outcome_data = {
         "outcome": "no_choice",
@@ -68,16 +43,19 @@ def handle_autograph_interaction(player: Player, fan_npc: NPC, interaction_conte
         "comfort_change": 0
     }
 
-    if choice_key == "1": # Sign & Chat
-        print(f"\nYou take a moment to sign an autograph for {fan_npc.name} and chat.")
-        # Simulate signing
+    if choice_key == "chat": # Sign & Chat
+        if logger: logger.add_log_message(f"You take a moment to sign an autograph for {fan_npc.name} and chat.")
 
-        # LLM Chat
-        player_chat_input = input(f"You to {fan_npc.name} (or type 'done' to finish chat): ")
-        if player_chat_input.lower() != 'done':
-            # For simplicity, one exchange. Could be a loop for more.
+        # Simple chat interaction
+        if ui:
+            player_chat_input = ui.get_text_input(f"Say something to {fan_npc.name}:")
+        else:
+            player_chat_input = "Thanks for the support!"
+
+        if player_chat_input:
             npc_response = generate_npc_response(player_chat_input, fan_npc, player.name)
-            print(f"{fan_npc.name}: {npc_response}")
+            if logger: logger.add_log_message(f"{fan_npc.name}: {npc_response}")
+
             if "LLM Error" not in npc_response and "unexpected error" not in npc_response:
                  fan_npc.add_memory(f"Player {player.name} chatted with me: '{player_chat_input}'. I said: '{npc_response}'")
                  fan_npc.update_relationship(5) # Small relationship boost from chat
@@ -91,36 +69,27 @@ def handle_autograph_interaction(player: Player, fan_npc: NPC, interaction_conte
         outcome_data["fame_gained"] = 2
         outcome_data["stress_change"] = -5
         outcome_data["comfort_change"] = 3
-        print(f"Fame increased by 2. Stress reduced by 5. Comfort increased by 3.")
+        if logger: logger.add_log_message("Fame +2, Stress -5, Comfort +3")
 
-    elif choice_key == "2": # Sign Quickly
-        print(f"\nYou quickly sign an autograph for {fan_npc.name}.")
+    elif choice_key == "quick": # Sign Quickly
+        if logger: logger.add_log_message(f"You quickly sign an autograph for {fan_npc.name}.")
         player.fame += 1
 
         outcome_data["outcome"] = "signed_quickly"
         outcome_data["minutes_passed"] = 2
         outcome_data["fame_gained"] = 1
-        print(f"Fame increased by 1.")
+        if logger: logger.add_log_message("Fame +1")
 
-    elif choice_key == "3": # Refuse
-        print(f"\nYou politely decline to sign an autograph at this time.")
+    elif choice_key == "refuse": # Refuse
+        if logger: logger.add_log_message(f"You politely decline to sign an autograph at this time.")
         player.stress = min(100, player.stress + 2)
-        fan_npc.update_relationship(-3) # Slight negative impact for refusal
+        fan_npc.update_relationship(-3)
         fan_npc.add_memory(f"Player {player.name} refused to give me an autograph.")
 
         outcome_data["outcome"] = "refused"
         outcome_data["minutes_passed"] = 1
         outcome_data["stress_change"] = 2
-        print(f"Stress increased slightly.")
-
-    else: # No valid choice made
-        print("You hesitate and the moment passes...")
-        outcome_data["minutes_passed"] = 1
-
-    # The calling function will be responsible for:
-    # 1. Advancing game time using outcome_data["minutes_passed"]
-    # 2. Calling update_npc_locations(current_game_time)
-    # 3. Calling process_time_based_player_needs(player, minutes_passed)
+        if logger: logger.add_log_message("Stress +2")
 
     return outcome_data
 

@@ -90,10 +90,10 @@ class Chart:
             })
         self._sort_and_trim_entries()
 
-    def calculate_song_chart_score(self, song_obj, player_obj): # Now takes player_obj
+    def calculate_song_chart_score(self, song_obj, player_obj, trend_manager=None): # Now takes trend_manager
         """
         Calculates a score for a song based on its qualities, player's fame,
-        and potential label marketing bonus.
+        trend multiplier, and potential label marketing bonus.
         This score determines its likelihood of charting and its position.
         """
         if not player_obj: # Should not happen in normal flow
@@ -101,6 +101,11 @@ class Chart:
 
         # Base score from song & recording quality
         score = (song_obj.song_quality * 75) + (song_obj.recording_quality * 50)
+
+        # Trend Bonus
+        if trend_manager:
+            trend_mult = trend_manager.get_popularity(song_obj.genre)
+            score *= trend_mult
 
         # Fame contribution
         fame_bonus = min(50, player_obj.fame / 10)
@@ -177,7 +182,7 @@ class Chart:
                 'chart_score': chart_score
             })
 
-    def update_weekly(self, all_songs, player_obj, current_game_time_obj):
+    def update_weekly(self, all_songs, player_obj, current_game_time_obj, trend_manager=None):
         """
         Main weekly update logic for the chart.
         - Decays scores of existing songs.
@@ -221,10 +226,14 @@ class Chart:
 
                 if artist_name == player_obj.name:
                     # It's a player song, calculate score with fame/label bonuses
-                    chart_score = self.calculate_song_chart_score(song, player_obj)
+                    chart_score = self.calculate_song_chart_score(song, player_obj, trend_manager)
                 else:
                     # It's an NPC/AI song. Use a simplified scoring logic.
                     chart_score = (song.song_quality * 75) + (song.recording_quality * 50)
+
+                    if trend_manager:
+                        chart_score *= trend_manager.get_popularity(song.genre)
+
                     if self.chart_genre_preference and song.genre == self.chart_genre_preference:
                         chart_score += 25
                     # Add some random buzz to make the charts more dynamic

@@ -3,7 +3,7 @@ class Venue:
                  venue_type="CLUB", category="VENUE_GENERAL",
                  capacity=100, prestige=1, parent_location_id=None,
                  can_rent_gear=False, gear_rental_fee=0, available_rental_gear_ids=None,
-                 interaction_options=None):
+                 interaction_options=None, genre_bias=None):
         self.venue_id = venue_id
         self.name = name
         self.description = description
@@ -19,6 +19,8 @@ class Venue:
         self.can_rent_gear = can_rent_gear
         self.gear_rental_fee = gear_rental_fee
         self.available_rental_gear_ids = available_rental_gear_ids if available_rental_gear_ids else []
+
+        self.genre_bias = genre_bias if genre_bias else {} # e.g. {"Rock": 1.2, "Pop": 0.8}
 
     def add_event(self, event):
         if event not in self.events_hosted:

@@ -22,10 +22,13 @@ from game.pygame_ui import PygameUI
 from game_data.gear_catalog import GEAR_CATALOG
 from game.npc import NPC
 from game_data.vehicle_catalog import VEHICLE_CATALOG
+from game.traits import TRAIT_CATALOG
 from game.chart import Chart
 from game.feedback_generator import generate_feedback_for_song, SOURCES, generate_feedback_for_album
 from game.sound import SoundManager
 from game.ascii_art import ART
+from game.performance import PerformanceManager
+from game.trends import TrendManager
 
 class Game:
     def __init__(self, ui):
@@ -41,6 +44,7 @@ class Game:
         self.web_menu_state = "main"
         self.text_to_view = ""
         self.active_performance = None
+        self.performance_manager = None # Added manager
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
@@ -52,6 +56,7 @@ class Game:
         self.songwriting_stage = None
         self.song_in_progress = {}
         self.SONG_GENRES = ["Rock", "Pop", "Folk", "Indie", "Electronic", "Blues"]
+        self.trend_manager = TrendManager(self.SONG_GENRES)
         self.OPPORTUNITY_CATALOG = {
             "radio_interview_local": {
                 "name": "Local Radio Interview",
@@ -187,10 +192,11 @@ class Game:
                 owner_npc_id_temp_venue = props.pop("owner_npc_id", None)
                 booking_fee_prop = props.pop("booking_fee", 50)
                 allows_player_booking_prop = props.pop("allows_player_booking", True)
+                genre_bias_prop = props.pop("genre_bias", {})
                 venue = Venue(venue_id=venue_data["venue_id"], name=venue_data["name"], description=venue_data["description"],
                             venue_type=venue_data["venue_type"], category=venue_data["category"],
                             capacity=venue_data["capacity"], prestige=venue_data["prestige"],
-                            parent_location_id=location_obj.name, **props)
+                            parent_location_id=location_obj.name, genre_bias=genre_bias_prop, **props)
                 if owner_npc_id_temp_venue: venue.owner_npc_id = owner_npc_id_temp_venue
                 venue.events_hosted_ids_from_json = list(venue_data.get("events_hosted_ids", []))
                 venue.booking_fee = booking_fee_prop; venue.allows_player_booking = allows_player_booking_prop
@@ -283,8 +289,8 @@ class Game:
         return True
 
     def initialize_player(self):
-        player_name = "Player" # Placeholder, will need a pygame input box
-        self.player = Player(player_name)
+        # Initial creation of player object, but details will be filled in character creation
+        self.player = Player("Player")
         hometown_loc = self.WORLD_MAP.get("Your Hometown")
         player_home_obj = self.get_poi_or_venue_by_id(self.PLAYER_HOME_POI_ID_GLOBAL) if self.PLAYER_HOME_POI_ID_GLOBAL else None
         if hometown_loc and player_home_obj:
@@ -294,10 +300,15 @@ class Game:
             print("Error setting start home.")
             self.running = False
 
+        # Set initial state to character creation
+        self.game_state = "character_creation"
+
         self.update_npc_locations(current_game_time)
         self.process_time_based_player_needs(self.player, 0)
-        if GEAR_CATALOG.get("worn_acoustic_guitar"): self.player.add_gear(GEAR_CATALOG["worn_acoustic_guitar"])
-        if GEAR_CATALOG.get("guitar_picks_assorted"): self.player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
+
+        # Gear will be added after character creation based on background
+        # if GEAR_CATALOG.get("worn_acoustic_guitar"): self.player.add_gear(GEAR_CATALOG["worn_acoustic_guitar"])
+        # if GEAR_CATALOG.get("guitar_picks_assorted"): self.player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
 
         self.LAST_CHART_UPDATE_DAY = current_game_time.day
 
@@ -462,6 +473,42 @@ class Game:
                 # NPCs progress in their careers
                 self.update_npc_careers()
 
+                # Update Trends
+                shift_happened = self.trend_manager.update_weekly()
+                if shift_happened:
+                    top_genre = self.trend_manager.get_top_genre()
+                    self.GAME_LOG.add_log_message(f"--- NEWS: A cultural shift! {top_genre} is the new wave! ---")
+                else:
+                    top_genre = self.trend_manager.get_top_genre()
+                    self.GAME_LOG.add_log_message(f"Trends: {top_genre} is currently popular.")
+
+            # Daily Upkeep (e.g. Bodyguard)
+            # This check runs every frame, so we need a "last_upkeep_day" tracker.
+            # Using last_opportunity_check_day is decent but strictly for opportunities.
+            # Let's re-use it or add a specific daily update block.
+            if current_game_time.day != self.last_opportunity_check_day:
+                # Daily Logic
+                if self.player.has_bodyguard:
+                    if self.player.money >= self.player.bodyguard_cost:
+                        self.player.money -= self.player.bodyguard_cost
+                        self.GAME_LOG.add_log_message(f"Paid bodyguard upkeep (${self.player.bodyguard_cost}).")
+                    else:
+                        self.player.has_bodyguard = False
+                        self.GAME_LOG.add_log_message("Couldn't pay bodyguard. They quit!")
+
+                # Check for NPC Favors (Allies)
+                for npc_id in self.player.contacts:
+                    npc = self.NPC_REGISTRY.get(npc_id)
+                    if npc and npc.relationship_with_player == RelationshipStatus.ALLY:
+                        if random.random() < 0.1: # 10% chance per day per Ally
+                            # Send a gift
+                            possible_gifts = ["food_energy_bar", "guitar_strings_basic", "guitar_picks_assorted"]
+                            gift_id = random.choice(possible_gifts)
+                            gift_item = GEAR_CATALOG.get(gift_id)
+                            if gift_item:
+                                self.player.add_gear(gift_item)
+                                self.GAME_LOG.add_log_message(f"MSG from {npc.name}: 'Hey, saw this and thought of you!' (Received {gift_item.name})")
+
                 # Gather all released songs in the world
                 all_released_songs = list(self.player.songs_written)
                 for npc in self.NPC_REGISTRY.values():
@@ -472,7 +519,8 @@ class Game:
                 total_money_gain = 0
                 all_feedback_events = []
                 for chart in self.ACTIVE_CHARTS:
-                    feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time)
+                    # Pass trend_manager to chart update
+                    feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time, self.trend_manager)
                     all_feedback_events.extend(feedback_events)
                     # Calculate fame and money from chart positions for the PLAYER only
                     for entry in chart.entries:
@@ -538,7 +586,9 @@ class Game:
             self.ui.draw_hud(date_str, location_str, next_event_str, money_str, self.player.hair_length, self.player.beard_length)
             self.ui.draw_log()
 
-            if self.game_state == "main_menu":
+            if self.game_state == "character_creation":
+                self.handle_character_creation()
+            elif self.game_state == "main_menu":
                 self.handle_main_menu()
             elif self.game_state == "explore":
                 self.handle_explore_menu()
@@ -560,6 +610,68 @@ class Game:
             self.ui.update_display()
 
         pygame.quit()
+
+    def handle_character_creation(self):
+        self.ui.clear_screen()
+        self.ui.draw_text("New Character", self.ui.FONT_TITLE, (255, 255, 255), 640, 50, centered=True)
+        self.ui.update_display()
+
+        # 1. Get Name
+        name = self.ui.get_text_input("Enter your Stage Name:")
+        if not name:
+            name = "The Unknown Artist"
+        self.player.name = name
+
+        # 2. Choose Background
+        backgrounds = {
+            "rocker": "The Rocker (Guitar++, Vocals+)",
+            "pop_star": "The Pop Star (Vocals++, Stage Presence+)",
+            "indie": "The Indie Artist (Songwriting++, Guitar+)",
+            "electronic": "The Producer (Electronic++, Songwriting+)",
+            "busker": "The Busker (Performance+, Stamina+)"
+        }
+
+        bg_choice = self.ui.present_choices(backgrounds, "Choose your starting background:")
+
+        # Apply Background Stats/Gear
+        if bg_choice == "rocker":
+            self.player.skills['guitar'] = 15
+            self.player.skills['vocals'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+            self.player.add_gear(GEAR_CATALOG.get("guitar_picks_assorted"))
+            self.player.traits.append(TRAIT_CATALOG["resilient"])
+        elif bg_choice == "pop_star":
+            self.player.skills['vocals'] = 15
+            self.player.skills['stage_presence'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("microphone_basic"))
+            self.player.money += 200 # Extra starting cash for clothes/style
+            self.player.traits.append(TRAIT_CATALOG["charismatic"])
+        elif bg_choice == "indie":
+            self.player.skills['songwriting'] = 15
+            self.player.skills['guitar'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+            self.player.add_gear(GEAR_CATALOG.get("notebook_lyrics"))
+            self.player.traits.append(TRAIT_CATALOG["virtuoso"])
+        elif bg_choice == "electronic":
+            self.player.skills['electronic'] = 15
+            self.player.skills['songwriting'] = 10
+            self.player.add_gear(GEAR_CATALOG.get("laptop_basic"))
+            self.player.add_gear(GEAR_CATALOG.get("headphones_studio"))
+            self.player.traits.append(TRAIT_CATALOG["night_owl"])
+        elif bg_choice == "busker":
+            self.player.skills['stage_presence'] = 15
+            self.player.skills['guitar'] = 5
+            self.player.energy = 100 # High stamina
+            self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+            self.player.money += 50 # Humble beginnings
+            self.player.traits.append(TRAIT_CATALOG["resilient"])
+
+        # Fallback if catalog items missing or not assigned above
+        if not self.player.gear_inventory and GEAR_CATALOG.get("worn_acoustic_guitar"):
+             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
+
+        self.GAME_LOG.add_log_message(f"Welcome, {self.player.name}! Your journey begins now.")
+        self.game_state = "main_menu"
 
     def handle_main_menu(self):
         main_menu_opts = {
@@ -607,12 +719,25 @@ class Game:
                         if opp_data and opp_data.get("type") == "poi_interaction" and opp_details.get("poi_id") == poi_id:
                              interaction_options[opp_id] = opp_data["action_text"]
 
+                interaction_options["wander"] = "Look around (Trigger Events)"
                 interaction_options["back"] = "Back"
 
                 choice = self.ui.present_choices(interaction_options, f"Interact with {self.selected_poi.name}")
                 if choice == "back":
                     self.explore_menu_state = "location"
                     self.selected_poi = None
+                elif choice == "wander":
+                    self.GAME_LOG.add_log_message("You take a moment to look around...")
+                    advance_game_time(15)
+
+                    # Gain Inspiration
+                    insp_gain = random.randint(2, 5)
+                    self.player.inspiration = min(100, self.player.inspiration + insp_gain)
+                    self.GAME_LOG.add_log_message(f"You feel inspired by the surroundings. (+{insp_gain} Inspiration)")
+
+                    event_result = check_for_random_event(self.player, current_poi_name=self.selected_poi.name, chance=0.8, ui=self.ui, logger=self.GAME_LOG)
+                    if not event_result["event_triggered"]:
+                        self.GAME_LOG.add_log_message("It seems quiet right now.")
                 else:
                     self.handle_interaction(interaction_options[choice])
                     if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership"]:
@@ -700,12 +825,28 @@ class Game:
             elif self.songwriting_stage == "confirm_start":
                 title = self.song_in_progress.get('title', 'Untitled')
                 genre = self.song_in_progress.get('genre', 'Unknown')
-                confirm_options = {
-                    "yes": f"Start writing '{title}' ({genre}) (Will take ~8 hours)",
-                    "no": "Cancel"
-                }
-                choice = self.ui.present_choices(confirm_options, "Ready to start writing?")
-                if choice == "yes":
+
+                insp_cost = 50
+                can_use_insp = self.player.inspiration >= insp_cost
+
+                start_label = f"Start writing '{title}' ({genre}) (Will take ~8 hours)"
+                start_insp_label = f"Start with Inspiration (Cost {insp_cost} Insp, Quality++)"
+
+                confirm_options = {"yes": start_label}
+                if can_use_insp:
+                    confirm_options["yes_insp"] = start_insp_label
+                confirm_options["no"] = "Cancel"
+
+                choice = self.ui.present_choices(confirm_options, f"Ready to write? (Inspiration: {self.player.inspiration}/100)")
+
+                if choice == "yes" or choice == "yes_insp":
+                    if choice == "yes_insp":
+                        self.player.inspiration -= insp_cost
+                        self.song_in_progress['inspiration_bonus'] = 0.2 # 20% quality boost
+                        self.GAME_LOG.add_log_message("You channel your inspiration into the song!")
+                    else:
+                        self.song_in_progress['inspiration_bonus'] = 0.0
+
                     self.songwriting_stage = "writing_components"
                     # This will fall through to the next stage in the same frame
                 else:
@@ -717,23 +858,27 @@ class Game:
                 # This is a non-interactive stage, so we do the work and then change state.
                 self.GAME_LOG.add_log_message("You spend a long day writing...")
 
+                insp_bonus = self.song_in_progress.get('inspiration_bonus', 0.0)
+
                 # Lyrics (2 hours)
-                lyrical_depth = self._calculate_song_component_quality('songwriting')
-                self.song_in_progress['lyrical_depth'] = lyrical_depth
+                lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
+                self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
                 advance_game_time(120)
                 self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
 
                 # Melody (3 hours)
-                catchiness = self._calculate_song_component_quality('songwriting', 'guitar')
-                self.song_in_progress['catchiness'] = catchiness
+                catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
+                self.song_in_progress['catchiness'] = min(1.0, catchiness)
                 advance_game_time(180)
                 self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
 
                 # Arrangement / Complexity (3 hours)
-                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7)
-                self.song_in_progress['music_complexity'] = music_complexity
-                originality = self._calculate_song_component_quality('songwriting') # Originality is based on songwriting
-                self.song_in_progress['originality'] = originality
+                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
+                self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
+
+                originality = self._calculate_song_component_quality('songwriting') + insp_bonus
+                self.song_in_progress['originality'] = min(1.0, originality)
+
                 advance_game_time(180)
                 self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
 
@@ -940,7 +1085,7 @@ class Game:
                 npc_options = {npc.npc_id: npc.name for npc in npcs_here}
                 npc_options["back"] = "Back"
 
-                choice = self.ui.present_choices(npc_options, "Talk to who?")
+                choice = self.ui.present_choices(npc_options, "Interact with who?")
                 if choice == "back":
                     self.explore_menu_state = "poi"
                 else:
@@ -950,9 +1095,35 @@ class Game:
                         self.player.contacts.append(self.selected_npc.npc_id)
                         self.GAME_LOG.add_log_message(f"You added {self.selected_npc.name} to your contacts.")
 
+                    self.explore_menu_state = "npc_interaction_menu"
+
+        elif self.explore_menu_state == "npc_interaction_menu":
+            if self.selected_npc:
+                interaction_opts = {
+                    "chat": "Chat",
+                    "gift": "Give Gift",
+                    "jam": "Jam Session (Requires Instrument)",
+                    "back": "Back"
+                }
+
+                choice = self.ui.present_choices(interaction_opts, f"Interaction: {self.selected_npc.name}")
+
+                if choice == "back":
+                    self.explore_menu_state = "talk"
+                    self.selected_npc = None
+                elif choice == "chat":
                     self.explore_menu_state = "dialogue"
                     self.conversation_history = []
                     self.player_input = ""
+                elif choice == "gift":
+                    self.explore_menu_state = "gifting"
+                elif choice == "jam":
+                    self.handle_jam_session(self.selected_npc)
+                    # Stay in menu or go back? Let's go back to see the result log clearly.
+                    self.explore_menu_state = "poi"
+            else:
+                self.explore_menu_state = "poi"
+
         elif self.explore_menu_state == "view_events":
             if self.selected_poi and isinstance(self.selected_poi, Venue):
                 if not self.selected_poi.events_hosted:
@@ -985,7 +1156,7 @@ class Game:
                 else:
                     # Regular, hardcoded event
                     event = self.selected_poi.events_hosted[int(choice)]
-                    if event.event_type == "OPEN_MIC":
+                    if event.event_type == "OPEN_MIC" or event.event_type == "CLUB_GIG":
                         self.active_performance = event
                         self.game_state = "performance"
                         self.performance_stage = "choose_song"
@@ -1048,6 +1219,75 @@ class Game:
             else:
                 self.explore_menu_state = "poi"
 
+    def handle_jam_session(self, npc):
+        self.GAME_LOG.add_log_message(f"You ask {npc.name} to jam with you.")
+
+        # Check if player has an instrument
+        player_instruments = [item for item in self.player.gear_inventory if item.gear_type.startswith("INSTRUMENT") and not item.is_broken]
+        if not player_instruments:
+            self.GAME_LOG.add_log_message("You don't have a working instrument with you!")
+            return
+
+        # Apply durability to one random instrument used
+        used_instrument = random.choice(player_instruments)
+        used_instrument.take_damage(random.randint(5, 15)) # Jamming is hard work
+        if used_instrument.is_broken:
+             self.GAME_LOG.add_log_message(f"CRACK! Your {used_instrument.name} broke during the jam!")
+
+        # Check if NPC is musical
+        if not npc.skills:
+            self.GAME_LOG.add_log_message(f"{npc.name} doesn't seem to play any instruments.")
+            return
+
+        advance_game_time(60) # 1 hour jam
+
+        # Calculate compatibility/quality
+        # Player skill: Max of their instrument skills
+        player_skill_level = 0
+        for skill in ['guitar', 'bass', 'drums', 'keyboard', 'electronic']:
+             player_skill_level = max(player_skill_level, self.player.skills.get(skill, 0))
+
+        # NPC skill: Max of their skills
+        npc_skill_level = max(npc.skills.values()) if npc.skills else 0
+
+        # Skill difference
+        diff = abs(player_skill_level - npc_skill_level)
+
+        if player_skill_level < 5 and npc_skill_level < 5:
+            self.GAME_LOG.add_log_message("It's a bit rough, but you both have fun making noise.")
+            xp = 0.5
+            rel_gain = 2
+        elif player_skill_level > npc_skill_level + 20:
+            self.GAME_LOG.add_log_message(f"You show {npc.name} a few tricks. They seem impressed.")
+            xp = 0.2
+            rel_gain = 5
+        elif npc_skill_level > player_skill_level + 20:
+            self.GAME_LOG.add_log_message(f"You struggle to keep up, but you learn a lot from {npc.name}.")
+            xp = 2.0
+            rel_gain = 3
+        else:
+            self.GAME_LOG.add_log_message("You lock into a great groove! The chemistry is undeniable.")
+            xp = 1.0
+            rel_gain = 8
+
+        # Apply rewards
+        primary_instrument_skill = "guitar" # Simplified: Assume guitar for now or pick based on inventory
+        if any(i.name.lower().find("drum") != -1 for i in player_instruments): primary_instrument_skill = "drums"
+        # ... logic to pick specific skill to upgrade could be better
+
+        self.player.practice_skill(primary_instrument_skill, xp * 5) # Scale factor
+        npc.update_relationship(rel_gain)
+
+        # Gain Inspiration from Jamming
+        insp_gain = random.randint(5, 10)
+        self.player.inspiration = min(100, self.player.inspiration + insp_gain)
+        self.GAME_LOG.add_log_message(f"Jamming gave you new ideas! (+{insp_gain} Inspiration)")
+
+        self.player.energy -= 10
+        self.player.stress = max(0, self.player.stress - 15) # Jamming relieves stress
+        self.GAME_LOG.add_log_message(f"Jam session finished. Stress -15.")
+
+
     def handle_interaction(self, interaction_text, time_cost=15):
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
 
@@ -1063,6 +1303,60 @@ class Game:
                 self.explore_menu_state = "shop"
             else:
                 self.GAME_LOG.add_log_message("Nothing for sale currently.")
+        elif interaction_text == "Look around (Trigger Events)": # Renaming or handling if text differs
+             pass # Handled by choice logic earlier, but if passed here:
+             # Actually, "wander" key handles it directly in loop.
+             # But if we want it to give inspiration:
+             pass
+        elif interaction_text == "Hire Bodyguard ($100/day)":
+            if self.player.has_bodyguard:
+                self.GAME_LOG.add_log_message("You already have a bodyguard.")
+            elif self.player.money >= 100:
+                self.player.money -= 100
+                self.player.has_bodyguard = True
+                self.GAME_LOG.add_log_message("You hired a bodyguard! Daily upkeep is $100.")
+            else:
+                self.GAME_LOG.add_log_message("You can't afford the initial fee.")
+        elif interaction_text.startswith("Work Shift:"):
+            # Parse earnings and time from text, e.g. "Work Shift: Stock Shelves ($20 / 4h)"
+            try:
+                parts = interaction_text.split("($")
+                earnings_part = parts[1].split("/")[0].strip()
+                time_part = parts[1].split("/")[1].split("h")[0].strip()
+
+                earnings = int(earnings_part)
+                hours = int(time_part)
+
+                self.GAME_LOG.add_log_message(f"You work a {hours} hour shift...")
+                advance_game_time(hours * 60)
+
+                # Apply fatigue
+                self.player.energy = max(0, self.player.energy - (10 * hours))
+                self.player.stress = min(100, self.player.stress + (5 * hours))
+                self.player.hunger = min(100, self.player.hunger + (5 * hours)) # Work makes you hungry
+
+                self.player.money += earnings
+                self.GAME_LOG.add_log_message(f"Shift complete. You earned ${earnings}. (Energy -{10*hours}, Stress +{5*hours})")
+            except Exception as e:
+                self.GAME_LOG.add_log_message(f"Error starting shift: {e}")
+        elif interaction_text == "Repair Instrument":
+            # Simple repair all for now or submenu? Let's do simple repair mechanics.
+            # Find broken/damaged instruments
+            damaged = [i for i in self.player.gear_inventory if i.durability < 100 and "INSTRUMENT" in i.gear_type]
+            if not damaged:
+                self.GAME_LOG.add_log_message("You don't have any damaged instruments.")
+            else:
+                # Calculate total cost
+                total_cost = sum([int((100 - i.durability) * 0.5) for i in damaged]) # $0.5 per point
+                if total_cost == 0: total_cost = 5 # Minimum bench fee
+
+                if self.player.money >= total_cost:
+                    self.player.money -= total_cost
+                    for i in damaged:
+                        i.repair()
+                    self.GAME_LOG.add_log_message(f"Repaired {len(damaged)} instruments for ${total_cost}.")
+                else:
+                    self.GAME_LOG.add_log_message(f"Repair costs ${total_cost}. You can't afford it.")
         elif interaction_text.startswith("Submit Demo"):
             min_fame = self.selected_poi.min_fame_to_submit
             if self.player.fame >= min_fame:
@@ -1229,6 +1523,10 @@ class Game:
             stress_from_starvation_hourly_rate = 2.0
             player.stress = min(100, player.stress + (hours_passed_float * stress_from_starvation_hourly_rate))
             player.stress = int(round(player.stress))
+            # Starvation saps energy rapidly
+            energy_loss_starvation = 5.0 * hours_passed_float
+            player.energy = max(0, player.energy - energy_loss_starvation)
+            player.energy = int(round(player.energy))
 
         POINTS_PER_DAY_HAIR = 10.0; POINTS_PER_DAY_BEARD = 12.5
         hair_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_HAIR
@@ -1747,10 +2045,27 @@ class Game:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
         elif self.character_menu_state == "inventory":
-            self.ui.draw_inventory_screen(self.player)
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.character_menu_state = "main"
+            # Pass game state logic to draw_inventory to handle input
+            # Or handle input here.
+            # Ideally UI just draws. Let's make a new state for "using" items if needed.
+            # For now, let's allow selecting an item to use.
+
+            # Simple list of items
+            inventory_options = {str(i): f"{item.name} ({item.gear_type})" for i, item in enumerate(self.player.gear_inventory)}
+            inventory_options["back"] = "Back"
+
+            choice = self.ui.present_choices(inventory_options, "Inventory - Select item to use/inspect:")
+
+            if choice == "back":
+                self.character_menu_state = "main"
+            else:
+                selected_item = self.player.gear_inventory[int(choice)]
+                if selected_item.gear_type == "FOOD":
+                    self.GAME_LOG.add_log_message(f"Using {selected_item.name}...")
+                    success, msg = self.player.consume_item(selected_item)
+                    self.GAME_LOG.add_log_message(msg)
+                else:
+                    self.GAME_LOG.add_log_message(f"You inspect {selected_item.name}. It looks fine.")
 
     def save_game(self, filename="savegame.dat"):
         save_data = {
@@ -1825,6 +2140,7 @@ class Game:
                     self.web_menu_state = "main"
 
     def handle_performance_scene(self):
+        # 1. Selection Phase
         if self.performance_stage == "choose_song":
             if not self.player.songs_written:
                 self.GAME_LOG.add_log_message("You have no songs to perform!")
@@ -1839,105 +2155,52 @@ class Game:
                 self.game_state = "explore"
             else:
                 selected_song = self.player.songs_written[int(choice)]
-                self.active_performance.song_to_perform = selected_song # Store it
-                self.performance_stage = "intro"
-                self.performance_log = [f"You take the stage at {self.active_performance.location.name} for {self.active_performance.name}...",
-                                        f"You've decided to play '{selected_song.title}'."]
+                self.active_performance.song_to_perform = selected_song
+                # Initialize Manager
+                self.performance_manager = PerformanceManager(self, self.active_performance, selected_song, self.ui)
+                self.performance_manager.state = "player_input" # Start game
+                self.performance_stage = "playing"
 
-        elif self.performance_stage == "intro":
-            # This is a timed, non-interactive stage
-            self.ui.clear_screen()
-            venue_id = self.active_performance.location.venue_id
-            art_to_display = ART.get(venue_id, ART['default'])
-            self.ui.draw_ascii_art(art_to_display, 300, 150)
-            # Display the log
-            for i, line in enumerate(self.performance_log):
-                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
-            self.ui.update_display()
-            pygame.time.wait(2000) # Pause for 2 seconds
+        # 2. Playing Phase (Delegated to Manager)
+        elif self.performance_stage == "playing":
+            if self.performance_manager.state == "player_input":
+                # Present choices via main loop's UI helper
+                actions = {
+                    "safe": "Play it Safe (Low Risk)",
+                    "hype": "Hype the Crowd (Med Risk, High Hype)",
+                    "solo": "Improvise Solo (High Risk, High Reward)"
+                }
+                self.performance_manager.draw_screen()
+                choice = self.ui.present_choices(actions, f"Action for {self.performance_manager.get_current_section()}:")
+                self.performance_manager.handle_input(choice)
 
-            # Skill check for the intro
-            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
-            performance_score = 0
-            if skills_to_use.get('stage_presence', 0) > 5:
-                self.performance_log.append("The band looks confident on stage.")
-                performance_score += 10
-            else:
-                self.performance_log.append("You nervously approach the mic.")
-                performance_score -= 5
-            self.performance_stage = "verse_1"
+            elif self.performance_manager.state == "resolution":
+                self.performance_manager.draw_screen()
+                # Wait for user acknowledgment
+                # We can use a simple wait loop or a present_choice with just "Continue"
+                self.ui.present_choices({"ok": "Continue"}, "Result")
+                self.performance_manager.handle_input("ok") # Advance state
 
-        elif self.performance_stage == "verse_1":
-            self.ui.clear_screen()
-            venue_id = self.active_performance.location.venue_id
-            art_to_display = ART.get(venue_id, ART['default'])
-            self.ui.draw_ascii_art(art_to_display, 300, 150)
-            # Display the log
-            for i, line in enumerate(self.performance_log):
-                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
-            self.ui.update_display()
-            pygame.time.wait(2000)
+            elif self.performance_manager.state == "summary":
+                self.performance_manager.draw_screen()
+                self.ui.present_choices({"finish": "Finish Show"}, "Performance Complete")
+                self.performance_stage = "finish"
 
-            # Skill check for vocals
-            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
-            song = self.active_performance.song_to_perform
-            if (skills_to_use.get('vocals', 0) + song.song_quality * 50) > 30:
-                self.performance_log.append("The vocals are clear and hit all the right notes.")
-                performance_score += 20
-            else:
-                self.performance_log.append("The vocals are a bit shaky, but the band pushes through.")
-                performance_score += 5
+        # 3. Completion Phase
+        elif self.performance_stage == "finish":
+            # Calculate Rewards based on final hype
+            final_hype = self.performance_manager.crowd_hype
+            money_gain = int(final_hype * 2) + 50
+            fame_gain = int(final_hype / 5)
 
-            self.active_performance.performance_score = performance_score # Store score
-            self.performance_stage = "outro"
-
-        elif self.performance_stage == "outro":
-            self.ui.clear_screen()
-            venue_id = self.active_performance.location.venue_id
-            art_to_display = ART.get(venue_id, ART['default'])
-            self.ui.draw_ascii_art(art_to_display, 300, 150)
-            # Display the log
-            for i, line in enumerate(self.performance_log):
-                self.ui.draw_text(line, FONT_LOG, WHITE, 50, 500 + i * 25)
-            self.ui.update_display()
-            pygame.time.wait(2000)
-
-            # Final skill check
-            skills_to_use = self.player.band.band_skills if self.player.band else self.player.skills
-            performance_score = self.active_performance.performance_score
-            if (skills_to_use.get('guitar', 0) + skills_to_use.get('stage_presence', 0)) > 10:
-                self.performance_log.append("The band finishes with a flourish! The crowd applauds.")
-                performance_score += 15
-            else:
-                self.performance_log.append("The song ends. A few people clap politely.")
-                performance_score += 5
-
-            # Final rewards
-            if self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
-                if performance_score > 40:
-                    self.GAME_LOG.add_log_message("You won the Battle of the Bands!")
-                    fame_gain = 50
-                    money_gain = 500
-                else:
-                    self.GAME_LOG.add_log_message("You didn't win, but you put on a good show.")
-                    fame_gain = 15
-                    money_gain = 50
-            else: # Default for Open Mic
-                fame_gain = int(performance_score / 5)
-                money_gain = int(performance_score / 2)
-
-            self.player.fame += fame_gain
             self.player.money += money_gain
-            self.GAME_LOG.add_log_message(f"Performance complete! You earned ${money_gain} and {fame_gain} fame.")
+            self.player.fame += fame_gain
+
+            self.GAME_LOG.add_log_message(f"Show over! The crowd hype reached {final_hype}/100.")
+            self.GAME_LOG.add_log_message(f"You earned ${money_gain} and {fame_gain} Fame.")
 
             # Cleanup
-            if self.active_performance.is_tour_gig:
-                if self.player.current_tour_id:
-                    self.player.tour_ledgers[self.player.current_tour_id]['completed_gigs'].append(self.active_performance.event_id)
-                    self.player.tour_ledgers[self.player.current_tour_id]['income'] += money_gain
-            elif self.active_performance.event_type == "BATTLE_OF_THE_BANDS":
-                self.player.active_opportunities["battle_of_the_bands_local"] = "completed"
+            self.performance_manager = None
             self.active_performance = None
-            self.performance_log = []
             self.performance_stage = None
             self.game_state = "explore"
