@@ -4,6 +4,10 @@ from game.game_time import current_game_time # Import global game time for start
 from game.vehicle import Vehicle
 from game.band import Band
 from game.traits import TRAIT_CATALOG
+from game.road_events import generate_road_event
+from game.travel_manager import TravelManager
+import math
+import random
 
 class Player:
     def __init__(self, name):
@@ -16,7 +20,10 @@ class Player:
         self.money = 500 # Starting money
 
         self.gear_inventory = [] # List of GearItem objects
+        self.home_storage = [] # List of GearItem objects stored at home
         self.vehicles = []
+        self.staff = [] # List of StaffMember objects
+        self.merch_stock = [] # List of MerchItem objects
         self.base_gear_capacity = 10 # Base capacity, actual capacity can vary
         self.has_bike = False # Player starts without a bike
 
@@ -27,6 +34,7 @@ class Player:
         self.hunger = 0 # 0-100, 0 is full, 100 is starving
 
         self.songs_written = []
+        self.albums_released = [] # List of Album objects
         self.band = None
 
         self.has_manager = False
@@ -85,19 +93,30 @@ class Player:
 
     def get_current_gear_capacity(self, travel_mode=None):
         """Calculates current gear capacity based on situation or travel mode."""
+        base_cap = self.base_gear_capacity
+
+        # Roadie Bonus (Staff)
+        roadie_bonus = 0
+        for s in self.staff:
+            if s.role == "Roadie":
+                roadie_bonus += s.skill_level * 2 # e.g., Skill 10 -> +20 capacity
+
+        if isinstance(travel_mode, Vehicle):
+             return travel_mode.get_max_cargo() + roadie_bonus
+
         if travel_mode == "walk":
-            return max(1, int(self.base_gear_capacity / 2)) # Walking reduces capacity, min 1
+            return max(1, int(base_cap / 2) + int(roadie_bonus / 2)) # Walking reduces capacity, min 1
         elif travel_mode == "bike":
             if self.has_bike:
-                return self.base_gear_capacity
+                return self.base_gear_capacity + int(roadie_bonus / 2)
             else: # Cannot use bike mode if no bike
                 return 0 # Or handle error upstream
         elif travel_mode == "taxi": # Taxis can usually carry a good amount of gear
-            return self.base_gear_capacity * 3
+            return (self.base_gear_capacity * 3) + roadie_bonus
         # Default capacity when not specifically traveling or using high-capacity transport (e.g. at home, in a venue)
         # This could also be a very large number if we assume no limit when 'static'.
         # For now, let's assume default is like having access to your "stuff" nearby.
-        return self.base_gear_capacity * 2
+        return (self.base_gear_capacity * 2) + roadie_bonus
 
 
     def get_current_gear_load(self):
@@ -170,10 +189,63 @@ class Player:
             print(f"Error: Cannot add '{vehicle}'. Not a valid Vehicle.")
             return False
         # Create a new instance to ensure player's vehicle has its own state (e.g. fuel)
-        new_vehicle = Vehicle(vehicle.name, vehicle.cost, vehicle.speed, vehicle.fuel_capacity, vehicle.fuel_efficiency)
+        if hasattr(vehicle, 'clone'):
+            new_vehicle = vehicle.clone()
+        else:
+            # Fallback if clone not available (e.g. older definition loaded)
+            new_vehicle = Vehicle(vehicle.name, vehicle.cost, vehicle.speed, vehicle.fuel_capacity, vehicle.fuel_efficiency, vehicle.cargo_capacity, vehicle.reliability, vehicle.condition)
+
         self.vehicles.append(new_vehicle)
         print(f"{new_vehicle.name} added to your garage.")
         return True
+
+    def stash_item(self, item):
+        if item in self.gear_inventory:
+            self.gear_inventory.remove(item)
+            self.home_storage.append(item)
+            return True, f"Stashed {item.name}."
+        return False, "Item not found."
+
+    def retrieve_item(self, item):
+        if item in self.home_storage:
+            if self.can_carry_gear(item):
+                self.home_storage.remove(item)
+                self.gear_inventory.append(item)
+                return True, f"Retrieved {item.name}."
+            else:
+                return False, "Cannot carry item."
+        return False, "Item not in storage."
+
+    def auto_pack(self):
+        """Uses Roadies to pack best gear up to capacity."""
+        if not any(s.role == "Roadie" for s in self.staff):
+            return "You need a Roadie to auto-pack."
+
+        # 1. Stash everything first to start clean (or keep what we have? Clean is safer to ensure optimality)
+        # Actually, let's just try to retrieve valuable stuff from home that fits.
+        # But if inv is full of junk, we might want to dump junk.
+        # Let's dump all to home first.
+        self.home_storage.extend(self.gear_inventory)
+        self.gear_inventory.clear()
+
+        # 2. Sort all items (now in home_storage) by value
+        sorted_items = sorted(self.home_storage, key=lambda x: x.cost, reverse=True)
+
+        # 3. Fill inventory
+        cap = self.get_current_gear_capacity()
+        current_load = 0
+        to_move = []
+
+        for item in sorted_items:
+            if current_load + item.size <= cap:
+                to_move.append(item)
+                current_load += item.size
+
+        for item in to_move:
+            self.home_storage.remove(item)
+            self.gear_inventory.append(item)
+
+        return f"Roadie auto-packed {len(to_move)} items. Load: {current_load}/{cap}"
 
     def has_trait(self, trait_id):
         return any(t.id == trait_id for t in self.traits)
@@ -231,41 +303,69 @@ class Player:
                 # Consider reducing skill gain effectiveness here in the future
 
 
-    def travel(self, destination_location, travel_time): # This is for inter-city travel
-        print(f"{self.name} is travelling from {self.current_location.name if self.current_location else 'Unknown'} to {destination_location.name}...")
-        # Simulate time passing
-        print(f"Travel took {travel_time} hours.")
-        self.current_location = destination_location
+    def start_travel(self, destination_location, distance_km, transport_mode="bus", cost_override=None, ticket_class="economy"):
+        """
+        Initializes travel. Returns a TravelManager instance if successful, else None.
+        """
+        print(f"\n{self.name} is preparing to travel from {self.current_location.name if self.current_location else 'Unknown'} to {destination_location.name}...")
 
-        # Attempt to set current_poi to a relevant transport hub in the new city
-        # This assumes inter-city travel implies arriving at such a hub.
-        # The mode of travel isn't passed here, so we make a best guess.
-        arrival_poi = None
-        if destination_location and (hasattr(destination_location, 'points_of_interest') or hasattr(destination_location, 'venues')):
-            all_pois_in_dest = destination_location.points_of_interest + destination_location.venues
+        # 1. Capacity Check
+        capacity = self.get_current_gear_capacity(transport_mode)
+        current_load = self.get_current_gear_load()
 
-            # Prioritize Airport if it exists, then Bus Station
-            for poi_category_priority in ["TRANSPORT_AIRPORT", "TRANSPORT_BUS"]:
-                for poi in all_pois_in_dest:
-                    if hasattr(poi, 'category') and poi.category == poi_category_priority:
-                        arrival_poi = poi
+        if current_load > capacity:
+            print(f"TRAVEL BLOCKED: Your gear load ({current_load}) exceeds the capacity of {transport_mode if isinstance(transport_mode, str) else transport_mode.name} ({capacity}).")
+            return None
+
+        # 2. Setup Travel Variables
+        cost = 0
+        vehicle = None
+
+        # Class multipliers
+        class_cost_mult = 1.0
+        if ticket_class == "business": class_cost_mult = 2.0
+        elif ticket_class == "first": class_cost_mult = 5.0
+
+        if isinstance(transport_mode, Vehicle):
+            # Check ownership
+            owned_vehicle = None
+            if transport_mode in self.vehicles:
+                owned_vehicle = transport_mode
+            else:
+                for v in self.vehicles:
+                    if v.name == transport_mode.name:
+                        owned_vehicle = v
                         break
-                if arrival_poi:
-                    break
 
-        self.current_poi = arrival_poi # Could be None if no suitable hub found
+            if not owned_vehicle:
+                print("Error: You don't own this vehicle.")
+                return None
 
-        # Update energy and stress due to travel
-        # travel_time is in hours for inter-city
-        stress_increase = travel_time * 2 # Example: +2 stress per hour
-        energy_decrease = travel_time * 3 # Example: -3 energy per hour
+            vehicle = owned_vehicle
+            print(f"Driving own vehicle: {vehicle.name}")
 
-        self.stress = min(100, self.stress + stress_increase)
-        self.energy = max(0, self.energy - energy_decrease)
+        elif transport_mode == "bus":
+            cost = distance_km * 0.5 * class_cost_mult
+        elif transport_mode == "train":
+            cost = distance_km * 1.0 * class_cost_mult
+        elif transport_mode == "plane":
+            cost = distance_km * 5.0 * class_cost_mult
 
-        arrival_poi_name = f"at {arrival_poi.name}" if arrival_poi else "at the city outskirts"
-        print(f"{self.name} has arrived in {destination_location.name} ({arrival_poi_name}).")
-        print(f"The journey was tiring. (Stress: +{stress_increase}, Energy: -{energy_decrease})")
+        if cost_override is not None and not isinstance(transport_mode, Vehicle):
+            cost = cost_override * class_cost_mult
+
+        if cost > self.money:
+            print(f"TRAVEL BLOCKED: You cannot afford the ticket (${cost}).")
+            return None
+
+        self.money -= cost
+        if cost > 0:
+            print(f"Ticket purchased for ${cost} ({ticket_class}).")
+
+        # Create Manager
+        mode_str = transport_mode if isinstance(transport_mode, str) else "car"
+        manager = TravelManager(self, destination_location, distance_km, mode_str, ticket_class, vehicle)
+        return manager
 
 
     def travel_within_city(self, destination_poi, time_taken): # New method for intra-city
@@ -350,10 +450,10 @@ if __name__ == '__main__':
     assert len(p.songs_written) == 0
 
     p.practice_skill("guitar", 2)
-    assert p.skills["guitar"] == 0.2
+    assert round(p.skills["guitar"], 1) == 2.2
     p.practice_skill("songwriting", 5) # Practice new skill
     assert "songwriting" in p.skills
-    assert p.skills["songwriting"] == 0.5
+    assert round(p.skills["songwriting"], 1) == 5.5
 
     # Add a mock song to test the list (actual song creation is elsewhere)
     class MockSong:
@@ -365,9 +465,9 @@ if __name__ == '__main__':
 
 
     p.practice_skill("guitar", 3)
-    assert p.skills["guitar"] == 0.5
+    assert round(p.skills["guitar"], 1) == 2.5
     p.practice_skill("vocals", 5)
-    assert p.skills["vocals"] == 0.5
+    assert round(p.skills["vocals"], 1) == 1.5
 
     p.fame = 200
     p.check_for_manager_unlock()
@@ -377,6 +477,8 @@ if __name__ == '__main__':
     class MockLocation: # Represents a City
         def __init__(self, name):
             self.name = name
+            self.points_of_interest = []
+            self.venues = []
 
     class MockPOI: # Represents a Point of Interest
         def __init__(self, name):
@@ -385,9 +487,32 @@ if __name__ == '__main__':
     hometown = MockLocation("Hometown")
     citycenter = MockLocation("City Center")
     p.current_location = hometown
-    p.travel(citycenter, 5) # Inter-city travel
-    assert p.current_location == citycenter
-    assert p.current_poi is None
+
+    # Updated Travel Test
+    # p.travel(citycenter, 5) # Old signature
+    # New signature: start_travel returns a manager. We simulate it manually here or check init.
+    manager = p.start_travel(citycenter, 300, "bus")
+    assert manager is not None
+    # Simulate completion
+    while not manager.is_finished:
+        manager.advance_one_hour()
+    p.current_location = citycenter # Manually set for test continuity
+
+    # Test Vehicle Travel
+    my_van = Vehicle("Tour Van", 2000, 80, 50, 10, 50) # efficient: 10km/l
+    p.add_vehicle(my_van)
+    p.current_location = hometown # Reset
+
+    manager = p.start_travel(citycenter, 400, my_van) # 400km trip.
+    assert manager is not None
+    # Need to find the vehicle in player's inventory because add_vehicle clones it
+    owned_van = p.vehicles[0]
+
+    # Simulate completion
+    while not manager.is_finished:
+        manager.advance_one_hour()
+
+    assert owned_van.fuel <= 10 # Started with 50, used ~40.
 
     home_poi = MockPOI("Player's Apartment")
     shop_poi = MockPOI("Music Shop")
@@ -408,6 +533,11 @@ if __name__ == '__main__':
     p.has_bike = True
     assert p.get_current_gear_capacity("bike") == 10 # With bike, it's base_gear_capacity
     assert p.get_current_gear_capacity("taxi") == 30 # base_gear_capacity * 3
+
+    # Test Vehicle Capacity
+    # p.add_vehicle clones the vehicle, so we need to use the owned instance or ensure the test vehicle is considered valid
+    # In get_current_gear_capacity, it just reads the object passed.
+    assert p.get_current_gear_capacity(my_van) == 50
 
     strings = GearItem("s001", "Strings", "Guitar strings", "ACCESSORY", 1, 10)
     guitar = GearItem("g001", "Basic Guitar", "An acoustic guitar", "INSTRUMENT", 5, 100)

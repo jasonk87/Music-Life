@@ -33,6 +33,25 @@ class NPC:
         self.tour_end_date = None
         self.traits = [] # List of Trait objects
 
+        # Band Mechanics
+        self.ego = 50 # 0-100. Higher ego = harder to please, demands more spotlight
+        self.satisfaction = 75 # 0-100. Current happiness in band. < 20 risks quitting.
+        self.wage_demand = 0 # Weekly salary expectation
+        self.creative_control_desire = 50 # 0-100. Need to be involved in songwriting.
+
+        # Producer Mechanics
+        self.production_style = None # "Polished", "Raw", "Experimental" if NPC is a producer
+
+        # Dynamic World / Scene
+        self.band_name = None # Name of the band they belong to (if any)
+        self.fame = 0 # Individual fame
+        self.reputation = 0 # -100 to 100 (Heel vs Face)
+
+        # Romance
+        self.romance_status = "Single" # "Single", "Dating", "Married"
+        self.romance_partner_id = None
+        self.romance_interest = 0 # 0-100 Interest in Player
+
     def __str__(self):
         return f"NPC: {self.name} (ID: {self.npc_id}, Personality: {self.personality_key}, Relationship: {self.relationship_with_player.name} ({self.relationship_score}))"
 

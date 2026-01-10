@@ -29,6 +29,14 @@ from game.sound import SoundManager
 from game.ascii_art import ART
 from game.performance import PerformanceManager
 from game.trends import TrendManager
+from game.band_drama import check_for_band_drama, resolve_weekly_wages
+from game.staff import StaffMember
+from game.themes import THEME_CATALOG
+from game.album import Album
+from game.marketing import CAMPAIGN_TYPES, run_marketing_campaign
+from game.merch import MerchItem, MERCH_TEMPLATES
+from game.rivals import simulate_rivals, get_news_feed
+from game.celebrity_events import check_for_celebrity_event
 
 class Game:
     def __init__(self, ui):
@@ -45,6 +53,7 @@ class Game:
         self.text_to_view = ""
         self.active_performance = None
         self.performance_manager = None # Added manager
+        self.travel_manager = None # Added travel manager
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
@@ -342,6 +351,8 @@ class Game:
                         self.GAME_LOG.add_log_message("Check your phone for more details.")
 
         # Check for manager-driven tour opportunities
+        # TODO: Refactor has_manager to check staff list for 'Manager' role if desired,
+        # but maintaining compatibility with existing boolean for now.
         if self.player.has_manager and not self.player.current_tour_id:
             # Simple logic: offer a tour if fame is high enough and not already on tour.
             for tour in self.TOURS:
@@ -470,8 +481,38 @@ class Game:
             if (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
                 self.GAME_LOG.add_log_message("--- Weekly World Update ---")
 
+                # Band Wages
+                wage_report = resolve_weekly_wages(self.player, self.player.band)
+                if wage_report:
+                     self.GAME_LOG.add_log_message("--- Band Wages ---")
+                     for line in wage_report.split('\n'):
+                         self.GAME_LOG.add_log_message(line)
+
+                # Staff Wages
+                total_staff_wages = sum(s.wage_per_week for s in self.player.staff)
+                if total_staff_wages > 0:
+                    if self.player.money >= total_staff_wages:
+                        self.player.money -= total_staff_wages
+                        self.GAME_LOG.add_log_message(f"Paid staff wages: ${total_staff_wages}")
+                    else:
+                        # Unpaid staff leave?
+                        self.GAME_LOG.add_log_message(f"Could not pay staff (${total_staff_wages}). They have quit!")
+                        self.player.staff = []
+
                 # NPCs progress in their careers
                 self.update_npc_careers()
+
+                # Rival Simulation
+                simulate_rivals(self.NPC_REGISTRY)
+
+                # Celebrity Events
+                cel_evt = check_for_celebrity_event(self.player)
+                if cel_evt:
+                    self.GAME_LOG.add_log_message(f"INVITE: {cel_evt['desc']}")
+                    # Auto-accept for now or add to opportunities?
+                    # Let's add fame immediately as 'attendance' abstractly
+                    self.player.fame += cel_evt['fame_gain']
+                    self.GAME_LOG.add_log_message(f"You attended and gained {cel_evt['fame_gain']} Fame!")
 
                 # Update Trends
                 shift_happened = self.trend_manager.update_weekly()
@@ -508,6 +549,11 @@ class Game:
                             if gift_item:
                                 self.player.add_gear(gift_item)
                                 self.GAME_LOG.add_log_message(f"MSG from {npc.name}: 'Hey, saw this and thought of you!' (Received {gift_item.name})")
+
+                # Check for Band Drama (Daily)
+                drama_result = check_for_band_drama(self.player, self.player.band)
+                if drama_result['event_triggered']:
+                    self.GAME_LOG.add_log_message(f"BAND DRAMA: {drama_result['message']}")
 
                 # Gather all released songs in the world
                 all_released_songs = list(self.player.songs_written)
@@ -606,6 +652,8 @@ class Game:
                 self.handle_text_viewer()
             elif self.game_state == "performance":
                 self.handle_performance_scene()
+            elif self.game_state == "travel_active":
+                self.handle_travel_active_state()
 
             self.ui.update_display()
 
@@ -810,7 +858,17 @@ class Game:
                     self.songwriting_stage = None
                 else:
                     self.song_in_progress['genre'] = choice
-                    self.songwriting_stage = "get_title"
+                    self.songwriting_stage = "choose_theme"
+
+            elif self.songwriting_stage == "choose_theme":
+                theme_options = {k: f"{v['name']} ({v['description']})" for k, v in THEME_CATALOG.items()}
+                theme_options["none"] = "No specific theme"
+
+                choice = self.ui.present_choices(theme_options, "Choose a lyrical theme:")
+                if choice != "none":
+                    self.song_in_progress['theme'] = choice
+
+                self.songwriting_stage = "get_title"
 
             elif self.songwriting_stage == "get_title":
                 song_title = self.ui.get_text_input("Enter a title for your new song:")
@@ -913,12 +971,23 @@ class Game:
                 # This is also a non-interactive stage
                 title = self.song_in_progress.get('title', 'Untitled')
                 genre = self.song_in_progress.get('genre', 'Rock')
+                theme = self.song_in_progress.get('theme', None)
                 author = self.player.name
 
                 originality=self.song_in_progress.get('originality', 0.5)
                 catchiness=self.song_in_progress.get('catchiness', 0.5)
                 lyrical_depth=self.song_in_progress.get('lyrical_depth', 0.5)
                 music_complexity=self.song_in_progress.get('music_complexity', 0.5)
+
+                # Apply Theme Bonus
+                if theme:
+                    t_data = THEME_CATALOG.get(theme)
+                    if t_data and genre in t_data['genre_affinity']:
+                        bonus = t_data['bonus_multiplier']
+                        # Bonus applies to specific stats or overall quality. Let's boost stats.
+                        originality = min(1.0, originality * bonus)
+                        lyrical_depth = min(1.0, lyrical_depth * bonus)
+                        self.GAME_LOG.add_log_message(f"Theme '{t_data['name']}' fits {genre} perfectly! (Quality Bonus)")
 
                 featured_artist_id = self.song_in_progress.get('featured_artist_id')
                 if featured_artist_id:
@@ -939,7 +1008,8 @@ class Game:
                     originality=originality,
                     catchiness=catchiness,
                     lyrical_depth=lyrical_depth,
-                    music_complexity=music_complexity
+                    music_complexity=music_complexity,
+                    theme=theme
                 )
 
                 self.player.songs_written.append(new_song)
@@ -1050,11 +1120,31 @@ class Game:
                 else:
                     selected_song = unrecorded_songs[int(choice)]
                     studio_quality = self.selected_poi.studio_quality
+
+                    # Producer Selection (Simplified: Check contacts for producers)
+                    # For now, just generate a random local producer to hire for extra cost
+                    prod_options = {
+                        "none": "Self-Produced (No Cost)",
+                        "local": "Hire Local Producer (+$200, +Quality)",
+                        "pro": "Hire Pro Producer (+$1000, ++Quality)"
+                    }
+                    prod_choice = self.ui.present_choices(prod_options, "Select Producer:")
+
+                    prod_cost = 0
+                    prod_bonus = 0.0
+
+                    if prod_choice == "local":
+                        prod_cost = 200
+                        prod_bonus = 0.1
+                    elif prod_choice == "pro":
+                        prod_cost = 1000
+                        prod_bonus = 0.25
+
                     # Let's say a session is 4 hours
-                    session_cost = self.selected_poi.hourly_rate * 4
+                    session_cost = (self.selected_poi.hourly_rate * 4) + prod_cost
 
                     if self.player.money < session_cost:
-                        self.GAME_LOG.add_log_message(f"You can't afford the ${session_cost} session fee.")
+                        self.GAME_LOG.add_log_message(f"You can't afford the ${session_cost} total cost.")
                         self.explore_menu_state = "poi"
                         return
 
@@ -1068,10 +1158,12 @@ class Game:
                     # Skill adds a bonus. Let's use 'guitar' skill for now.
                     skill_bonus = self.player.skills.get('guitar', 0) / 100.0 # e.g., 10 skill = 0.1 bonus
 
-                    final_quality = min(1.0, base_quality + skill_bonus)
+                    final_quality = min(1.0, base_quality + skill_bonus + prod_bonus)
 
                     selected_song.mark_as_recorded(final_quality)
                     self.GAME_LOG.add_log_message(f"'{selected_song.title}' is now recorded! Recording Quality: {final_quality:.2f}")
+                    if prod_choice != "none":
+                        self.GAME_LOG.add_log_message(f"Producer's touch added {prod_bonus:.2f} quality!")
                     self.explore_menu_state = "poi"
             else:
                 # Should not happen if triggered correctly
@@ -1102,6 +1194,7 @@ class Game:
                 interaction_opts = {
                     "chat": "Chat",
                     "gift": "Give Gift",
+                    "flirt": "Flirt",
                     "jam": "Jam Session (Requires Instrument)",
                     "back": "Back"
                 }
@@ -1117,6 +1210,16 @@ class Game:
                     self.player_input = ""
                 elif choice == "gift":
                     self.explore_menu_state = "gifting"
+                elif choice == "flirt":
+                    # Simple romance logic
+                    roll = random.random()
+                    if roll < 0.3 + (self.selected_npc.romance_interest / 100.0):
+                        self.selected_npc.romance_interest += 10
+                        self.GAME_LOG.add_log_message(f"You flirted with {self.selected_npc.name}. They blushed! (Interest: {self.selected_npc.romance_interest})")
+                        self.selected_npc.romance_status = "Dating" # Fast track for demo
+                    else:
+                        self.GAME_LOG.add_log_message(f"You flirted with {self.selected_npc.name}. They didn't seem interested.")
+                    self.explore_menu_state = "poi"
                 elif choice == "jam":
                     self.handle_jam_session(self.selected_npc)
                     # Stay in menu or go back? Let's go back to see the result log clearly.
@@ -1458,22 +1561,57 @@ class Game:
             dest_choice = self.ui.present_choices(dest_opts, f"Departures from {self.player.current_poi.name}")
             if dest_choice != "back":
                 travel_details = connections[dest_choice]
-                if self.player.money >= travel_details['cost']:
-                    self.player.money -= travel_details['cost']
+
+                # Ticket Class Selection
+                ticket_class = "economy"
+                if not selected_vehicle and self.player.current_poi.category in ["TRANSPORT_AIRPORT", "TRANSPORT_BUS"]:
+                    class_opts = {
+                        "economy": f"Economy (${travel_details['cost']})",
+                        "business": f"Business (${travel_details['cost']*2}) - Less Stress",
+                        "first": f"First Class (${travel_details['cost']*5}) - Comfort"
+                    }
+                    ticket_class = self.ui.present_choices(class_opts, "Select Ticket Class")
+
+                # Check money for public transport here (approx check)
+                base_cost = travel_details['cost']
+                multiplier = 1
+                if ticket_class == "business": multiplier = 2
+                elif ticket_class == "first": multiplier = 5
+
+                can_afford_ticket = True
+                if not selected_vehicle:
+                     if self.player.money < base_cost * multiplier:
+                         can_afford_ticket = False
+
+                if can_afford_ticket:
                     dest_loc_obj = self.WORLD_MAP.get(dest_choice)
                     if dest_loc_obj:
-                        travel_time = travel_details['time_hours']
-                        if selected_vehicle:
-                            travel_time /= selected_vehicle.speed
+                        # Estimate distance from time (assuming 60km/h average for generic "time_hours" in data)
+                        estimated_distance = travel_details['time_hours'] * 60.0
 
-                        self.player.travel(dest_loc_obj, travel_time)
-                        advance_game_time(travel_time * 60)
-                        self.update_npc_locations(current_game_time)
-                        self.process_time_based_player_needs(self.player, travel_time * 60)
-                        self.GAME_LOG.add_log_message(f"You travelled to {dest_choice}.")
+                        transport_mode = selected_vehicle if selected_vehicle else "bus" # Default to bus if no vehicle
+                        if "method" in travel_details:
+                            transport_mode = travel_details["method"].lower() if not selected_vehicle else selected_vehicle
+                        elif self.player.current_poi.category == "TRANSPORT_AIRPORT" and not selected_vehicle:
+                            transport_mode = "plane"
+
+                        cost_override = None
+                        if not selected_vehicle:
+                            cost_override = travel_details['cost']
+
+                        # Initialize Travel
+                        self.travel_manager = self.player.start_travel(dest_loc_obj, estimated_distance, transport_mode, cost_override, ticket_class)
+
+                        if self.travel_manager:
+                            self.game_state = "travel_active"
+                            self.GAME_LOG.add_log_message(f"Departing for {dest_loc_obj.name}...")
+                        else:
+                            self.GAME_LOG.add_log_message("Travel initiation failed.")
                 else:
                     self.GAME_LOG.add_log_message("You can't afford to travel.")
-            self.game_state = "main_menu"
+
+            if self.game_state != "travel_active":
+                self.game_state = "main_menu"
 
     def rest(self, hours=8):
         self.GAME_LOG.add_log_message(f"You rest for {hours} hours.")
@@ -1702,11 +1840,15 @@ class Game:
     def handle_phone_menu(self):
         if self.phone_menu_state == "main":
             phone_menu_opts = {
+                "news": "Read News Feed",
                 "schedule": "Schedule",
                 "music": "Music",
                 "contacts": "Contacts",
                 "web": "Web",
             }
+            if self.player.has_manager:
+                phone_menu_opts["agent"] = "Call Agent"
+
             # Add dynamic opportunities
             if self.player.pending_contracts:
                 phone_menu_opts["label_offers"] = f"View Record Deal Offer ({len(self.player.pending_contracts)})"
@@ -1743,8 +1885,24 @@ class Game:
                 # Handle the selected opportunity
                 self.handle_opportunity(choice)
                 self.phone_menu_state = "main" # Return to phone menu
+            elif choice == "agent":
+                self.phone_menu_state = "agent"
+            elif choice == "news":
+                self.phone_menu_state = "news"
             else:
                 self.phone_menu_state = choice
+        elif self.phone_menu_state == "news":
+            feed = get_news_feed()
+            if not feed:
+                info = "No news yet."
+            else:
+                info = "--- LATEST NEWS ---\n" + "\n".join(feed[:10])
+
+            self.ui.present_choices({"back": "Back"}, info)
+            self.phone_menu_state = "main"
+
+        elif self.phone_menu_state == "agent":
+            self.handle_agent_menu()
         elif self.phone_menu_state == "contacts":
             self.handle_contacts_menu()
         elif self.phone_menu_state == "schedule":
@@ -1765,6 +1923,7 @@ class Game:
             contract = self.player.pending_contracts[0]
             offer_options = {
                 "accept": "Accept Offer",
+                "negotiate": f"Negotiate Terms ({contract.label_patience} attempts left)",
                 "decline": "Decline Offer",
                 "back": "Decide later"
             }
@@ -1783,6 +1942,13 @@ class Game:
                 self.GAME_LOG.add_log_message(f"You signed with {contract.label_name}! You received an advance of ${contract.advance_money}.")
                 self.player.pending_contracts.clear()
                 self.phone_menu_state = "main"
+            elif choice == "negotiate":
+                has_charisma = self.player.has_trait("charismatic")
+                success, msg, pulled = contract.negotiate(self.player.fame, has_charisma)
+                self.GAME_LOG.add_log_message(msg)
+                if pulled:
+                    self.player.pending_contracts.pop(0)
+                    self.phone_menu_state = "main"
             elif choice == "decline":
                 self.GAME_LOG.add_log_message(f"You declined the offer from {contract.label_name}.")
                 self.player.pending_contracts.clear()
@@ -1791,10 +1957,41 @@ class Game:
                 self.phone_menu_state = "main"
 
 
+    def handle_agent_menu(self):
+        opts = {
+            "find_gig": "Find Gig (Immediate)",
+            "plan_tour": "Plan Tour (Start Wizard)",
+            "back": "Hang Up"
+        }
+        choice = self.ui.present_choices(opts, "Agent on the line: 'What can I do for you?'")
+
+        if choice == "back":
+            self.phone_menu_state = "main"
+        elif choice == "find_gig":
+            # Simplified gig finding logic
+            self.GAME_LOG.add_log_message("Agent: 'Let me make some calls...'")
+            advance_game_time(60) # 1 hour
+
+            if random.random() < 0.5 + (self.player.fame / 500.0):
+                self.GAME_LOG.add_log_message("Agent: 'I found a slot at a club for tomorrow night!'")
+                # Add event logic here (simplified)
+                # Ideally, add to schedule.
+                gig_time = current_game_time.copy()
+                gig_time.add_days(1)
+                gig_time.hour = 20
+                self.player.schedule.add_event(gig_time, gig_time, "Agent Booked Gig", "Gig")
+            else:
+                self.GAME_LOG.add_log_message("Agent: 'Sorry, nothing available right now.'")
+
+        elif choice == "plan_tour":
+            self.GAME_LOG.add_log_message("Agent: 'I'll look for routing options. Check back later.'")
+            # Placeholder for complex tour logic
+
     def handle_web_menu(self):
         if self.web_menu_state == "main":
             web_options = {
                 "view_charts": "View Music Charts",
+                "marketing": "Digital Marketing Portal",
                 "back": "Back to Phone"
             }
             choice = self.ui.present_choices(web_options, "Web Browser")
@@ -1815,6 +2012,47 @@ class Game:
                 chart_to_view = self.ACTIVE_CHARTS[int(choice)]
                 self.text_to_view = str(chart_to_view)
                 self.game_state = "view_text"
+                self.web_menu_state = "main"
+
+        elif self.web_menu_state == "marketing":
+            # Select Campaign
+            camp_opts = {k: f"{v['name']} (${v['cost']})" for k, v in CAMPAIGN_TYPES.items()}
+            camp_opts["back"] = "Back"
+
+            choice = self.ui.present_choices(camp_opts, "Select Marketing Campaign:")
+
+            if choice == "back":
+                self.web_menu_state = "main"
+            else:
+                self.marketing_campaign_type = choice
+                self.web_menu_state = "marketing_select_song"
+
+        elif self.web_menu_state == "marketing_select_song":
+            # Select Song (Released only)
+            released = [s for s in self.player.songs_written if s.is_released]
+            if not released:
+                self.GAME_LOG.add_log_message("No released songs to market.")
+                self.web_menu_state = "marketing"
+                return
+
+            song_opts = {str(i): s.title for i, s in enumerate(released)}
+            song_opts["back"] = "Back"
+
+            choice = self.ui.present_choices(song_opts, "Select Song to Market:")
+
+            if choice == "back":
+                self.web_menu_state = "marketing"
+            else:
+                song = released[int(choice)]
+                cost = CAMPAIGN_TYPES[self.marketing_campaign_type]['cost']
+
+                if self.player.money >= cost:
+                    self.player.money -= cost
+                    buzz, msg = run_marketing_campaign(self.marketing_campaign_type, song)
+                    self.GAME_LOG.add_log_message(msg)
+                else:
+                    self.GAME_LOG.add_log_message("You cannot afford this campaign.")
+
                 self.web_menu_state = "main"
 
 
@@ -1895,7 +2133,8 @@ class Game:
         if self.music_menu_state == "main":
             music_menu_opts = {
                 "view_songs": "View Your Songs",
-                "release_song": "Release a Song",
+                "release_song": "Release a Song (Single)",
+                "create_album": "Assemble Album (Needs 3+ Songs)",
                 "back": "Back to Phone"
             }
             choice = self.ui.present_choices(music_menu_opts, "Music")
@@ -1940,6 +2179,50 @@ class Game:
                 # In the future, this could cost money for distribution.
                 self.music_menu_state = "main"
 
+        elif self.music_menu_state == "create_album":
+            # 1. Select unreleased, recorded songs
+            candidates = [s for s in self.player.songs_written if s.is_recorded and not s.is_released]
+
+            if len(candidates) < 3:
+                self.GAME_LOG.add_log_message("You need at least 3 recorded, unreleased songs to make an album.")
+                self.music_menu_state = "main"
+                return
+
+            # Simple selection: Select all? Or picking loop?
+            # For simplicity in this text UI, let's auto-select all candidates or offer to select subset?
+            # Let's offer a "Select All" or "Pick Top 5" approach.
+            # Real simulation would allow checkbox selection.
+
+            opts = {
+                "all": f"Use All {len(candidates)} Available Songs",
+                "back": "Cancel"
+            }
+            choice = self.ui.present_choices(opts, "Select tracks for album:")
+
+            if choice == "all":
+                album_title = self.ui.get_text_input("Enter Album Title:")
+                if not album_title: album_title = "Self-Titled"
+
+                new_album = Album(album_title, self.player.name, candidates, release_date=current_game_time)
+
+                # Release Logic
+                self.player.albums_released.append(new_album)
+                for s in candidates:
+                    s.is_released = True
+                    s.release_date = current_game_time
+
+                self.GAME_LOG.add_log_message(f"You released '{new_album.title}'!")
+                self.GAME_LOG.add_log_message(f"Critics rate it: {int(new_album.quality * 100)}/100")
+
+                # Fame Bonus
+                fame_gain = int(new_album.quality * 50) + (len(candidates) * 5)
+                self.player.fame += fame_gain
+                self.GAME_LOG.add_log_message(f"Your fame increases by {fame_gain}!")
+
+                self.music_menu_state = "main"
+            else:
+                self.music_menu_state = "main"
+
     def handle_contacts_menu(self):
         if self.phone_menu_state == "contacts": # Main contacts list view
             if not self.player.contacts:
@@ -1981,6 +2264,8 @@ class Game:
                 "skills": "Skills",
                 "inventory": "Inventory",
                 "band": "Band",
+                "staff": "Staff (Roadies/Security)",
+                "merch": "Merchandise",
                 "back": "Back"
             }
             choice = self.ui.present_choices(character_menu_opts, "Character")
@@ -1994,6 +2279,98 @@ class Game:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
 
+        elif self.character_menu_state == "staff":
+            if not self.player.staff:
+                info = "You have no staff."
+            else:
+                info = "Staff:\n" + "\n".join([str(s) for s in self.player.staff])
+
+            opts = {
+                "hire_roadie": "Hire Roadie (Lvl 1, $200/wk)",
+                "hire_bodyguard": "Hire Bodyguard (Lvl 1, $300/wk)",
+                "fire": "Fire Staff",
+                "back": "Back"
+            }
+
+            # Simple text display via log or header?
+            # Using present_choices header
+            choice = self.ui.present_choices(opts, info)
+
+            if choice == "back":
+                self.character_menu_state = "main"
+            elif choice == "hire_roadie":
+                if self.player.money >= 200:
+                    new_staff = StaffMember(f"Roadie #{len(self.player.staff)+1}", "Roadie", 200, 1)
+                    self.player.staff.append(new_staff)
+                    self.GAME_LOG.add_log_message("Hired a Roadie!")
+                else:
+                    self.GAME_LOG.add_log_message("Cannot afford hiring cost (1st week wage).")
+            elif choice == "hire_bodyguard":
+                if self.player.money >= 300:
+                    new_staff = StaffMember(f"Guard #{len(self.player.staff)+1}", "Bodyguard", 300, 1)
+                    self.player.staff.append(new_staff)
+                    self.player.has_bodyguard = True # Sync with old boolean
+                    self.GAME_LOG.add_log_message("Hired a Bodyguard!")
+                else:
+                    self.GAME_LOG.add_log_message("Cannot afford hiring cost.")
+            elif choice == "fire":
+                if not self.player.staff:
+                    self.GAME_LOG.add_log_message("No staff to fire.")
+                else:
+                    fire_opts = {str(i): s.name for i, s in enumerate(self.player.staff)}
+                    fire_opts["back"] = "Back"
+                    c = self.ui.present_choices(fire_opts, "Fire who?")
+                    if c != "back":
+                        removed = self.player.staff.pop(int(c))
+                        self.GAME_LOG.add_log_message(f"Fired {removed.name}.")
+                        if removed.role == "Bodyguard" and not any(s.role == "Bodyguard" for s in self.player.staff):
+                            self.player.has_bodyguard = False
+
+        elif self.character_menu_state == "merch":
+            if not self.player.merch_stock:
+                info = "You have no merch stock."
+            else:
+                info = "Current Stock:\n" + "\n".join([str(m) for m in self.player.merch_stock])
+
+            opts = {
+                "order": "Order New Merch",
+                "back": "Back"
+            }
+            choice = self.ui.present_choices(opts, info)
+
+            if choice == "back":
+                self.character_menu_state = "main"
+            elif choice == "order":
+                self.character_menu_state = "merch_order"
+
+        elif self.character_menu_state == "merch_order":
+            order_opts = {k: f"{v['name']} (Cost: ${v['cost']}, Sell: ${v['price']})" for k, v in MERCH_TEMPLATES.items()}
+            order_opts["back"] = "Back"
+
+            choice = self.ui.present_choices(order_opts, "Select Merch to Order (Batch of 50):")
+
+            if choice == "back":
+                self.character_menu_state = "merch"
+            else:
+                template = MERCH_TEMPLATES[choice]
+                batch_size = 50
+                total_cost = template['cost'] * batch_size
+
+                if self.player.money >= total_cost:
+                    self.player.money -= total_cost
+                    # Check if player already has this item type
+                    existing_item = next((m for m in self.player.merch_stock if m.name == template['name']), None)
+                    if existing_item:
+                        existing_item.stock += batch_size
+                    else:
+                        new_item = MerchItem(template['name'], template['cost'], template['price'], batch_size)
+                        self.player.merch_stock.append(new_item)
+
+                    self.GAME_LOG.add_log_message(f"Ordered {batch_size} {template['name']}s for ${total_cost}.")
+                    self.character_menu_state = "merch"
+                else:
+                    self.GAME_LOG.add_log_message(f"Cannot afford ${total_cost}.")
+
         elif self.character_menu_state == "band":
             if self.band_menu_state == "main":
                 if self.player.band is None:
@@ -2005,11 +2382,20 @@ class Game:
                         self.band_menu_state = "recruit"
                 else:
                     self.ui.draw_band_screen(self.player.band)
-                    for event in pygame.event.get():
-                        if event.type == pygame.KEYDOWN:
-                            if event.key == pygame.K_ESCAPE:
-                                self.character_menu_state = "main"
-                                self.band_menu_state = "main"
+                    # Show menu options for band management
+                    band_opts = {
+                        "interact": "Manage Members (Interact/Fire)",
+                        "recruit": "Recruit New Member",
+                        "back": "Back"
+                    }
+                    choice = self.ui.present_choices(band_opts, f"Band: {self.player.band.name} (Chem: {self.player.band.chemistry})")
+
+                    if choice == "back":
+                        self.character_menu_state = "main"
+                    elif choice == "recruit":
+                        self.band_menu_state = "recruit"
+                    elif choice == "interact":
+                        self.band_menu_state = "interact"
 
             elif self.band_menu_state == "recruit":
                 recruitable_npcs = {npc.npc_id: npc for npc in self.NPC_REGISTRY.values() if npc.skills and npc not in (self.player.band.members if self.player.band else [])}
@@ -2034,30 +2420,95 @@ class Game:
                                 band_name = f"{self.player.name} and the Noise"
                             self.player.band = Band(band_name, self.player)
 
+                        # Set initial wage demand based on fame/skill
+                        npc_to_recruit.wage_demand = 50 + int(self._calculate_npc_fame(npc_to_recruit) / 2)
+
                         self.player.band.add_member(npc_to_recruit)
-                        self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} agreed to join your band!")
+                        self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} agreed to join your band! (Wage demand: ${npc_to_recruit.wage_demand}/week)")
                     else:
                         self.GAME_LOG.add_log_message(f"{npc_to_recruit.name} isn't interested. Maybe when you're more famous.")
                     self.band_menu_state = "main"
+
+            elif self.band_menu_state == "interact":
+                # Interaction menu for band members
+                if not self.player.band or len(self.player.band.members) <= 1:
+                    self.band_menu_state = "main"
+                    return
+
+                member_options = {member.npc_id: f"{member.name} (Sat: {member.satisfaction})" for member in self.player.band.members if member != self.player}
+                member_options["back"] = "Back"
+
+                choice = self.ui.present_choices(member_options, "Interact with band member:")
+
+                if choice == "back":
+                    self.band_menu_state = "main"
+                else:
+                     target_member = next((m for m in self.player.band.members if m.npc_id == choice), None)
+                     if target_member:
+                         action_opts = {
+                             "praise": "Praise (+Satisfaction, +Chemistry)",
+                             "critique": "Critique (-Satisfaction, +Skill/Quality?)",
+                             "bonus": "Give Bonus $100 (+Satisfaction)",
+                             "fire": "Fire from Band"
+                         }
+                         action = self.ui.present_choices(action_opts, f"Action for {target_member.name}:")
+
+                         if action == "praise":
+                             target_member.satisfaction = min(100, target_member.satisfaction + 5)
+                             self.player.band.update_chemistry(2)
+                             self.GAME_LOG.add_log_message(f"You praised {target_member.name}. They seem happy.")
+                         elif action == "critique":
+                             target_member.satisfaction = max(0, target_member.satisfaction - 5)
+                             self.player.band.update_chemistry(-1)
+                             self.GAME_LOG.add_log_message(f"You critiqued {target_member.name}. It was harsh but necessary.")
+                         elif action == "bonus":
+                             if self.player.money >= 100:
+                                 self.player.money -= 100
+                                 target_member.satisfaction = min(100, target_member.satisfaction + 15)
+                                 self.GAME_LOG.add_log_message(f"You gave {target_member.name} a bonus. They love it!")
+                             else:
+                                 self.GAME_LOG.add_log_message("You can't afford a bonus.")
+                         elif action == "fire":
+                             self.player.band.members.remove(target_member)
+                             self.player.band.recalculate_skills()
+                             target_member.satisfaction = 0
+                             self.GAME_LOG.add_log_message(f"You fired {target_member.name}. The atmosphere is awkward.")
+                             self.band_menu_state = "main"
         elif self.character_menu_state == "skills":
             self.ui.draw_skills_screen(self.player)
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.character_menu_state = "main"
         elif self.character_menu_state == "inventory":
-            # Pass game state logic to draw_inventory to handle input
-            # Or handle input here.
-            # Ideally UI just draws. Let's make a new state for "using" items if needed.
-            # For now, let's allow selecting an item to use.
+            # Check if at home
+            at_home = self.player.current_poi and self.PLAYER_HOME_POI_ID_GLOBAL and self.player.current_poi.poi_id == self.PLAYER_HOME_POI_ID_GLOBAL
 
-            # Simple list of items
-            inventory_options = {str(i): f"{item.name} ({item.gear_type})" for i, item in enumerate(self.player.gear_inventory)}
-            inventory_options["back"] = "Back"
+            opts = {
+                "inspect": "Inspect/Use Items",
+                "storage": "Home Storage (Stash/Retrieve)" if at_home else "Home Storage (Must be at home)",
+                "back": "Back"
+            }
 
-            choice = self.ui.present_choices(inventory_options, "Inventory - Select item to use/inspect:")
+            choice = self.ui.present_choices(opts, "Inventory Management")
 
             if choice == "back":
                 self.character_menu_state = "main"
+            elif choice == "inspect":
+                self.character_menu_state = "inventory_inspect"
+            elif choice == "storage":
+                if at_home:
+                    self.character_menu_state = "inventory_storage"
+                else:
+                    self.GAME_LOG.add_log_message("You must be at home to access storage.")
+
+        elif self.character_menu_state == "inventory_inspect":
+            inventory_options = {str(i): f"{item.name} ({item.gear_type})" for i, item in enumerate(self.player.gear_inventory)}
+            inventory_options["back"] = "Back"
+
+            choice = self.ui.present_choices(inventory_options, "Select item to use/inspect:")
+
+            if choice == "back":
+                self.character_menu_state = "inventory"
             else:
                 selected_item = self.player.gear_inventory[int(choice)]
                 if selected_item.gear_type == "FOOD":
@@ -2066,6 +2517,39 @@ class Game:
                     self.GAME_LOG.add_log_message(msg)
                 else:
                     self.GAME_LOG.add_log_message(f"You inspect {selected_item.name}. It looks fine.")
+
+        elif self.character_menu_state == "inventory_storage":
+            # Show stash/retrieve options
+            mode_opts = {"stash": "Stash Item (to Home)", "retrieve": "Retrieve Item (from Home)", "auto_pack": "Auto-Pack (Requires Roadie)", "back": "Back"}
+            mode = self.ui.present_choices(mode_opts, "Storage")
+
+            if mode == "back":
+                self.character_menu_state = "inventory"
+            elif mode == "stash":
+                if not self.player.gear_inventory:
+                    self.GAME_LOG.add_log_message("Nothing to stash.")
+                else:
+                    inv_opts = {str(i): item.name for i, item in enumerate(self.player.gear_inventory)}
+                    inv_opts["back"] = "Back"
+                    c = self.ui.present_choices(inv_opts, "Select item to stash:")
+                    if c != "back":
+                        item = self.player.gear_inventory[int(c)]
+                        success, msg = self.player.stash_item(item)
+                        self.GAME_LOG.add_log_message(msg)
+            elif mode == "retrieve":
+                if not self.player.home_storage:
+                    self.GAME_LOG.add_log_message("Storage is empty.")
+                else:
+                    store_opts = {str(i): item.name for i, item in enumerate(self.player.home_storage)}
+                    store_opts["back"] = "Back"
+                    c = self.ui.present_choices(store_opts, "Select item to retrieve:")
+                    if c != "back":
+                        item = self.player.home_storage[int(c)]
+                        success, msg = self.player.retrieve_item(item)
+                        self.GAME_LOG.add_log_message(msg)
+            elif mode == "auto_pack":
+                msg = self.player.auto_pack()
+                self.GAME_LOG.add_log_message(msg)
 
     def save_game(self, filename="savegame.dat"):
         save_data = {
@@ -2139,6 +2623,105 @@ class Game:
                     self.phone_menu_state = "web"
                     self.web_menu_state = "main"
 
+    def handle_travel_active_state(self):
+        tm = self.travel_manager
+        if not tm:
+            self.game_state = "main_menu"
+            return
+
+        # 1. Draw UI
+        pct = tm.get_progress_percent()
+        bar_length = 20
+        filled = int(pct * bar_length)
+        bar = "[" + "="*filled + " "*(bar_length-filled) + "]"
+
+        status_text = f"Traveling to {tm.destination.name} ({tm.transport_mode.upper()})\n"
+        status_text += f"Progress: {bar} {int(pct*100)}%\n"
+        status_text += f"Distance: {tm.distance_covered:.1f}/{tm.distance_total:.1f} km"
+
+        # 2. Get Actions
+        actions = tm.get_actions()
+
+        choice = self.ui.present_choices(actions, status_text)
+
+        # 3. Handle Input
+        if choice == "continue":
+            events, arrived = tm.advance_one_hour()
+            advance_game_time(60)
+            self.process_time_based_player_needs(self.player, 60)
+
+            for e in events:
+                self.GAME_LOG.add_log_message(e)
+
+            if arrived:
+                self.player.current_location = tm.destination
+                self.player.current_poi = None # Or arrival hub logic
+                self.GAME_LOG.add_log_message(f"Arrived at {tm.destination.name}!")
+                self.travel_manager = None
+                self.game_state = "main_menu"
+
+        elif choice == "nap":
+            # If driver/biker, stop to nap.
+            if tm.vehicle and tm.vehicle.name != "Custom Tour Bus": # Driver
+                self.GAME_LOG.add_log_message("You pull over to take a nap. (1 hour)")
+                advance_game_time(60)
+                self.player.energy = min(100, self.player.energy + 10)
+                self.process_time_based_player_needs(self.player, 60)
+            else: # Passenger or Tour Bus
+                self.GAME_LOG.add_log_message("You take a nap while traveling. (1 hour)")
+                events, arrived = tm.advance_one_hour()
+                advance_game_time(60)
+                self.player.energy = min(100, self.player.energy + 15) # Better nap
+                self.process_time_based_player_needs(self.player, 60)
+                for e in events: self.GAME_LOG.add_log_message(e)
+                if arrived:
+                    self.player.current_location = tm.destination
+                    self.player.current_poi = None
+                    self.GAME_LOG.add_log_message(f"Arrived at {tm.destination.name}!")
+                    self.travel_manager = None
+                    self.game_state = "main_menu"
+
+        elif choice == "phone":
+            # Access phone features restricted?
+            # For now, just a simplified action
+            self.GAME_LOG.add_log_message("You check your phone... (Time passes)")
+            # Maybe check news?
+            from game.rivals import get_news_feed
+            feed = get_news_feed()
+            if feed: self.GAME_LOG.add_log_message(f"NEWS: {feed[0]}")
+
+            # Still advance travel if passenger
+            if not tm.vehicle or tm.vehicle.name == "Custom Tour Bus":
+                 events, arrived = tm.advance_one_hour()
+                 if arrived:
+                    self.player.current_location = tm.destination
+                    self.player.current_poi = None
+                    self.travel_manager = None
+                    self.game_state = "main_menu"
+            else:
+                 # Distracted driving?
+                 self.GAME_LOG.add_log_message("Eyes on the road!")
+
+            advance_game_time(60)
+            self.process_time_based_player_needs(self.player, 60)
+
+        elif choice in ["meal", "drink"]:
+            if self.player.hunger > 0:
+                self.player.hunger = max(0, self.player.hunger - 30)
+                self.GAME_LOG.add_log_message("You enjoy some service. (Hunger -30)")
+            else:
+                self.GAME_LOG.add_log_message("You aren't hungry.")
+
+            # Advance travel
+            events, arrived = tm.advance_one_hour()
+            advance_game_time(60)
+            self.process_time_based_player_needs(self.player, 60)
+            if arrived:
+                self.player.current_location = tm.destination
+                self.player.current_poi = None
+                self.travel_manager = None
+                self.game_state = "main_menu"
+
     def handle_performance_scene(self):
         # 1. Selection Phase
         if self.performance_stage == "choose_song":
@@ -2197,7 +2780,29 @@ class Game:
             self.player.fame += fame_gain
 
             self.GAME_LOG.add_log_message(f"Show over! The crowd hype reached {final_hype}/100.")
-            self.GAME_LOG.add_log_message(f"You earned ${money_gain} and {fame_gain} Fame.")
+            self.GAME_LOG.add_log_message(f"Ticket Sales: +${money_gain} | Fame: +{fame_gain}")
+
+            # Merch Sales Logic
+            if self.player.merch_stock:
+                total_merch_sales = 0
+                for item in self.player.merch_stock:
+                    if item.stock > 0:
+                        # Buyers based on hype
+                        potential_buyers = int(final_hype / 2) # e.g. 100 hype -> 50 buyers max
+                        # Buying chance based on fame?
+                        actual_sales = 0
+                        for _ in range(potential_buyers):
+                            if item.stock > 0 and random.random() < 0.2: # 20% buy rate
+                                item.stock -= 1
+                                total_merch_sales += item.sale_price
+                                actual_sales += 1
+
+                        if actual_sales > 0:
+                            self.GAME_LOG.add_log_message(f"Sold {actual_sales} {item.name}s.")
+
+                if total_merch_sales > 0:
+                    self.player.money += total_merch_sales
+                    self.GAME_LOG.add_log_message(f"Merch Income: +${total_merch_sales}")
 
             # Cleanup
             self.performance_manager = None

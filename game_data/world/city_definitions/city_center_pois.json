@@ -141,6 +141,16 @@
       "properties": {
         "shop_inventory_vehicle_ids": ["rusty_sedan", "used_hatchback", "tour_van", "motorcycle"]
       }
+    },
+    {
+      "poi_id": "citycenter_luxury_motors",
+      "name": "Prestige Motors",
+      "description": "A showroom with polished floors and price tags that make you sweat.",
+      "category": "SHOP_VEHICLE",
+      "interaction_options": ["Browse vehicles"],
+      "properties": {
+        "shop_inventory_vehicle_ids": ["luxury_suv", "tour_bus", "private_jet"]
+      }
     }
   ],
   "venues": [
