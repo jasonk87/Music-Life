@@ -32,6 +32,9 @@ class Player:
         self.homesickness = 0
         self.comfort = 70
         self.hunger = 0 # 0-100, 0 is full, 100 is starving
+        self.health = 100
+        self.alive = True
+        self.cause_of_death = None
 
         self.songs_written = []
         self.albums_released = [] # List of Album objects
@@ -40,7 +43,7 @@ class Player:
         self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
         self.has_pr_manager = False
-        self.pr_manager_fame_requirement_to_hire = 60 # Renamed for clarity with active hiring
+        self.pr_manager_fame_requirement_to_hire = 35 # Renamed for clarity with active hiring
         self.has_bodyguard = False
         self.bodyguard_cost = 100
 
@@ -48,6 +51,7 @@ class Player:
         self.inspiration = 0 # 0-100
 
         self.rented_accommodation_info = None # Stores {"poi_id": str, "checkout_time_obj": GameTime}
+        self.has_home = True
 
         # Opportunities - this will store various types of opportunities
         # For interviews, the key could be like "interview_city_chronicle"
@@ -72,6 +76,8 @@ class Player:
         self.completed_tour_ids = [] # List of tour_ids the player has completed
         self.current_tour_id = None   # ID of the currently active tour
         self.tour_ledgers = {}        # Dict to store financial details of tours: tour_id -> {"name": "Tour Name", "expenses": 0, "income": 0, "status": "ongoing/completed", "gigs_details": []}
+        self.unpaid_survival_weeks = 0
+        self.grit = 0
 
         # Constants for growth mechanics (can be tuned)
         self.HAIR_POINTS_PER_LENGTH_LEVEL = 100.0 # How many progress points to gain one length level for hair
@@ -412,7 +418,7 @@ class Player:
         status += f"Location: {location_str}{poi_str}\n"
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
         status += f"Energy: {self.energy}/100, Stress: {self.stress}/100, Hunger: {self.hunger}/100\n"
-        status += f"Comfort: {self.comfort}/100, Homesickness: {self.homesickness}/100\n"
+        status += f"Comfort: {self.comfort}/100, Health: {self.health}/100, Homesickness: {self.homesickness}/100\n"
         status += f"Skills: {self.skills}\n"
         status += f"Songs Written: {len(self.songs_written)}\n"
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"

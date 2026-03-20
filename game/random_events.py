@@ -3,17 +3,6 @@ from game.dialogue import generate_npc_response, reset_npc_dialogue_history # Up
 from game.npc import NPC # Import the NPC class
 
 class RandomEvent:
-    def __init__(self, name, description_template, fame_threshold_min=0, fame_threshold_max=float('inf'), actions=None, npc_interaction=None):
-        self.name = name
-        self.description_template = description_template # Can use {player_name}
-        self.fame_threshold_min = fame_threshold_min
-        self.fame_threshold_max = fame_threshold_max
-        self.actions = actions if actions else [] # List of functions to call or descriptions of outcomes
-        self.npc_interaction = npc_interaction # Optional: dict with {"npc_type": "key", "npc_name": "Name", "initial_message": "Dialog starter"}
-        self.custom_interaction_fn_name = None # Placeholder, will be set in __init__ if provided
-        # Need to add custom_interaction_fn_name to __init__ signature
-
-    # Update __init__ to accept custom_interaction_fn_name
     def __init__(self, name, description_template, fame_threshold_min=0, fame_threshold_max=float('inf'),
                  actions=None, npc_interaction=None, custom_interaction_fn_name=None): # Added custom_interaction_fn_name
         self.name = name

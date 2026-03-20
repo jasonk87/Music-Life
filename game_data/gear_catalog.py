@@ -46,6 +46,42 @@ GEAR_CATALOG = {
         cost=5,
         properties={"quantity": 5}
     ),
+    "microphone_basic": GearItem(
+        item_id="microphone_basic",
+        name="Basic Vocal Microphone",
+        description="A dependable starter microphone for rehearsals and small live sets.",
+        gear_type="ACCESSORY",
+        size=1,
+        cost=40,
+        properties={"quality": 0.4, "performance_quality_bonus": 0.05}
+    ),
+    "notebook_lyrics": GearItem(
+        item_id="notebook_lyrics",
+        name="Lyric Notebook",
+        description="A beat-up notebook packed with lyric fragments and half-finished ideas.",
+        gear_type="ACCESSORY",
+        size=1,
+        cost=12,
+        properties={"songwriting_bonus": 0.05}
+    ),
+    "laptop_basic": GearItem(
+        item_id="laptop_basic",
+        name="Basic Production Laptop",
+        description="A modest laptop with enough power for demos, edits, and electronic sketches.",
+        gear_type="ACCESSORY",
+        size=3,
+        cost=350,
+        properties={"quality": 0.5, "electronic_bonus": 0.08}
+    ),
+    "headphones_studio": GearItem(
+        item_id="headphones_studio",
+        name="Studio Headphones",
+        description="Closed-back headphones that make it easier to hear details while recording or mixing.",
+        gear_type="ACCESSORY",
+        size=1,
+        cost=90,
+        properties={"quality": 0.5, "recording_bonus": 0.05}
+    ),
     "pro_electric_guitar": GearItem(
         item_id="pro_electric_guitar",
         name="Professional Electric Guitar",
@@ -130,6 +166,7 @@ GEAR_CATALOG = {
         cost=5, # Price at a fast food joint
         hunger_reduction=35,
         energy_boost=10,
+        properties={"comfort_effect": -2}
         # Could add a property: {"comfort_effect": -2}
     ),
     "food_grocery_bag": GearItem(
@@ -147,11 +184,6 @@ GEAR_CATALOG = {
         item_id="food_greasy_breakfast", name="Greasy Breakfast Special", gear_type="FOOD", size=0, cost=8, # Cost here is default, can be overridden by POI menu
         description="Eggs, bacon (or sausage substitute), hash browns, and toast. Fills you up.",
         hunger_reduction=50, energy_boost=15, properties={"comfort_effect": 1}
-    ),
-    "food_cheap_burger": GearItem( # Added from main.py's previous hardcoding
-        item_id="food_cheap_burger", name="Cheap Greasy Burger", gear_type="FOOD", size=0, cost=5,
-        description="Questionable meat, soggy bun, but it fills a hole.",
-        hunger_reduction=35, energy_boost=10, properties={"comfort_effect": -2}
     ),
     "food_blast_burger": GearItem(
         item_id="food_blast_burger", name="Blast Burger", gear_type="FOOD", size=0, cost=7,
@@ -177,8 +209,8 @@ GEAR_CATALOG = {
 
 if __name__ == '__main__':
     # Test that all items can be created and accessed
-    # Original 15 items + 5 new distinct food items (food_cheap_burger was already one of the 15)
-    expected_items = 15 + 5
+    # Original 15 items + 5 distinct food items + 4 starter/background items
+    expected_items = 15 + 5 + 4
     assert len(GEAR_CATALOG) == expected_items, f"Expected {expected_items} items, found {len(GEAR_CATALOG)}"
     assert GEAR_CATALOG["worn_acoustic_guitar"].name == "Worn Acoustic Guitar"
     assert GEAR_CATALOG["food_energy_bar"].cost == 3

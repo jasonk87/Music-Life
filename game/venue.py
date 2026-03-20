@@ -33,6 +33,9 @@ class Venue:
             self.events_hosted.remove(event)
             print(f"Event '{event.name}' removed from venue '{self.name}'.")
 
+    def get_interactions(self):
+        return self.interaction_options
+
     def __str__(self):
         base_str = f"{self.name} (ID: {self.venue_id}, Type: {self.venue_type}, Category: {self.category}, Capacity: {self.capacity}, Prestige: {self.prestige})"
         if self.can_rent_gear:

@@ -42,6 +42,12 @@ class GameTime:
     def copy(self):
         return GameTime(self.year, self.month, self.day, self.hour, self.minute)
 
+    def add_hours(self, hours):
+        self.advance_time(hours * 60)
+
+    def add_days(self, days):
+        self.advance_time(days * 24 * 60)
+
     def _to_tuple(self):
         """Helper for comparisons."""
         return (self.year, self.month, self.day, self.hour, self.minute)

@@ -27,7 +27,7 @@
       "name": "City Center Chronicle",
       "description": "The bustling office of the city's main newspaper and online news hub.",
       "category": "OFFICE_NEWS_AGENCY",
-      "interaction_options": ["Look for today's paper", "Ask for a journalist"],
+      "interaction_options": ["Look for today's paper", "Ask for a journalist", "Work Shift: Courier Run ($35 / 5h)"],
       "properties": {
         "comfort_modifier_hourly": -1,
         "owner_npc_id": "brenda_reporter001"
@@ -40,7 +40,7 @@
       "category": "OFFICE_RECORD_LABEL",
       "interaction_options": [],
       "properties": {
-        "min_fame_to_submit": 75,
+        "min_fame_to_submit": 40,
         "genres_preferred": ["Indie", "Pop", "Rock", "Electronic"]
       }
     },
@@ -49,7 +49,7 @@
       "name": "The Daily Grind Cafe",
       "description": "Popular hangout, good coffee, free Wi-Fi.",
       "category": "POI_CAFE",
-      "interaction_options": ["Grab Coffee ($5)", "People Watch", "Look for Local Flyers"],
+      "interaction_options": ["Grab Coffee ($5)", "People Watch", "Look for Local Flyers", "Work Shift: Barista ($28 / 4h)"],
       "properties": {
         "comfort_modifier_hourly": 1
       }
@@ -98,7 +98,7 @@
       "name": "SuperValue Mart",
       "description": "A large supermarket with a wide variety of groceries.",
       "category": "SHOP_FOOD",
-      "interaction_options": ["Buy Food Items"],
+      "interaction_options": ["Buy Food Items", "Work Shift: Night Stock ($32 / 5h)"],
       "properties": {
         "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag"]
       }

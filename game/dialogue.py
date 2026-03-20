@@ -1,6 +1,6 @@
-import google.generativeai as genai
 import sys
 import os
+import random
 
 # Try to import config from root
 try:
@@ -52,16 +52,86 @@ NPC_PERSONALITIES = {
     }
 }
 
+
+FALLBACK_RESPONSES = {
+    "friendly_fan": [
+        "I have been following your music. Keep going.",
+        "You have real potential. I am excited to see what you do next.",
+        "It is great meeting you. The local scene needs more artists like you.",
+    ],
+    "gruff_club_owner": [
+        "Talk is cheap. Bring me a solid set and a crowd.",
+        "I have seen plenty of hopeful acts. Be reliable and maybe we do business.",
+        "If you want stage time, prove you can handle it.",
+    ],
+    "adoring_fan": [
+        "I cannot believe I am talking to you right now.",
+        "Your music means a lot to me.",
+        "Please keep making songs. I am cheering for you.",
+    ],
+    "old_timer_joe": [
+        "Good gear helps, but discipline matters more.",
+        "Plenty of players want fame. Fewer want to put in the hours.",
+        "Take care of your instrument and it will take care of you.",
+    ],
+    "potential_bandmate_guitarist": [
+        "Maybe we could work together if your songs are strong enough.",
+        "I respect effort. Show me serious musicianship.",
+        "If the project is real, I am listening.",
+    ],
+    "music_blogger_critical": [
+        "Hype does not matter much to me. The songs do.",
+        "If you want attention, make something worth writing about.",
+        "The scene rewards originality, not imitation.",
+    ],
+    "grateful_fan": [
+        "That show meant a lot. Thanks for giving it everything.",
+        "I loved that performance. You really connected with the room.",
+        "I will remember that set for a while.",
+    ],
+    "interviewer_professional": [
+        "Tell me what separates your music from everyone else in town.",
+        "What are you building toward right now in your career?",
+        "How has your recent work changed your direction as an artist?",
+    ],
+    "pr_agent_evaluator": [
+        "Your presentation matters. So does momentum.",
+        "Come back when the numbers and the narrative are stronger.",
+        "There may be potential here, but it needs clearer traction.",
+    ],
+    "dj_eclectic_local": [
+        "If you have a strong track, I am open to hearing it.",
+        "Local artists can break through with the right song at the right time.",
+        "Bring me something polished and memorable.",
+    ],
+    "default": [
+        "Tell me more.",
+        "I am listening.",
+        "That is interesting. What happens next?",
+    ],
+}
+
+
+def _generate_fallback_response(player_message, npc_instance):
+    personality_key = getattr(npc_instance, "personality_key", "default")
+    bank = FALLBACK_RESPONSES.get(personality_key, FALLBACK_RESPONSES["default"])
+    opener = random.choice(bank)
+
+    lowered = player_message.lower()
+    if "hello" in lowered or "hi" in lowered:
+        return opener
+    if "gig" in lowered or "show" in lowered:
+        return f"{opener} Focus on the performance and the reputation will follow."
+    if "song" in lowered or "music" in lowered:
+        return f"{opener} Good songs open more doors than talk ever will."
+    if "help" in lowered:
+        return f"{opener} Be specific about what you need."
+    return opener
+
 def generate_npc_response(player_message, npc_instance, player_name="The Musician"):
     """
     Generates a response from an NPC using Google Gemini 1.5 Flash.
     """
-    if not config:
-        return "Error: config.py missing."
-
-    if config.GEMINI_API_KEY == "YOUR_API_KEY_HERE" or not config.GEMINI_API_KEY:
-        return "System: Please set your GEMINI_API_KEY in config.py to talk to NPCs."
-
     if not npc_instance or not hasattr(npc_instance, 'personality_key'):
         return "Error: Invalid NPC instance provided."
 
@@ -80,12 +150,23 @@ def generate_npc_response(player_message, npc_instance, player_name="The Musicia
         memory_summary = "; ".join(npc_instance.memories[-3:])
         system_instruction += f"Key things you remember concerning {player_name}: {memory_summary}\n"
 
+    if not config:
+        return _generate_fallback_response(player_message, npc_instance)
+
+    if config.GEMINI_API_KEY == "YOUR_API_KEY_HERE" or not config.GEMINI_API_KEY:
+        return _generate_fallback_response(player_message, npc_instance)
+
+    try:
+        import google.generativeai as genai
+    except Exception:
+        return _generate_fallback_response(player_message, npc_instance)
+
     # Configure Gemini
     try:
         genai.configure(api_key=config.GEMINI_API_KEY)
         model = genai.GenerativeModel(config.LLM_MODEL, system_instruction=system_instruction)
     except Exception as e:
-        return f"Gemini Config Error: {str(e)}"
+        return _generate_fallback_response(player_message, npc_instance)
 
     # Construct Chat History
     # Gemini chat history structure: list of content dicts or objects
@@ -115,7 +196,7 @@ def generate_npc_response(player_message, npc_instance, player_name="The Musicia
         return npc_response_content
 
     except Exception as e:
-        return f"LLM Error: {str(e)}"
+        return _generate_fallback_response(player_message, npc_instance)
 
 def reset_npc_dialogue_history(npc_instance):
     if npc_instance and hasattr(npc_instance, 'dialogue_history'):

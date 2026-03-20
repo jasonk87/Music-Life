@@ -1,4 +1,5 @@
 import random # Needed for incident chance
+import uuid
 
 class Event:
     EVENT_TYPES = {
@@ -14,6 +15,7 @@ class Event:
                  description="", specific_fame_reward=None, specific_payout=None,
                  is_tour_gig=False, is_player_organized=False, required_fame=0, is_npc_gig=False): # Added is_player_organized
         self.name = name
+        self.event_id = str(uuid.uuid4())
         self.location = location
         self.event_type = event_type
         self.required_fame = required_fame

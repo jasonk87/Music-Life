@@ -1,6 +1,10 @@
 import random
 from .song import Song
 
+
+def _contextual_roll(score, threshold):
+    return random.randint(1, 100) + score >= threshold
+
 class Chart:
     def __init__(self, name, max_size=10, chart_genre_preference=None):
         self.name = name
@@ -76,7 +80,12 @@ class Chart:
             song = self._generate_ai_song()
             # Calculate a chart score. AI artists don't have fame, so we pass a mock player or just 0 fame.
             # Let's create a simple score calculation for AI songs.
-            chart_score = (song.song_quality * 75) + (song.recording_quality * 50) + random.uniform(0, 30)
+            base_score = (song.song_quality * 75) + (song.recording_quality * 50)
+            if _contextual_roll(int(base_score / 8), 92):
+                base_score += 25
+            elif _contextual_roll(int(base_score / 10), 75):
+                base_score += 10
+            chart_score = base_score
             self.entries.append({
                 'song_id': song.song_id,
                 'song_obj': song,
@@ -236,8 +245,11 @@ class Chart:
 
                     if self.chart_genre_preference and song.genre == self.chart_genre_preference:
                         chart_score += 25
-                    # Add some random buzz to make the charts more dynamic
-                    chart_score += random.uniform(0, 20)
+                    npc_score = int(chart_score / 10)
+                    if _contextual_roll(npc_score, 94):
+                        chart_score += 18
+                    elif _contextual_roll(npc_score, 78):
+                        chart_score += 8
 
                 self._add_or_update_song_entry(song, chart_score, artist_name)
 

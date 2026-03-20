@@ -17,19 +17,23 @@
       "name": "Garage Rehearsal Space",
       "description": "A bit rough but it's cheap.",
       "category": "REHEARSAL_STUDIO",
-      "interaction_options": ["Book Rehearsal Slot (1 hour, $10)"],
-      "properties": {}
+      "interaction_options": ["Book Rehearsal Slot (1 hour, $10)", "Record a rough demo"],
+      "properties": {
+        "studio_quality": 0.42,
+        "hourly_rate": 15
+      }
     },
     {
       "poi_id": "hometown_player_home",
       "name": "Your Apartment",
       "description": "Your starting digs. A bit small, but it's home.",
       "category": "HOME",
-      "interaction_options": ["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Create a Remix", "Relax at home (2 hours)"],
+      "interaction_options": ["Rest (8 hours)", "Practice guitar (at home)", "Write a new song", "Record a home demo", "Create a Remix", "Relax at home (2 hours)"],
       "properties": {
         "rest_quality": 0.8,
         "stress_modifier_hourly": -10,
-        "comfort_modifier_hourly": 5
+        "comfort_modifier_hourly": 5,
+        "studio_quality": 0.3
       }
     },
     {
@@ -37,7 +41,7 @@
       "name": "Hometown Bus Stop",
       "description": "A dusty bus stop for regional travel to City Center.",
       "category": "TRANSPORT_BUS",
-      "interaction_options": ["View Departures & Buy Tickets"],
+      "interaction_options": ["View Departures & Buy Tickets", "Work Shift: Parcel Sorting ($18 / 4h)"],
       "properties": {}
     },
     {
@@ -55,7 +59,7 @@
       "name": "Greasy Spoon Diner",
       "description": "Cheap, fast, and... food-like substances.",
       "category": "FOOD_FASTFOOD",
-      "interaction_options": ["Work Shift: Dishwashing ($25 / 4h)"], "properties": {
+      "interaction_options": ["Work Shift: Dishwashing ($25 / 4h)", "Work Shift: Wait Tables ($22 / 4h)"], "properties": {
         "menu_items": [
           {"display_text": "Order Greasy Breakfast ($8)", "item_id": "food_greasy_breakfast", "cost": 8, "effects": {"hunger": -50, "energy": 15, "comfort": 1}},
           {"display_text": "Order Cheap Burger ($5)", "item_id": "food_cheap_burger", "cost": 5, "effects": {"hunger": -35, "energy": 10, "comfort": -2}},

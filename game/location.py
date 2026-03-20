@@ -48,10 +48,13 @@ class Location:
             all_events.extend(venue.events_hosted)
         return all_events
 
-    def add_travel_connection(self, destination_location_name, cost, time_hours):
+    def add_travel_connection(self, destination_location_name, cost, time_hours, method=None):
         # In a fuller system, destination_location_name might be resolved to an object.
         # For now, just store by name.
-        self.travel_connections[destination_location_name] = {"cost": cost, "time_hours": time_hours}
+        connection = {"cost": cost, "time_hours": time_hours}
+        if method:
+            connection["method"] = method
+        self.travel_connections[destination_location_name] = connection
 
     def get_travel_details(self, destination_location_name):
         return self.travel_connections.get(destination_location_name)
