@@ -1022,8 +1022,6 @@ class Game:
                         self.GAME_LOG.add_log_message("Check your phone for more details.")
 
         # Check for manager-driven tour opportunities
-        # TODO: Refactor has_manager to check staff list for 'Manager' role if desired,
-        # but maintaining compatibility with existing boolean for now.
         if self.player.has_manager and not self.player.current_tour_id:
             # Simple logic: offer a tour if fame is high enough and not already on tour.
             for tour in self.TOURS:
