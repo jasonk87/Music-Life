@@ -40,7 +40,6 @@ class Player:
         self.albums_released = [] # List of Album objects
         self.band = None
 
-        self.has_manager = False
         self.manager_unlocked_fame_threshold = 200
         self.has_pr_manager = False
         self.pr_manager_fame_requirement_to_hire = 35 # Renamed for clarity with active hiring
@@ -384,9 +383,14 @@ class Player:
         print(f"{self.name} has arrived at {destination_poi.name}.")
 
 
+    @property
+    def has_manager(self):
+        return any(staff.role == "Manager" for staff in self.staff)
+
     def check_for_manager_unlock(self):
         if not self.has_manager and self.fame >= self.manager_unlocked_fame_threshold:
-            self.has_manager = True
+            from game.staff import StaffMember
+            self.staff.append(StaffMember(f"Manager #{len(self.staff)+1}", "Manager", 500, 1))
             print("\n*** Congratulations! Your fame has grown significantly! ***")
             print("*** You've attracted the attention of a professional artist manager! ***")
             print("*** This will unlock new opportunities. (Manager interactions to be implemented further) ***\n")
@@ -396,7 +400,8 @@ class Player:
         """Checks and unlocks staff members like general manager or PR manager based on fame."""
         # Artist Manager
         if not self.has_manager and self.fame >= self.manager_unlocked_fame_threshold:
-            self.has_manager = True
+            from game.staff import StaffMember
+            self.staff.append(StaffMember(f"Manager #{len(self.staff)+1}", "Manager", 500, 1))
             print("\n*** Congratulations! Your fame has grown significantly! ***")
             print("*** You've attracted the attention of a professional Artist Manager! ***")
             print("*** They can help guide your career and open new doors. (Manager interactions to be implemented further) ***\n")
