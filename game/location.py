@@ -48,6 +48,33 @@ class Location:
             all_events.extend(venue.events_hosted)
         return all_events
 
+    def ensure_intra_city_connectivity(self):
+        """
+        Ensures that every POI and Venue in this location has at least a fallback
+        intra-city travel connection to every other POI and Venue.
+        If a connection already exists, it is preserved.
+        """
+        all_targets = self.points_of_interest + self.venues
+        for i in range(len(all_targets)):
+            for j in range(i + 1, len(all_targets)):
+                target1 = all_targets[i]
+                target2 = all_targets[j]
+
+                id1 = getattr(target1, 'poi_id', getattr(target1, 'venue_id', None))
+                id2 = getattr(target2, 'poi_id', getattr(target2, 'venue_id', None))
+
+                if not id1 or not id2:
+                    continue
+
+                connection_key = frozenset((id1, id2))
+                if connection_key not in self.intra_city_poi_connections:
+                    # Create a default fallback connection
+                    self.intra_city_poi_connections[connection_key] = {
+                        "walk": {"time": 20, "cost": 0},
+                        "taxi": {"time": 5, "cost": 15},
+                        "bike": {"time": 8, "cost": 0, "requires_bike": True}
+                    }
+
     def add_travel_connection(self, destination_location_name, cost, time_hours, method=None):
         # In a fuller system, destination_location_name might be resolved to an object.
         # For now, just store by name.

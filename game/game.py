@@ -877,6 +877,9 @@ class Game:
                 poi_ids_tuple = tuple(sorted(conn_data["pois"]))
                 if len(poi_ids_tuple) == 2: location_obj.intra_city_poi_connections[frozenset(poi_ids_tuple)] = {k: v for k, v in conn_data.items() if k != "pois"}
 
+            # Ensure all points are connected so the player can always travel between them
+            location_obj.ensure_intra_city_connectivity()
+
         self._build_poi_venue_id_map()
 
         try:
