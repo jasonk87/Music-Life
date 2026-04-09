@@ -161,6 +161,16 @@ class Game:
         self.process_time_based_player_needs(self.player, minutes)
         self._check_player_survival_state()
 
+    def _get_max_genre_gear_boost(self, genre):
+        """Finds the highest genre boost from the player's non-broken gear."""
+        max_boost = 0.0
+        for item in self.player.gear_inventory:
+            if not item.is_broken:
+                boost = item.get_genre_boost(genre)
+                if boost > max_boost:
+                    max_boost = boost
+        return max_boost
+
     def _calculate_recording_quality(self, song, studio_quality, producer_bonus=0.0):
         performance_skills = [
             self.player.skills.get("guitar", 0),
@@ -170,8 +180,11 @@ class Game:
         ]
         best_relevant_skill = max(performance_skills)
         skill_bonus = best_relevant_skill / 100.0
+
+        gear_bonus = self._get_max_genre_gear_boost(song.genre)
+
         base_quality = (song.song_quality * 0.6) + (studio_quality * 0.4)
-        return min(1.0, base_quality + skill_bonus + producer_bonus)
+        return min(1.0, base_quality + skill_bonus + producer_bonus + gear_bonus)
 
     def _get_recording_setup(self, poi):
         if not poi:
@@ -580,11 +593,19 @@ class Game:
 
     def _resolve_gig_rewards(self, performance_event, final_hype):
         setlist_quality = 0.0
+        average_gear_boost = 0.0
+
         if self.performance_setlist:
             setlist_quality = sum(song.song_quality for song in self.performance_setlist) / len(self.performance_setlist)
+
+            # Apply tone/gear bonus for the genres played in the setlist
+            genre_boosts = [self._get_max_genre_gear_boost(song.genre) for song in self.performance_setlist]
+            average_gear_boost = sum(genre_boosts) / len(genre_boosts)
+
         score = (
             int(final_hype / 2)
             + int(setlist_quality * 30)
+            + int(average_gear_boost * 40)  # scale up the 0.0-0.3 boost to 0-12 score points
             + min(18, int(self.player.skills.get("stage_presence", 0)))
             + min(12, int(self.player.fame / 6))
             - max(0, int(self.player.stress / 10))
@@ -625,11 +646,30 @@ class Game:
             return
 
         theft_score = int(self.player.money / 30) + (12 if not self.player.has_home else 0) + int(self.player.fame / 10)
-        if self.player.money > 0 and not self.player.has_bodyguard and self._passes_contextual_threshold(theft_score, 102):
-            cash_loss = min(self.player.money, random.randint(15, 60))
-            self.player.money -= cash_loss
-            self.player.stress = min(100, self.player.stress + 9)
-            self.GAME_LOG.add_log_message(f"THEFT: Someone catches you slipping and you lose ${cash_loss}.")
+        if (self.player.money > 0 or len(self.player.gear_inventory) > 0) and not self.player.has_bodyguard and self._passes_contextual_threshold(theft_score, 102):
+            stealable_items = [item for item in self.player.gear_inventory if not item.is_broken]
+            if len(stealable_items) > 0 and random.random() < 0.4:
+                # Steal an item
+                stolen_item = random.choice(stealable_items)
+                if stolen_item:
+                    self.player.remove_gear(stolen_item)
+                    self.player.stress = min(100, self.player.stress + 20)
+                    self.GAME_LOG.add_log_message(f"THEFT: Someone broke in and stole your {stolen_item.name}!")
+
+                    # Try to put it in a local pawn shop
+                    if self.player.current_location:
+                        pawn_shops = [p for p in self.player.current_location.points_of_interest if getattr(p, "category", "") == "SHOP_PAWN"]
+                        if pawn_shops:
+                            shop = random.choice(pawn_shops)
+                            shop.pawned_items.append(stolen_item)
+                            self.GAME_LOG.add_log_message("You might be able to track it down at a local pawn shop.")
+            else:
+                # Steal cash
+                cash_loss = min(self.player.money, random.randint(15, 60))
+                if cash_loss > 0:
+                    self.player.money -= cash_loss
+                    self.player.stress = min(100, self.player.stress + 9)
+                    self.GAME_LOG.add_log_message(f"THEFT: Someone catches you slipping and you lose ${cash_loss}.")
             return
 
         released_songs = [song for song in self.player.songs_written if song.is_released]
@@ -1560,9 +1600,71 @@ class Game:
                         self.GAME_LOG.add_log_message("It seems quiet right now.")
                 else:
                     self.handle_interaction(interaction_options[choice])
-                    if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership"]:
+                    if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership", "pawn_sell", "pawn_buy"]:
                         self.explore_menu_state = "location"
                         self.selected_poi = None
+            else:
+                self.explore_menu_state = "location"
+        elif self.explore_menu_state == "pawn_sell":
+            if self.selected_poi:
+                pawnable_items = [i for i in self.player.gear_inventory if not i.is_broken and i.cost > 0]
+                if not pawnable_items:
+                    self.GAME_LOG.add_log_message("You have no valuable items to pawn.")
+                    self.explore_menu_state = "poi"
+                else:
+                    inventory_opts = {}
+                    for i, item in enumerate(pawnable_items):
+                        pawn_value = max(1, int(item.cost * 0.25)) # Pawn for 25% of cost
+                        inventory_opts[str(i)] = f"{item.name} (Pawn for ${pawn_value})"
+                    inventory_opts["back"] = "Cancel"
+
+                    choice = self.ui.present_choices(inventory_opts, "Select item to pawn:")
+                    if choice == "back":
+                        self.explore_menu_state = "poi"
+                    else:
+                        item_to_pawn = pawnable_items[int(choice)]
+                        pawn_value = max(1, int(item_to_pawn.cost * 0.25))
+
+                        self.player.remove_gear(item_to_pawn)
+                        self.player.money += pawn_value
+
+                        self.selected_poi.pawned_items.append(item_to_pawn)
+
+                        self.GAME_LOG.add_log_message(f"You pawned your {item_to_pawn.name} for ${pawn_value}.")
+                        self.explore_menu_state = "poi"
+            else:
+                self.explore_menu_state = "location"
+        elif self.explore_menu_state == "pawn_buy":
+            if self.selected_poi:
+                pawned_items = self.selected_poi.pawned_items
+                if not pawned_items:
+                    self.GAME_LOG.add_log_message("The pawn shop has no items for sale.")
+                    self.explore_menu_state = "poi"
+                else:
+                    inventory_opts = {}
+                    for i, item in enumerate(pawned_items):
+                        buyback_price = max(1, int(item.cost * 0.60)) # Buy back for 60% of cost
+                        inventory_opts[str(i)] = f"{item.name} (Buy for ${buyback_price})"
+                    inventory_opts["back"] = "Cancel"
+
+                    choice = self.ui.present_choices(inventory_opts, "Browse Pawn Shop:")
+                    if choice == "back":
+                        self.explore_menu_state = "poi"
+                    else:
+                        item_to_buy = pawned_items[int(choice)]
+                        buyback_price = max(1, int(item_to_buy.cost * 0.60))
+
+                        if self.player.money >= buyback_price:
+                            if self.player.can_carry_gear(item_to_buy):
+                                self.player.money -= buyback_price
+                                self.selected_poi.pawned_items.remove(item_to_buy)
+                                self.player.add_gear(item_to_buy)
+                                self.GAME_LOG.add_log_message(f"You bought back a {item_to_buy.name} for ${buyback_price}.")
+                                self.explore_menu_state = "poi"
+                            else:
+                                self.GAME_LOG.add_log_message(f"You can't carry {item_to_buy.name}.")
+                        else:
+                            self.GAME_LOG.add_log_message(f"You can't afford {item_to_buy.name}. Need ${buyback_price}, Cash: ${self.player.money}.")
             else:
                 self.explore_menu_state = "location"
         elif self.explore_menu_state == "dealership":
@@ -2264,6 +2366,8 @@ class Game:
             "Create a Remix",
             "Rest (8 hours)",
             "Browse vehicles",
+            "Pawn Item",
+            "Browse Pawn Shop",
         ] or interaction_text.startswith("Submit Demo") or interaction_text.startswith("Order ") \
             or interaction_text.startswith("Book Rehearsal Slot") \
             or interaction_text.startswith("Rent Room") or interaction_text.startswith("Sleep (8 hours") \
@@ -2535,6 +2639,10 @@ class Game:
                 self.explore_menu_state = "dealership"
             else:
                 self.GAME_LOG.add_log_message("No vehicles for sale currently.")
+        elif interaction_text == "Pawn Item":
+            self.explore_menu_state = "pawn_sell"
+        elif interaction_text == "Browse Pawn Shop":
+            self.explore_menu_state = "pawn_buy"
 
     def handle_travel_menu(self):
         travel_options = {

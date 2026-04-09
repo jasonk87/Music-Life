@@ -151,6 +151,17 @@
       "properties": {
         "shop_inventory_vehicle_ids": ["luxury_suv", "tour_bus", "private_jet"]
       }
+    },
+    {
+      "poi_id": "citycenter_pawn_shop",
+      "name": "City Center Exchange & Pawn",
+      "description": "A bustling pawn shop full of forgotten dreams and stolen guitars.",
+      "category": "SHOP_PAWN",
+      "interaction_options": [
+        "Pawn Item",
+        "Browse Pawn Shop"
+      ],
+      "properties": {}
     }
   ],
   "venues": [

@@ -88,6 +88,17 @@
         "stress_modifier_hourly": -20,
         "comfort_modifier_hourly": 15
       }
+    },
+    {
+      "poi_id": "austin_pawn_shop",
+      "name": "Lone Star Pawn",
+      "description": "A giant pawn shop filled with rare instruments from broken bands.",
+      "category": "SHOP_PAWN",
+      "interaction_options": [
+        "Pawn Item",
+        "Browse Pawn Shop"
+      ],
+      "properties": {}
     }
   ],
   "venues": [

@@ -80,6 +80,17 @@
       "properties": {
         "owner_npc_id": "barber_bill_npc"
       }
+    },
+    {
+      "poi_id": "hometown_pawn_shop",
+      "name": "Hometown Pawn",
+      "description": "A dingy pawn shop with bars on the windows. Good for quick cash, bad for getting your stuff back.",
+      "category": "SHOP_PAWN",
+      "interaction_options": [
+        "Pawn Item",
+        "Browse Pawn Shop"
+      ],
+      "properties": {}
     }
   ],
   "venues": [
