@@ -1665,11 +1665,13 @@ class Game:
                 confirm_options = {"yes": start_label}
                 if can_use_insp:
                     confirm_options["yes_insp"] = start_insp_label
+                if self.player.band and len(self.player.band.members) > 1:
+                    confirm_options["band"] = f"Collaborate with {self.player.band.name} (Uses Band Skills & Chemistry)"
                 confirm_options["no"] = "Cancel"
 
                 choice = self.ui.present_choices(confirm_options, f"Ready to write? (Inspiration: {self.player.inspiration}/100)")
 
-                if choice == "yes" or choice == "yes_insp":
+                if choice in ["yes", "yes_insp", "band"]:
                     if choice == "yes_insp":
                         self.player.inspiration -= insp_cost
                         self.song_in_progress['inspiration_bonus'] = 0.2 # 20% quality boost
@@ -1677,6 +1679,7 @@ class Game:
                     else:
                         self.song_in_progress['inspiration_bonus'] = 0.0
 
+                    self.song_in_progress['is_collaborative'] = (choice == "band")
                     self.songwriting_stage = "writing_components"
                     # This will fall through to the next stage in the same frame
                 else:
@@ -1686,31 +1689,89 @@ class Game:
 
             if self.songwriting_stage == "writing_components":
                 # This is a non-interactive stage, so we do the work and then change state.
-                self.GAME_LOG.add_log_message("You spend a long day writing...")
-
                 insp_bonus = self.song_in_progress.get('inspiration_bonus', 0.0)
+                is_collaborative = self.song_in_progress.get('is_collaborative', False)
 
-                # Lyrics (2 hours)
-                lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
-                self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
-                self._advance_time_with_needs(120)
-                self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
+                if is_collaborative:
+                    self.GAME_LOG.add_log_message(f"You call a band meeting to write '{self.song_in_progress.get('title')}'.")
+                    band = self.player.band
 
-                # Melody (3 hours)
-                catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
-                self.song_in_progress['catchiness'] = min(1.0, catchiness)
-                self._advance_time_with_needs(180)
-                self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
+                    # Band chemistry determines how well skills blend and how likely conflicts are
+                    chem_bonus = (band.chemistry - 50) / 200.0 # From -0.25 to +0.25
 
-                # Arrangement / Complexity (3 hours)
-                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
-                self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
+                    # Simulating conflicts
+                    conflict_chance = max(0.05, 0.5 - (band.chemistry / 150.0))
+                    if random.random() < conflict_chance:
+                        # Find two different members to argue
+                        if len(band.members) >= 2:
+                            m1, m2 = random.sample(band.members, 2)
+                            self.GAME_LOG.add_log_message(f"DRAMA: {m1.name} and {m2.name} argue over the creative direction!")
+                            band.update_chemistry(-5)
+                            chem_bonus -= 0.15 # Massive penalty to the song quality
+                            self.player.stress = min(100, self.player.stress + 10)
+                        else:
+                            self.GAME_LOG.add_log_message("DRAMA: Creative blocks and frustration hit the room.")
+                            chem_bonus -= 0.1
+                    elif random.random() < (band.chemistry / 150.0):
+                        self.GAME_LOG.add_log_message("SYNERGY: The band locks into a perfect groove!")
+                        chem_bonus += 0.15
+                        band.update_chemistry(2)
+                        self.player.stress = max(0, self.player.stress - 5)
 
-                originality = self._calculate_song_component_quality('songwriting') + insp_bonus
-                self.song_in_progress['originality'] = min(1.0, originality)
+                    # Lyrics (2 hours)
+                    lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus + chem_bonus
+                    self.song_in_progress['lyrical_depth'] = max(0.1, min(1.0, lyrical_depth))
+                    self._advance_time_with_needs(120)
+                    self.GAME_LOG.add_log_message(f"The band hashes out the lyrics. (Quality: {self.song_in_progress['lyrical_depth']:.2f})")
 
-                self._advance_time_with_needs(180)
-                self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
+                    # Melody (3 hours)
+                    catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus + chem_bonus
+                    self.song_in_progress['catchiness'] = max(0.1, min(1.0, catchiness))
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"Working out the vocal melodies together. (Quality: {self.song_in_progress['catchiness']:.2f})")
+
+                    # Arrangement / Complexity (3 hours)
+                    music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus + chem_bonus
+                    self.song_in_progress['music_complexity'] = max(0.1, min(1.0, music_complexity))
+
+                    originality = self._calculate_song_component_quality('songwriting') + insp_bonus + chem_bonus
+                    self.song_in_progress['originality'] = max(0.1, min(1.0, originality))
+
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"The final arrangement comes together. (Complexity: {self.song_in_progress['music_complexity']:.2f}, Originality: {self.song_in_progress['originality']:.2f})")
+
+                else:
+                    self.GAME_LOG.add_log_message("You spend a long day writing solo...")
+
+                    # Lyrics (2 hours)
+                    # Temporarily force player skills if not collaborating
+                    old_band = self.player.band
+                    self.player.band = None
+                    lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
+                    self.player.band = old_band
+                    self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
+                    self._advance_time_with_needs(120)
+                    self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
+
+                    # Melody (3 hours)
+                    self.player.band = None
+                    catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
+                    self.player.band = old_band
+                    self.song_in_progress['catchiness'] = min(1.0, catchiness)
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
+
+                    # Arrangement / Complexity (3 hours)
+                    self.player.band = None
+                    music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
+                    originality = self._calculate_song_component_quality('songwriting') + insp_bonus
+                    self.player.band = old_band
+
+                    self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
+                    self.song_in_progress['originality'] = min(1.0, originality)
+
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
 
                 self.GAME_LOG.add_log_message("The song is written! Now to finalize it.")
                 self.songwriting_stage = "invite_feature"
