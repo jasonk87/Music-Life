@@ -99,6 +99,18 @@
         "Browse Pawn Shop"
       ],
       "properties": {}
+    },
+    {
+      "poi_id": "austin_health_center",
+      "name": "Live Music Wellness Center",
+      "description": "A boutique clinic focused on musician injuries and burnout.",
+      "category": "CLINIC",
+      "interaction_options": [
+        "Vocal Rest Treatment ($50, 4 hours)",
+        "Physical Therapy ($100, 2 hours)",
+        "Detox/Rehab ($500, 3 days)"
+      ],
+      "properties": {}
     }
   ],
   "venues": [

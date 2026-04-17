@@ -100,7 +100,7 @@
       "category": "SHOP_FOOD",
       "interaction_options": ["Buy Food Items", "Work Shift: Night Stock ($32 / 5h)"],
       "properties": {
-        "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag"]
+        "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag", "substance_energy_drink"]
       }
     },
     {
@@ -160,6 +160,18 @@
       "interaction_options": [
         "Pawn Item",
         "Browse Pawn Shop"
+      ],
+      "properties": {}
+    },
+    {
+      "poi_id": "citycenter_hospital",
+      "name": "St. Jude Hospital",
+      "description": "A large general hospital. They handle everything, for a price.",
+      "category": "CLINIC",
+      "interaction_options": [
+        "Vocal Rest Treatment ($50, 4 hours)",
+        "Physical Therapy ($100, 2 hours)",
+        "Detox/Rehab ($500, 3 days)"
       ],
       "properties": {}
     }

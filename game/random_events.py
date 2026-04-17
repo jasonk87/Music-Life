@@ -182,6 +182,11 @@ def check_for_random_event(player, current_poi_name="an unknown place", chance=0
                      if logger: logger.add_log_message("They just want to party! You have a wild night. (Energy -20, Stress -10)")
                      player.energy = max(0, player.energy - 20)
                      player.stress = max(0, player.stress - 10)
+                     if random.random() < 0.3:
+                         from game_data.gear_catalog import GEAR_CATALOG
+                         favors = GEAR_CATALOG.get("substance_party_favors")
+                         if favors and player.add_gear(favors):
+                             if logger: logger.add_log_message("They slipped a baggie of 'Shady Party Favors' into your pocket...")
                  else:
                      if logger: logger.add_log_message("They are obsessed! It gets creepy. (Stress +15)")
                      player.stress = min(100, player.stress + 15)

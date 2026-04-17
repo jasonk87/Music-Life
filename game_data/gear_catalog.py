@@ -225,6 +225,17 @@ GEAR_CATALOG = {
         description="A simple cup of tap water.",
         hunger_reduction=0, energy_boost=1 # Slight refreshment
     ),
+    # --- Substances ---
+    "substance_energy_drink": GearItem(
+        item_id="substance_energy_drink", name="Sketchy Energy Drink", gear_type="FOOD", size=0, cost=4,
+        description="Packed with caffeine and chemicals. Gives a huge burst of energy but wrecks your health.",
+        hunger_reduction=5, energy_boost=45, properties={"comfort_effect": -10, "health_effect": -5, "substance_dependency_effect": 5}
+    ),
+    "substance_party_favors": GearItem(
+        item_id="substance_party_favors", name="Shady Party Favors", gear_type="FOOD", size=0, cost=50,
+        description="A little baggie of something. Makes you feel invincible on stage but destroys your body.",
+        hunger_reduction=0, energy_boost=80, properties={"comfort_effect": 20, "health_effect": -15, "substance_dependency_effect": 25, "stress_effect": -30}
+    ),
 }
 
 if __name__ == '__main__':

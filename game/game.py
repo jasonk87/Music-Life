@@ -610,7 +610,13 @@ class Game:
             + min(12, int(self.player.fame / 6))
             - max(0, int(self.player.stress / 10))
             - max(0, int((100 - self.player.energy) / 12))
+            - int(self.player.vocal_strain / 10)
+            - int(self.player.wrist_strain / 10)
         ) - 35
+
+        # Increase strain slightly per gig
+        self.player.vocal_strain = min(100, self.player.vocal_strain + random.randint(3, 8))
+        self.player.wrist_strain = min(100, self.player.wrist_strain + random.randint(2, 6))
         bands = [
             {"max": 18, "key": "messy", "pay_mult": 0.55, "fame_mult": 0.5, "message": "The set never really locks in."},
             {"max": 52, "key": "serviceable", "pay_mult": 0.85, "fame_mult": 0.8, "message": "You get through the set and a few people respond."},
@@ -2368,6 +2374,9 @@ class Game:
             "Browse vehicles",
             "Pawn Item",
             "Browse Pawn Shop",
+            "Vocal Rest Treatment ($50, 4 hours)",
+            "Physical Therapy ($100, 2 hours)",
+            "Detox/Rehab ($500, 3 days)",
         ] or interaction_text.startswith("Submit Demo") or interaction_text.startswith("Order ") \
             or interaction_text.startswith("Book Rehearsal Slot") \
             or interaction_text.startswith("Rent Room") or interaction_text.startswith("Sleep (8 hours") \
@@ -2643,6 +2652,32 @@ class Game:
             self.explore_menu_state = "pawn_sell"
         elif interaction_text == "Browse Pawn Shop":
             self.explore_menu_state = "pawn_buy"
+        elif interaction_text == "Vocal Rest Treatment ($50, 4 hours)":
+            if self.player.money < 50:
+                self.GAME_LOG.add_log_message("You can't afford this treatment.")
+            else:
+                self.player.money -= 50
+                self._advance_time_with_needs(240)
+                self.player.vocal_strain = max(0, self.player.vocal_strain - 50)
+                self.GAME_LOG.add_log_message("You rest your voice with professional guidance. (Vocal Strain -50)")
+        elif interaction_text == "Physical Therapy ($100, 2 hours)":
+            if self.player.money < 100:
+                self.GAME_LOG.add_log_message("You can't afford physical therapy.")
+            else:
+                self.player.money -= 100
+                self._advance_time_with_needs(120)
+                self.player.wrist_strain = max(0, self.player.wrist_strain - 40)
+                self.GAME_LOG.add_log_message("The therapist works out the knots in your arms. (Wrist Strain -40)")
+        elif interaction_text == "Detox/Rehab ($500, 3 days)":
+            if self.player.money < 500:
+                self.GAME_LOG.add_log_message("Rehab isn't cheap. You need $500.")
+            else:
+                self.player.money -= 500
+                self.GAME_LOG.add_log_message("You check yourself in to get clean. This will take a while...")
+                self._advance_time_with_needs(72 * 60)
+                self.player.substance_dependency = 0
+                self.player.health = min(100, self.player.health + 20)
+                self.GAME_LOG.add_log_message("You've completed the program. You feel terrible, but clean. (Dependency removed)")
 
     def handle_travel_menu(self):
         travel_options = {
@@ -2924,8 +2959,19 @@ class Game:
             player.comfort = max(0, player.comfort - int(round(hours_passed_float * 1.5)))
             player.stress = min(100, player.stress + int(round(hours_passed_float * 1.0)))
 
+        # Withdrawals
+        if player.substance_dependency > 20:
+            withdrawal_rate = (player.substance_dependency / 100.0) * 2.0
+            player.stress = min(100, player.stress + int(round(hours_passed_float * withdrawal_rate)))
+            player.energy = max(0, player.energy - int(round(hours_passed_float * withdrawal_rate)))
+
         if player.current_poi and getattr(player.current_poi, "category", "") == "HOME" and player.hunger < 50 and player.stress < 60:
             player.health = min(100, player.health + int(round(hours_passed_float * 0.3)))
+
+        # Passive recovery from strain if resting
+        if player.energy > 60 and player.stress < 40:
+            player.vocal_strain = max(0, player.vocal_strain - (hours_passed_float * 0.5))
+            player.wrist_strain = max(0, player.wrist_strain - (hours_passed_float * 0.5))
 
         POINTS_PER_DAY_HAIR = 10.0; POINTS_PER_DAY_BEARD = 12.5
         hair_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_HAIR

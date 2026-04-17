@@ -94,6 +94,8 @@ class TestPerformanceFlow(unittest.TestCase):
         game.player.merch_stock = []
         game.player.contacts = []
         game.player.gear_inventory = []
+        game.player.vocal_strain = 0
+        game.player.wrist_strain = 0
         song = Song("Closer", "Tester", "Rock", song_quality=0.9)
         song.mark_as_recorded(0.8)
         game.performance_setlist = [song]
