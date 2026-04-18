@@ -628,6 +628,24 @@ class Game:
         base_fame = getattr(performance_event, "fame_reward", 5)
         outcome["money_gain"] = max(10, int(base_payout * outcome["data"]["pay_mult"]))
         outcome["fame_gain"] = max(1, int(base_fame * outcome["data"]["fame_mult"]))
+
+        # Venue prestige impact
+        if hasattr(performance_event, "location") and hasattr(performance_event.location, "update_prestige"):
+            venue = performance_event.location
+            prestige_shift = 0.0
+            band_key = outcome.get("band") # From _resolve_outcome_roll which returns 'band' key
+            if band_key == "standout" and final_hype > 85:
+                prestige_shift = 0.2
+            elif band_key == "strong" and final_hype > 70:
+                prestige_shift = 0.1
+            elif band_key == "messy":
+                prestige_shift = -0.1
+
+            if prestige_shift != 0:
+                venue.update_prestige(prestige_shift)
+                # Ensure the venue is marked as active
+                venue.weeks_without_events = 0
+
         return outcome
 
     def _passes_contextual_threshold(self, score, threshold):
@@ -818,8 +836,17 @@ class Game:
     def _get_explore_context(self, location, poi=None):
         if poi:
             title = f"{poi.name} in {location.name}"
+            type_str = getattr(poi, 'category', getattr(poi, 'venue_type', 'Unknown'))
+            if hasattr(poi, 'prestige'):
+                # Extract trend string from __str__ method of Venue
+                str_rep = str(poi)
+                trend = ""
+                if "↑" in str_rep: trend = " ↑"
+                elif "↓" in str_rep: trend = " ↓"
+                type_str += f" (Prestige: {poi.prestige:.1f}{trend})"
+
             details = [
-                f"Type: {getattr(poi, 'category', getattr(poi, 'venue_type', 'Unknown'))}",
+                f"Type: {type_str}",
                 f"Interactions available: {len(getattr(poi, 'interaction_options', []))}",
                 f"Energy / Stress: {self.player.energy} / {self.player.stress}",
                 self._get_progress_hint(),
@@ -1233,6 +1260,24 @@ class Game:
 
             if self.player and (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
                 self.GAME_LOG.add_log_message("--- Weekly World Update ---")
+
+                # Venue Prestige Decay
+                from game.rivals import NEWS_FEED
+                for loc in self.WORLD_MAP.values():
+                    for venue in loc.venues:
+                        venue.weeks_without_events += 1
+                        if venue.weeks_without_events > 4:
+                            # Venue is stagnant, lose prestige slowly
+                            venue.update_prestige(-0.1)
+
+                        if venue.prestige < 1.0:
+                            # Management changes hands
+                            venue.prestige = venue.base_prestige
+                            venue.weeks_without_events = 0
+                            venue.events_hosted.clear()
+                            venue.prestige_history.clear()
+                            NEWS_FEED.insert(0, f"SCENE: {venue.name} in {loc.name} closed its doors after a rough patch, but new management is attempting a reopening.")
+                            self.GAME_LOG.add_log_message(f"NEWS: {venue.name} is under new management.")
 
                 # Band Wages
                 wage_report = resolve_weekly_wages(self.player, self.player.band)
@@ -3101,6 +3146,16 @@ class Game:
                                     new_gig = Event(name=gig_name, event_type="CLUB_GIG", location=venue_to_book, is_npc_gig=True)
                                     venue_to_book.add_event(new_gig)
                                     self.GAME_LOG.add_log_message(f"GOSSIP: You see a flyer that {npc.name} is playing a show at {venue_to_book.name} soon.")
+
+                                    # Simulate the gig outcome for the venue's prestige
+                                    venue_to_book.weeks_without_events = 0
+                                    npc_quality = npc_fame + sum(npc.skills.values())
+                                    if npc_quality > (venue_to_book.prestige * 50):
+                                        # Legendary show for this venue
+                                        venue_to_book.update_prestige(0.1)
+                                    elif npc_quality < (venue_to_book.prestige * 10):
+                                        # Flop
+                                        venue_to_book.update_prestige(-0.1)
 
                 tour_score = min(18, int(npc_fame / 18))
                 if npc_fame > 200 and not npc.on_tour and self._passes_contextual_threshold(tour_score, 108):

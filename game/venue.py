@@ -10,7 +10,12 @@ class Venue:
         self.venue_type = venue_type
         self.category = category
         self.capacity = capacity
-        self.prestige = prestige
+
+        self.prestige = float(prestige)
+        self.base_prestige = float(prestige)
+        self.prestige_history = []
+        self.weeks_without_events = 0
+
         self.events_hosted = []
         self.owner_npc_id = None
         self.interaction_options = interaction_options if interaction_options is not None else []
@@ -36,8 +41,23 @@ class Venue:
     def get_interactions(self):
         return self.interaction_options
 
+    def update_prestige(self, amount):
+        self.prestige_history.append(self.prestige)
+        # Keep history manageable
+        if len(self.prestige_history) > 10:
+            self.prestige_history.pop(0)
+
+        self.prestige = max(0.0, min(10.0, self.prestige + amount))
+
     def __str__(self):
-        base_str = f"{self.name} (ID: {self.venue_id}, Type: {self.venue_type}, Category: {self.category}, Capacity: {self.capacity}, Prestige: {self.prestige})"
+        prestige_str = f"{self.prestige:.1f}"
+        if self.prestige_history:
+            if self.prestige > self.prestige_history[-1]:
+                prestige_str += " ↑"
+            elif self.prestige < self.prestige_history[-1]:
+                prestige_str += " ↓"
+
+        base_str = f"{self.name} (ID: {self.venue_id}, Type: {self.venue_type}, Category: {self.category}, Capacity: {self.capacity}, Prestige: {prestige_str})"
         if self.can_rent_gear:
             base_str += f" [Gear Rental: Yes, Fee: ${self.gear_rental_fee}, Items: {len(self.available_rental_gear_ids)} types]"
         else:

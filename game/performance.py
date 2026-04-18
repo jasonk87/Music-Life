@@ -15,6 +15,15 @@ class PerformanceManager:
 
         # Stats
         self.crowd_hype = 50 # 0-100
+
+        # Apply Venue Prestige modifier to base hype
+        # High prestige venue expects better acts. Base hype starts slightly lower so you have to earn it,
+        # but the ceiling for rewards is much higher (handled in game.py).
+        # A dive bar (prestige 1) starts with higher default hype because the crowd is less critical.
+        if hasattr(self.event.location, 'prestige'):
+            prestige_penalty = (self.event.location.prestige - 1) * 2
+            self.crowd_hype = max(20, self.crowd_hype - int(prestige_penalty))
+
         # Apply Genre Bias
         bias_mult = 1.0
         if hasattr(self.event.location, 'genre_bias'):
