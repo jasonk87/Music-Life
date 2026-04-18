@@ -33,6 +33,12 @@ class Player:
         self.comfort = 70
         self.hunger = 0 # 0-100, 0 is full, 100 is starving
         self.health = 100
+
+        # Ailments and physical strain
+        self.vocal_strain = 0 # 0-100
+        self.wrist_strain = 0 # 0-100
+        self.substance_dependency = 0 # 0-100
+
         self.alive = True
         self.cause_of_death = None
 
@@ -186,6 +192,18 @@ class Player:
         comfort_effect = item.properties.get("comfort_effect", 0)
         self.comfort = max(0, min(100, self.comfort + comfort_effect))
 
+        # Apply health effect
+        health_effect = item.properties.get("health_effect", 0)
+        self.health = max(0, min(100, self.health + health_effect))
+
+        # Apply stress effect
+        stress_effect = item.properties.get("stress_effect", 0)
+        self.stress = max(0, min(100, self.stress + stress_effect))
+
+        # Apply substance dependency
+        substance_dependency_effect = item.properties.get("substance_dependency_effect", 0)
+        self.substance_dependency = max(0, min(100, self.substance_dependency + substance_dependency_effect))
+
         msg = f"You ate {item.name}. (Hunger -{old_hunger - self.hunger}, Energy +{self.energy - old_energy})"
         return True, msg
 
@@ -270,8 +288,22 @@ class Player:
         gain_mult = self.get_trait_multiplier("skill_gain_mult")
 
         # Arbitrary skill gain formula, can be refined
-        self.skills[skill_name] += hours * 0.1 * gain_mult
+        # Apply Strain Penalties (practicing with injuries reduces gains)
+        strain_penalty = 0.0
+        if skill_name == "vocals" and self.vocal_strain > 50:
+            strain_penalty = (self.vocal_strain - 50) / 100.0 # Up to 50% penalty
+        elif skill_name in ["guitar", "bass", "drums", "keyboard", "electronic"] and self.wrist_strain > 50:
+            strain_penalty = (self.wrist_strain - 50) / 100.0
+
+        effective_gain_mult = max(0.1, gain_mult * (1.0 - strain_penalty))
+        self.skills[skill_name] += hours * 0.1 * effective_gain_mult
         print(f"{self.name} practiced {skill_name} for {hours} hours. Skill level is now {self.skills[skill_name]:.1f}.")
+
+        # Increase Strain
+        if skill_name == "vocals":
+            self.vocal_strain = min(100, self.vocal_strain + (hours * 2))
+        elif skill_name in ["guitar", "bass", "drums"]:
+            self.wrist_strain = min(100, self.wrist_strain + (hours * 1.5))
 
         # Gear wear from practice
         # Determine relevant gear type for the skill
@@ -424,6 +456,7 @@ class Player:
         status += f"Fame: {self.fame}, Money: ${self.money}\n"
         status += f"Energy: {self.energy}/100, Stress: {self.stress}/100, Hunger: {self.hunger}/100\n"
         status += f"Comfort: {self.comfort}/100, Health: {self.health}/100, Homesickness: {self.homesickness}/100\n"
+        status += f"Vocal Strain: {self.vocal_strain}/100, Wrist Strain: {self.wrist_strain}/100, Substance Dep: {self.substance_dependency}/100\n"
         status += f"Skills: {self.skills}\n"
         status += f"Songs Written: {len(self.songs_written)}\n"
         status += f"Gear: {len(self.gear_inventory)} items (Load: {self.get_current_gear_load()}/{self.get_current_gear_capacity()})\n"

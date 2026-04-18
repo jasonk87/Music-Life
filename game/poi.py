@@ -31,6 +31,7 @@ class PointOfInterest:
         self.comfort_modifier_hourly = comfort_modifier_hourly
 
         self.player_interest_score = 0.0 # For OFFICE_RECORD_LABEL, how interested they are in the player
+        self.pawned_items = [] # Items that have been pawned at this POI
 
         # Specific to FOOD_FASTFOOD POIs
         self.menu_items = [] # List of dicts: {"display_text": "Order X ($Y)", "item_id": "food_item_id_from_catalog", "cost": Y, "effects": {"hunger": -Z, "energy": +W}}

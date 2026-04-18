@@ -273,8 +273,16 @@ class PygameUI:
             "Homesickness": f"{player.homesickness}/100",
         }
 
+        if player.vocal_strain > 0:
+            stats["Vocal Strain"] = f"{player.vocal_strain}/100"
+        if player.wrist_strain > 0:
+            stats["Wrist Strain"] = f"{player.wrist_strain}/100"
+        if player.substance_dependency > 0:
+            stats["Dependency"] = f"{player.substance_dependency}/100"
+
         for key, value in stats.items():
-            self.draw_text(f"{key}: {value}", FONT_DEFAULT, WHITE, 100, y_pos)
+            color = RED if "Strain" in key or "Dependency" in key else WHITE
+            self.draw_text(f"{key}: {value}", FONT_DEFAULT, color, 100, y_pos)
             y_pos += 40
 
         self.draw_text("Press ESC to go back", FONT_DEFAULT, WHITE, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50, centered=True)

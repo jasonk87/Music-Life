@@ -161,6 +161,16 @@ class Game:
         self.process_time_based_player_needs(self.player, minutes)
         self._check_player_survival_state()
 
+    def _get_max_genre_gear_boost(self, genre):
+        """Finds the highest genre boost from the player's non-broken gear."""
+        max_boost = 0.0
+        for item in self.player.gear_inventory:
+            if not item.is_broken:
+                boost = item.get_genre_boost(genre)
+                if boost > max_boost:
+                    max_boost = boost
+        return max_boost
+
     def _calculate_recording_quality(self, song, studio_quality, producer_bonus=0.0):
         performance_skills = [
             self.player.skills.get("guitar", 0),
@@ -170,8 +180,11 @@ class Game:
         ]
         best_relevant_skill = max(performance_skills)
         skill_bonus = best_relevant_skill / 100.0
+
+        gear_bonus = self._get_max_genre_gear_boost(song.genre)
+
         base_quality = (song.song_quality * 0.6) + (studio_quality * 0.4)
-        return min(1.0, base_quality + skill_bonus + producer_bonus)
+        return min(1.0, base_quality + skill_bonus + producer_bonus + gear_bonus)
 
     def _get_recording_setup(self, poi):
         if not poi:
@@ -580,16 +593,30 @@ class Game:
 
     def _resolve_gig_rewards(self, performance_event, final_hype):
         setlist_quality = 0.0
+        average_gear_boost = 0.0
+
         if self.performance_setlist:
             setlist_quality = sum(song.song_quality for song in self.performance_setlist) / len(self.performance_setlist)
+
+            # Apply tone/gear bonus for the genres played in the setlist
+            genre_boosts = [self._get_max_genre_gear_boost(song.genre) for song in self.performance_setlist]
+            average_gear_boost = sum(genre_boosts) / len(genre_boosts)
+
         score = (
             int(final_hype / 2)
             + int(setlist_quality * 30)
+            + int(average_gear_boost * 40)  # scale up the 0.0-0.3 boost to 0-12 score points
             + min(18, int(self.player.skills.get("stage_presence", 0)))
             + min(12, int(self.player.fame / 6))
             - max(0, int(self.player.stress / 10))
             - max(0, int((100 - self.player.energy) / 12))
+            - int(self.player.vocal_strain / 10)
+            - int(self.player.wrist_strain / 10)
         ) - 35
+
+        # Increase strain slightly per gig
+        self.player.vocal_strain = min(100, self.player.vocal_strain + random.randint(3, 8))
+        self.player.wrist_strain = min(100, self.player.wrist_strain + random.randint(2, 6))
         bands = [
             {"max": 18, "key": "messy", "pay_mult": 0.55, "fame_mult": 0.5, "message": "The set never really locks in."},
             {"max": 52, "key": "serviceable", "pay_mult": 0.85, "fame_mult": 0.8, "message": "You get through the set and a few people respond."},
@@ -601,6 +628,24 @@ class Game:
         base_fame = getattr(performance_event, "fame_reward", 5)
         outcome["money_gain"] = max(10, int(base_payout * outcome["data"]["pay_mult"]))
         outcome["fame_gain"] = max(1, int(base_fame * outcome["data"]["fame_mult"]))
+
+        # Venue prestige impact
+        if hasattr(performance_event, "location") and hasattr(performance_event.location, "update_prestige"):
+            venue = performance_event.location
+            prestige_shift = 0.0
+            band_key = outcome.get("band") # From _resolve_outcome_roll which returns 'band' key
+            if band_key == "standout" and final_hype > 85:
+                prestige_shift = 0.2
+            elif band_key == "strong" and final_hype > 70:
+                prestige_shift = 0.1
+            elif band_key == "messy":
+                prestige_shift = -0.1
+
+            if prestige_shift != 0:
+                venue.update_prestige(prestige_shift)
+                # Ensure the venue is marked as active
+                venue.weeks_without_events = 0
+
         return outcome
 
     def _passes_contextual_threshold(self, score, threshold):
@@ -625,11 +670,30 @@ class Game:
             return
 
         theft_score = int(self.player.money / 30) + (12 if not self.player.has_home else 0) + int(self.player.fame / 10)
-        if self.player.money > 0 and not self.player.has_bodyguard and self._passes_contextual_threshold(theft_score, 102):
-            cash_loss = min(self.player.money, random.randint(15, 60))
-            self.player.money -= cash_loss
-            self.player.stress = min(100, self.player.stress + 9)
-            self.GAME_LOG.add_log_message(f"THEFT: Someone catches you slipping and you lose ${cash_loss}.")
+        if (self.player.money > 0 or len(self.player.gear_inventory) > 0) and not self.player.has_bodyguard and self._passes_contextual_threshold(theft_score, 102):
+            stealable_items = [item for item in self.player.gear_inventory if not item.is_broken]
+            if len(stealable_items) > 0 and random.random() < 0.4:
+                # Steal an item
+                stolen_item = random.choice(stealable_items)
+                if stolen_item:
+                    self.player.remove_gear(stolen_item)
+                    self.player.stress = min(100, self.player.stress + 20)
+                    self.GAME_LOG.add_log_message(f"THEFT: Someone broke in and stole your {stolen_item.name}!")
+
+                    # Try to put it in a local pawn shop
+                    if self.player.current_location:
+                        pawn_shops = [p for p in self.player.current_location.points_of_interest if getattr(p, "category", "") == "SHOP_PAWN"]
+                        if pawn_shops:
+                            shop = random.choice(pawn_shops)
+                            shop.pawned_items.append(stolen_item)
+                            self.GAME_LOG.add_log_message("You might be able to track it down at a local pawn shop.")
+            else:
+                # Steal cash
+                cash_loss = min(self.player.money, random.randint(15, 60))
+                if cash_loss > 0:
+                    self.player.money -= cash_loss
+                    self.player.stress = min(100, self.player.stress + 9)
+                    self.GAME_LOG.add_log_message(f"THEFT: Someone catches you slipping and you lose ${cash_loss}.")
             return
 
         released_songs = [song for song in self.player.songs_written if song.is_released]
@@ -772,8 +836,17 @@ class Game:
     def _get_explore_context(self, location, poi=None):
         if poi:
             title = f"{poi.name} in {location.name}"
+            type_str = getattr(poi, 'category', getattr(poi, 'venue_type', 'Unknown'))
+            if hasattr(poi, 'prestige'):
+                # Extract trend string from __str__ method of Venue
+                str_rep = str(poi)
+                trend = ""
+                if "↑" in str_rep: trend = " ↑"
+                elif "↓" in str_rep: trend = " ↓"
+                type_str += f" (Prestige: {poi.prestige:.1f}{trend})"
+
             details = [
-                f"Type: {getattr(poi, 'category', getattr(poi, 'venue_type', 'Unknown'))}",
+                f"Type: {type_str}",
                 f"Interactions available: {len(getattr(poi, 'interaction_options', []))}",
                 f"Energy / Stress: {self.player.energy} / {self.player.stress}",
                 self._get_progress_hint(),
@@ -876,6 +949,9 @@ class Game:
             for conn_data in city_def_data.get("intra_city_poi_connections", []):
                 poi_ids_tuple = tuple(sorted(conn_data["pois"]))
                 if len(poi_ids_tuple) == 2: location_obj.intra_city_poi_connections[frozenset(poi_ids_tuple)] = {k: v for k, v in conn_data.items() if k != "pois"}
+
+            # Ensure all points are connected so the player can always travel between them
+            location_obj.ensure_intra_city_connectivity()
 
         self._build_poi_venue_id_map()
 
@@ -1184,6 +1260,24 @@ class Game:
 
             if self.player and (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
                 self.GAME_LOG.add_log_message("--- Weekly World Update ---")
+
+                # Venue Prestige Decay
+                from game.rivals import NEWS_FEED
+                for loc in self.WORLD_MAP.values():
+                    for venue in loc.venues:
+                        venue.weeks_without_events += 1
+                        if venue.weeks_without_events > 4:
+                            # Venue is stagnant, lose prestige slowly
+                            venue.update_prestige(-0.1)
+
+                        if venue.prestige < 1.0:
+                            # Management changes hands
+                            venue.prestige = venue.base_prestige
+                            venue.weeks_without_events = 0
+                            venue.events_hosted.clear()
+                            venue.prestige_history.clear()
+                            NEWS_FEED.insert(0, f"SCENE: {venue.name} in {loc.name} closed its doors after a rough patch, but new management is attempting a reopening.")
+                            self.GAME_LOG.add_log_message(f"NEWS: {venue.name} is under new management.")
 
                 # Band Wages
                 wage_report = resolve_weekly_wages(self.player, self.player.band)
@@ -1557,9 +1651,71 @@ class Game:
                         self.GAME_LOG.add_log_message("It seems quiet right now.")
                 else:
                     self.handle_interaction(interaction_options[choice])
-                    if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership"]:
+                    if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership", "pawn_sell", "pawn_buy"]:
                         self.explore_menu_state = "location"
                         self.selected_poi = None
+            else:
+                self.explore_menu_state = "location"
+        elif self.explore_menu_state == "pawn_sell":
+            if self.selected_poi:
+                pawnable_items = [i for i in self.player.gear_inventory if not i.is_broken and i.cost > 0]
+                if not pawnable_items:
+                    self.GAME_LOG.add_log_message("You have no valuable items to pawn.")
+                    self.explore_menu_state = "poi"
+                else:
+                    inventory_opts = {}
+                    for i, item in enumerate(pawnable_items):
+                        pawn_value = max(1, int(item.cost * 0.25)) # Pawn for 25% of cost
+                        inventory_opts[str(i)] = f"{item.name} (Pawn for ${pawn_value})"
+                    inventory_opts["back"] = "Cancel"
+
+                    choice = self.ui.present_choices(inventory_opts, "Select item to pawn:")
+                    if choice == "back":
+                        self.explore_menu_state = "poi"
+                    else:
+                        item_to_pawn = pawnable_items[int(choice)]
+                        pawn_value = max(1, int(item_to_pawn.cost * 0.25))
+
+                        self.player.remove_gear(item_to_pawn)
+                        self.player.money += pawn_value
+
+                        self.selected_poi.pawned_items.append(item_to_pawn)
+
+                        self.GAME_LOG.add_log_message(f"You pawned your {item_to_pawn.name} for ${pawn_value}.")
+                        self.explore_menu_state = "poi"
+            else:
+                self.explore_menu_state = "location"
+        elif self.explore_menu_state == "pawn_buy":
+            if self.selected_poi:
+                pawned_items = self.selected_poi.pawned_items
+                if not pawned_items:
+                    self.GAME_LOG.add_log_message("The pawn shop has no items for sale.")
+                    self.explore_menu_state = "poi"
+                else:
+                    inventory_opts = {}
+                    for i, item in enumerate(pawned_items):
+                        buyback_price = max(1, int(item.cost * 0.60)) # Buy back for 60% of cost
+                        inventory_opts[str(i)] = f"{item.name} (Buy for ${buyback_price})"
+                    inventory_opts["back"] = "Cancel"
+
+                    choice = self.ui.present_choices(inventory_opts, "Browse Pawn Shop:")
+                    if choice == "back":
+                        self.explore_menu_state = "poi"
+                    else:
+                        item_to_buy = pawned_items[int(choice)]
+                        buyback_price = max(1, int(item_to_buy.cost * 0.60))
+
+                        if self.player.money >= buyback_price:
+                            if self.player.can_carry_gear(item_to_buy):
+                                self.player.money -= buyback_price
+                                self.selected_poi.pawned_items.remove(item_to_buy)
+                                self.player.add_gear(item_to_buy)
+                                self.GAME_LOG.add_log_message(f"You bought back a {item_to_buy.name} for ${buyback_price}.")
+                                self.explore_menu_state = "poi"
+                            else:
+                                self.GAME_LOG.add_log_message(f"You can't carry {item_to_buy.name}.")
+                        else:
+                            self.GAME_LOG.add_log_message(f"You can't afford {item_to_buy.name}. Need ${buyback_price}, Cash: ${self.player.money}.")
             else:
                 self.explore_menu_state = "location"
         elif self.explore_menu_state == "dealership":
@@ -1662,11 +1818,13 @@ class Game:
                 confirm_options = {"yes": start_label}
                 if can_use_insp:
                     confirm_options["yes_insp"] = start_insp_label
+                if self.player.band and len(self.player.band.members) > 1:
+                    confirm_options["band"] = f"Collaborate with {self.player.band.name} (Uses Band Skills & Chemistry)"
                 confirm_options["no"] = "Cancel"
 
                 choice = self.ui.present_choices(confirm_options, f"Ready to write? (Inspiration: {self.player.inspiration}/100)")
 
-                if choice == "yes" or choice == "yes_insp":
+                if choice in ["yes", "yes_insp", "band"]:
                     if choice == "yes_insp":
                         self.player.inspiration -= insp_cost
                         self.song_in_progress['inspiration_bonus'] = 0.2 # 20% quality boost
@@ -1674,6 +1832,7 @@ class Game:
                     else:
                         self.song_in_progress['inspiration_bonus'] = 0.0
 
+                    self.song_in_progress['is_collaborative'] = (choice == "band")
                     self.songwriting_stage = "writing_components"
                     # This will fall through to the next stage in the same frame
                 else:
@@ -1683,31 +1842,89 @@ class Game:
 
             if self.songwriting_stage == "writing_components":
                 # This is a non-interactive stage, so we do the work and then change state.
-                self.GAME_LOG.add_log_message("You spend a long day writing...")
-
                 insp_bonus = self.song_in_progress.get('inspiration_bonus', 0.0)
+                is_collaborative = self.song_in_progress.get('is_collaborative', False)
 
-                # Lyrics (2 hours)
-                lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
-                self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
-                self._advance_time_with_needs(120)
-                self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
+                if is_collaborative:
+                    self.GAME_LOG.add_log_message(f"You call a band meeting to write '{self.song_in_progress.get('title')}'.")
+                    band = self.player.band
 
-                # Melody (3 hours)
-                catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
-                self.song_in_progress['catchiness'] = min(1.0, catchiness)
-                self._advance_time_with_needs(180)
-                self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
+                    # Band chemistry determines how well skills blend and how likely conflicts are
+                    chem_bonus = (band.chemistry - 50) / 200.0 # From -0.25 to +0.25
 
-                # Arrangement / Complexity (3 hours)
-                music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
-                self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
+                    # Simulating conflicts
+                    conflict_chance = max(0.05, 0.5 - (band.chemistry / 150.0))
+                    if random.random() < conflict_chance:
+                        # Find two different members to argue
+                        if len(band.members) >= 2:
+                            m1, m2 = random.sample(band.members, 2)
+                            self.GAME_LOG.add_log_message(f"DRAMA: {m1.name} and {m2.name} argue over the creative direction!")
+                            band.update_chemistry(-5)
+                            chem_bonus -= 0.15 # Massive penalty to the song quality
+                            self.player.stress = min(100, self.player.stress + 10)
+                        else:
+                            self.GAME_LOG.add_log_message("DRAMA: Creative blocks and frustration hit the room.")
+                            chem_bonus -= 0.1
+                    elif random.random() < (band.chemistry / 150.0):
+                        self.GAME_LOG.add_log_message("SYNERGY: The band locks into a perfect groove!")
+                        chem_bonus += 0.15
+                        band.update_chemistry(2)
+                        self.player.stress = max(0, self.player.stress - 5)
 
-                originality = self._calculate_song_component_quality('songwriting') + insp_bonus
-                self.song_in_progress['originality'] = min(1.0, originality)
+                    # Lyrics (2 hours)
+                    lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus + chem_bonus
+                    self.song_in_progress['lyrical_depth'] = max(0.1, min(1.0, lyrical_depth))
+                    self._advance_time_with_needs(120)
+                    self.GAME_LOG.add_log_message(f"The band hashes out the lyrics. (Quality: {self.song_in_progress['lyrical_depth']:.2f})")
 
-                self._advance_time_with_needs(180)
-                self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
+                    # Melody (3 hours)
+                    catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus + chem_bonus
+                    self.song_in_progress['catchiness'] = max(0.1, min(1.0, catchiness))
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"Working out the vocal melodies together. (Quality: {self.song_in_progress['catchiness']:.2f})")
+
+                    # Arrangement / Complexity (3 hours)
+                    music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus + chem_bonus
+                    self.song_in_progress['music_complexity'] = max(0.1, min(1.0, music_complexity))
+
+                    originality = self._calculate_song_component_quality('songwriting') + insp_bonus + chem_bonus
+                    self.song_in_progress['originality'] = max(0.1, min(1.0, originality))
+
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"The final arrangement comes together. (Complexity: {self.song_in_progress['music_complexity']:.2f}, Originality: {self.song_in_progress['originality']:.2f})")
+
+                else:
+                    self.GAME_LOG.add_log_message("You spend a long day writing solo...")
+
+                    # Lyrics (2 hours)
+                    # Temporarily force player skills if not collaborating
+                    old_band = self.player.band
+                    self.player.band = None
+                    lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
+                    self.player.band = old_band
+                    self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
+                    self._advance_time_with_needs(120)
+                    self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
+
+                    # Melody (3 hours)
+                    self.player.band = None
+                    catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
+                    self.player.band = old_band
+                    self.song_in_progress['catchiness'] = min(1.0, catchiness)
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
+
+                    # Arrangement / Complexity (3 hours)
+                    self.player.band = None
+                    music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
+                    originality = self._calculate_song_component_quality('songwriting') + insp_bonus
+                    self.player.band = old_band
+
+                    self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
+                    self.song_in_progress['originality'] = min(1.0, originality)
+
+                    self._advance_time_with_needs(180)
+                    self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
 
                 self.GAME_LOG.add_log_message("The song is written! Now to finalize it.")
                 self.songwriting_stage = "invite_feature"
@@ -2200,6 +2417,11 @@ class Game:
             "Create a Remix",
             "Rest (8 hours)",
             "Browse vehicles",
+            "Pawn Item",
+            "Browse Pawn Shop",
+            "Vocal Rest Treatment ($50, 4 hours)",
+            "Physical Therapy ($100, 2 hours)",
+            "Detox/Rehab ($500, 3 days)",
         ] or interaction_text.startswith("Submit Demo") or interaction_text.startswith("Order ") \
             or interaction_text.startswith("Book Rehearsal Slot") \
             or interaction_text.startswith("Rent Room") or interaction_text.startswith("Sleep (8 hours") \
@@ -2471,6 +2693,36 @@ class Game:
                 self.explore_menu_state = "dealership"
             else:
                 self.GAME_LOG.add_log_message("No vehicles for sale currently.")
+        elif interaction_text == "Pawn Item":
+            self.explore_menu_state = "pawn_sell"
+        elif interaction_text == "Browse Pawn Shop":
+            self.explore_menu_state = "pawn_buy"
+        elif interaction_text == "Vocal Rest Treatment ($50, 4 hours)":
+            if self.player.money < 50:
+                self.GAME_LOG.add_log_message("You can't afford this treatment.")
+            else:
+                self.player.money -= 50
+                self._advance_time_with_needs(240)
+                self.player.vocal_strain = max(0, self.player.vocal_strain - 50)
+                self.GAME_LOG.add_log_message("You rest your voice with professional guidance. (Vocal Strain -50)")
+        elif interaction_text == "Physical Therapy ($100, 2 hours)":
+            if self.player.money < 100:
+                self.GAME_LOG.add_log_message("You can't afford physical therapy.")
+            else:
+                self.player.money -= 100
+                self._advance_time_with_needs(120)
+                self.player.wrist_strain = max(0, self.player.wrist_strain - 40)
+                self.GAME_LOG.add_log_message("The therapist works out the knots in your arms. (Wrist Strain -40)")
+        elif interaction_text == "Detox/Rehab ($500, 3 days)":
+            if self.player.money < 500:
+                self.GAME_LOG.add_log_message("Rehab isn't cheap. You need $500.")
+            else:
+                self.player.money -= 500
+                self.GAME_LOG.add_log_message("You check yourself in to get clean. This will take a while...")
+                self._advance_time_with_needs(72 * 60)
+                self.player.substance_dependency = 0
+                self.player.health = min(100, self.player.health + 20)
+                self.GAME_LOG.add_log_message("You've completed the program. You feel terrible, but clean. (Dependency removed)")
 
     def handle_travel_menu(self):
         travel_options = {
@@ -2752,8 +3004,19 @@ class Game:
             player.comfort = max(0, player.comfort - int(round(hours_passed_float * 1.5)))
             player.stress = min(100, player.stress + int(round(hours_passed_float * 1.0)))
 
+        # Withdrawals
+        if player.substance_dependency > 20:
+            withdrawal_rate = (player.substance_dependency / 100.0) * 2.0
+            player.stress = min(100, player.stress + int(round(hours_passed_float * withdrawal_rate)))
+            player.energy = max(0, player.energy - int(round(hours_passed_float * withdrawal_rate)))
+
         if player.current_poi and getattr(player.current_poi, "category", "") == "HOME" and player.hunger < 50 and player.stress < 60:
             player.health = min(100, player.health + int(round(hours_passed_float * 0.3)))
+
+        # Passive recovery from strain if resting
+        if player.energy > 60 and player.stress < 40:
+            player.vocal_strain = max(0, player.vocal_strain - (hours_passed_float * 0.5))
+            player.wrist_strain = max(0, player.wrist_strain - (hours_passed_float * 0.5))
 
         POINTS_PER_DAY_HAIR = 10.0; POINTS_PER_DAY_BEARD = 12.5
         hair_growth_to_add = (minutes_just_passed / (24.0 * 60.0)) * POINTS_PER_DAY_HAIR
@@ -2883,6 +3146,16 @@ class Game:
                                     new_gig = Event(name=gig_name, event_type="CLUB_GIG", location=venue_to_book, is_npc_gig=True)
                                     venue_to_book.add_event(new_gig)
                                     self.GAME_LOG.add_log_message(f"GOSSIP: You see a flyer that {npc.name} is playing a show at {venue_to_book.name} soon.")
+
+                                    # Simulate the gig outcome for the venue's prestige
+                                    venue_to_book.weeks_without_events = 0
+                                    npc_quality = npc_fame + sum(npc.skills.values())
+                                    if npc_quality > (venue_to_book.prestige * 50):
+                                        # Legendary show for this venue
+                                        venue_to_book.update_prestige(0.1)
+                                    elif npc_quality < (venue_to_book.prestige * 10):
+                                        # Flop
+                                        venue_to_book.update_prestige(-0.1)
 
                 tour_score = min(18, int(npc_fame / 18))
                 if npc_fame > 200 and not npc.on_tour and self._passes_contextual_threshold(tour_score, 108):

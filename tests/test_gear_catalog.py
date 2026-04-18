@@ -11,7 +11,7 @@ from game_data.gear_catalog import GEAR_CATALOG
 class TestGearCatalog(unittest.TestCase):
     def test_catalog_keys_are_unique(self):
         """Guard against accidental duplicate dictionary keys."""
-        expected_item_count = 24
+        expected_item_count = 26
         self.assertEqual(len(GEAR_CATALOG), expected_item_count)
 
     def test_cheap_burger_has_comfort_effect(self):

@@ -29,6 +29,11 @@ class GearItem:
             self.properties['hunger_reduction'] = self.hunger_reduction
             self.properties['energy_boost'] = self.energy_boost
 
+    def get_genre_boost(self, genre):
+        """Returns the tone/quality boost this gear provides for a specific genre."""
+        if self.is_broken:
+            return 0.0
+        return self.properties.get('genre_boosts', {}).get(genre, 0.0)
 
     def take_damage(self, amount: int):
         if self.is_broken: # Cannot damage already broken item further

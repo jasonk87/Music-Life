@@ -51,7 +51,7 @@
       "category": "SHOP_FOOD",
       "interaction_options": ["Buy Food Items", "Chat with Clerk", "Work Shift: Stock Shelves ($20 / 4h)"],
       "properties": {
-        "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag"]
+        "shop_inventory_item_ids": ["food_energy_bar", "food_grocery_bag", "substance_energy_drink"]
       }
     },
     {
@@ -80,6 +80,29 @@
       "properties": {
         "owner_npc_id": "barber_bill_npc"
       }
+    },
+    {
+      "poi_id": "hometown_pawn_shop",
+      "name": "Hometown Pawn",
+      "description": "A dingy pawn shop with bars on the windows. Good for quick cash, bad for getting your stuff back.",
+      "category": "SHOP_PAWN",
+      "interaction_options": [
+        "Pawn Item",
+        "Browse Pawn Shop"
+      ],
+      "properties": {}
+    },
+    {
+      "poi_id": "hometown_clinic",
+      "name": "Hometown Free Clinic",
+      "description": "A small underfunded medical center. The wait times are brutal.",
+      "category": "CLINIC",
+      "interaction_options": [
+        "Vocal Rest Treatment ($50, 4 hours)",
+        "Physical Therapy ($100, 2 hours)",
+        "Detox/Rehab ($500, 3 days)"
+      ],
+      "properties": {}
     }
   ],
   "venues": [

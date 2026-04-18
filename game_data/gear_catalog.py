@@ -8,7 +8,12 @@ GEAR_CATALOG = {
         gear_type="INSTRUMENT_ACOUSTIC",
         size=5,
         cost=50,
-        properties={"acoustic": True, "quality": 0.3, "genre_suitability": ["Folk", "Pop", "Blues", "Indie"]}
+        properties={
+            "acoustic": True,
+            "quality": 0.3,
+            "genre_suitability": ["Folk", "Pop", "Blues", "Indie"],
+            "genre_boosts": {"Folk": 0.1, "Indie": 0.05}
+        }
     ),
     "basic_electric_guitar": GearItem(
         item_id="basic_electric_guitar",
@@ -17,7 +22,12 @@ GEAR_CATALOG = {
         gear_type="INSTRUMENT_ELECTRIC",
         size=5,
         cost=150,
-        properties={"electric": True, "quality": 0.5, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic"]}
+        properties={
+            "electric": True,
+            "quality": 0.5,
+            "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic"],
+            "genre_boosts": {"Rock": 0.1, "Blues": 0.05}
+        }
     ),
     "practice_amp_small": GearItem( # Amps don't have genre suitability directly, but instruments playing through them do.
         item_id="practice_amp_small",
@@ -89,7 +99,12 @@ GEAR_CATALOG = {
         gear_type="INSTRUMENT_ELECTRIC",
         size=5,
         cost=1200,
-        properties={"electric": True, "quality": 0.9, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic", "Metal"]}
+        properties={
+            "electric": True,
+            "quality": 0.9,
+            "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic", "Metal"],
+            "genre_boosts": {"Rock": 0.25, "Metal": 0.2, "Blues": 0.15}
+        }
     ),
     "pro_bass_guitar": GearItem(
         item_id="pro_bass_guitar",
@@ -98,7 +113,12 @@ GEAR_CATALOG = {
         gear_type="INSTRUMENT_BASS",
         size=6,
         cost=1000,
-        properties={"electric": True, "quality": 0.85, "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic", "Metal", "Funk"]}
+        properties={
+            "electric": True,
+            "quality": 0.85,
+            "genre_suitability": ["Rock", "Pop", "Blues", "Indie", "Electronic", "Metal", "Funk"],
+            "genre_boosts": {"Funk": 0.25, "Rock": 0.15}
+        }
     ),
     "pro_amp_large": GearItem(
         item_id="pro_amp_large",
@@ -204,6 +224,17 @@ GEAR_CATALOG = {
         item_id="food_water", name="Cup of Water", gear_type="FOOD", size=0, cost=0,
         description="A simple cup of tap water.",
         hunger_reduction=0, energy_boost=1 # Slight refreshment
+    ),
+    # --- Substances ---
+    "substance_energy_drink": GearItem(
+        item_id="substance_energy_drink", name="Sketchy Energy Drink", gear_type="FOOD", size=0, cost=4,
+        description="Packed with caffeine and chemicals. Gives a huge burst of energy but wrecks your health.",
+        hunger_reduction=5, energy_boost=45, properties={"comfort_effect": -10, "health_effect": -5, "substance_dependency_effect": 5}
+    ),
+    "substance_party_favors": GearItem(
+        item_id="substance_party_favors", name="Shady Party Favors", gear_type="FOOD", size=0, cost=50,
+        description="A little baggie of something. Makes you feel invincible on stage but destroys your body.",
+        hunger_reduction=0, energy_boost=80, properties={"comfort_effect": 20, "health_effect": -15, "substance_dependency_effect": 25, "stress_effect": -30}
     ),
 }
 
