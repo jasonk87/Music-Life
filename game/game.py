@@ -3416,7 +3416,7 @@ class Game:
                 self.GAME_LOG.add_log_message("Agent: 'I've mapped out a short 3-stop regional tour!'")
                 # Find venues across different cities if possible, or just 3 decent venues
                 all_venues = []
-                for loc in self.LOCATIONS.values():
+                for loc in self.WORLD_MAP.values():
                     all_venues.extend(loc.venues)
 
                 if len(all_venues) >= 3:
