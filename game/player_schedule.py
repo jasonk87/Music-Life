@@ -1,6 +1,8 @@
 # game/player_schedule.py
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
+
+PRESENCE_REQUIRED_CATEGORIES = {"Gig", "Gig (Tour)", "Job", "Rehearsal", "Meeting", "Label Visit", "Studio Session"}
 import datetime # For date calculations, though GameTime is primary
 
 from game.game_time import GameTime # Assuming GameTime is in game_time.py
@@ -21,6 +23,16 @@ class ScheduledItem:
     def __str__(self):
         return f"{self.start_time.get_time_string_for_schedule()} - {self.end_time.get_time_string_for_schedule()}: {self.description} [{self.category}]"
 
+    def get_destination_id(self) -> Optional[str]:
+        if not self.details:
+            return None
+        return self.details.get("destination_id") or self.details.get("venue_id") or self.details.get("poi_id")
+
+    def requires_presence(self) -> bool:
+        if self.details and "requires_presence" in self.details:
+            return bool(self.details.get("requires_presence"))
+        return self.category in PRESENCE_REQUIRED_CATEGORIES
+
 class PlayerSchedule:
     def __init__(self):
         self.scheduled_items: List[ScheduledItem] = []
@@ -32,11 +44,15 @@ class PlayerSchedule:
             # Allow events that might end on the same "minute" if duration is very short, but not inverted
             raise ValueError("End time cannot be before start time.")
 
+        event_details = details or {}
+        if category in PRESENCE_REQUIRED_CATEGORIES and not (event_details.get("destination_id") or event_details.get("venue_id") or event_details.get("poi_id") or event_details.get("location_name")):
+            raise ValueError(f"{category} events require a destination reference.")
+
         item = ScheduledItem(start_time=start_time.copy(),
                              end_time=end_time.copy(),
                              description=description,
                              category=category,
-                             details=details or {})
+                             details=event_details)
         self.scheduled_items.append(item)
         self.scheduled_items.sort() # Keep sorted by start_time
         print(f"Scheduled: {description} from {start_time} to {end_time}")
@@ -96,6 +112,17 @@ class PlayerSchedule:
         return sorted(weekly_events)
 
 
+    def get_next_presence_obligation(self, current_time: GameTime, cutoff_time: Optional[GameTime] = None) -> Optional[ScheduledItem]:
+        for item in self.scheduled_items:
+            if not item.requires_presence():
+                continue
+            if item.end_time < current_time:
+                continue
+            if cutoff_time and item.start_time > cutoff_time:
+                continue
+            return item
+        return None
+
     def get_upcoming_events(self, current_time: GameTime, limit=5) -> List[ScheduledItem]:
         upcoming = []
         count = 0
@@ -125,8 +152,8 @@ if __name__ == '__main__':
 
     # Test PlayerSchedule
     schedule = PlayerSchedule()
-    schedule.add_event(t2_start, t2_end, "Gig at The Rusty Mug", "Gig") # Add out of order
-    schedule.add_event(t1_start, t1_end, "Morning Rehearsal", "Rehearsal")
+    schedule.add_event(t2_start, t2_end, "Gig at The Rusty Mug", "Gig", {"venue_id": "test_venue"}) # Add out of order
+    schedule.add_event(t1_start, t1_end, "Morning Rehearsal", "Rehearsal", {"poi_id": "test_studio"})
 
     print("\nFull Schedule (Sorted):")
     for item in schedule.scheduled_items:
