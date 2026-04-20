@@ -41,9 +41,19 @@ def test_practice_requires_valid_location(game_env):
     # Should work at home and train the specific skill requested
     home_poi = PointOfInterest("home_poi", "Home", "Home", category="HOME")
     player.current_poi = home_poi
+    player.skills["vocals"] = 0
     res = game_env.do_practice_grind("vocals", 1)
     assert res.get("ok")
     assert player.skills.get("vocals", 0) > 0
+    home_skill = player.skills.get("vocals")
+
+    # Should scale better at studio
+    player.skills["vocals"] = 0
+    studio_poi = PointOfInterest("studio_poi", "Studio", "Studio", category="STUDIO_RECORDING")
+    player.current_poi = studio_poi
+    res = game_env.do_practice_grind("vocals", 1)
+    assert res.get("ok")
+    assert player.skills.get("vocals", 0) > home_skill
 
 def test_open_mic_requires_venue_and_time(game_env):
     player = game_env.player
@@ -63,9 +73,12 @@ def test_open_mic_requires_venue_and_time(game_env):
     from game.game_time import current_game_time
     # Fail morning
     current_game_time.hour = 10
+    time_before = current_game_time.copy()
+
     res = game_env.do_open_mic_set()
     assert not res.get("ok")
     assert res.get("reason") == "wrong_time"
+    assert current_game_time.minute == time_before.minute and current_game_time.hour == time_before.hour # Time not consumed on failure
 
     # Succeed evening
     current_game_time.hour = 20
@@ -79,6 +92,12 @@ def test_open_mic_requires_venue_and_time(game_env):
     res = game_env.do_open_mic_set()
     assert res.get("ok")
 
+    # Fail if there is an active competing event
+    bar_poi.events = [Event("Club Gig", bar_poi, event_type="CLUB_GIG")]
+    res = game_env.do_open_mic_set()
+    assert not res.get("ok")
+    assert res.get("reason") == "competing_event"
+
 def test_rest_recovers_energy_based_on_location(game_env):
     player = game_env.player
     player.energy = 10
@@ -89,12 +108,32 @@ def test_rest_recovers_energy_based_on_location(game_env):
     game_env.rest(8)
     assert player.energy == 10 # Didn't sleep
 
+    # Motel should succeed with rental
+    from game.game_time import current_game_time
+    checkout = current_game_time.copy()
+    checkout.add_hours(24)
+    player.rented_accommodation_info = {"poi_id": "motel_poi", "checkout_time_obj": checkout}
+    game_env.rest(8)
+    assert player.energy > 10 # Successfully slept
+
+    # Reset energy
+    player.energy = 10
+
     # Home should work natively
     home_poi = PointOfInterest("home_poi", "Home", "Home", category="HOME", rest_quality=0.5)
     player.current_poi = home_poi
+    player.has_home = True
 
     game_env.rest(8) # Should sleep_rest via location engine
     assert player.energy > 10
+
+    # Reset energy
+    player.energy = 10
+
+    # Home should fail without has_home
+    player.has_home = False
+    game_env.rest(8)
+    assert player.energy == 10
 
 def test_purchase_essential_item_grants_gear(game_env):
     player = game_env.player
@@ -110,3 +149,10 @@ def test_purchase_essential_item_grants_gear(game_env):
     res = game_env.buy_essential_item("worn_acoustic_guitar")
     assert res.get("ok")
     assert any(g.item_id == "worn_acoustic_guitar" for g in player.gear_inventory)
+
+    # Test purchase failure due to wrong location
+    street_poi = PointOfInterest("street_poi", "Street", "Street", category="DOWNTOWN")
+    player.current_poi = street_poi
+    res = game_env.buy_essential_item("guitar_strings_basic")
+    assert not res.get("ok")
+    assert res.get("reason") == "wrong_location"

@@ -203,25 +203,29 @@ class EarlyLifeLoop:
         """Deprecated: Wraps abstract practice into location-aware presence."""
         from game.place_presence import LocalAction
         self.ensure_player_state(player)
-        if not player.current_poi or player.current_poi.category not in ["HOME", "ACCOMMODATION_HOTEL", "ACCOMMODATION_MOTEL", "STUDIO_RECORDING"]:
+        if not player.current_poi:
             return {"ok": False, "reason": "wrong_location"}
 
-        # Hand off to the engine.
+        # Hand off to the engine. Validation happens there.
         dummy_action = LocalAction(f"practice_music:{skill_name}", "Practice", int(hours * 60), tags=["practice"])
         res = self.game.location_action_engine.execute_action(player, player.current_poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
-        return {"ok": res.get("ok", False), "skill_name": skill_name, "hours": hours, "reason": res.get("reason_code", "")}
+        return {"ok": res.get("ok", False), "skill_name": skill_name, "hours": hours, "reason": res.get("reason_code", "failed")}
 
     def run_open_mic_set(self, player):
         """Deprecated: Wraps abstract open mic into location-aware presence."""
         from game.place_presence import LocalAction
         self.ensure_player_state(player)
-
-        poi = player.current_poi
-        if not poi or poi.category not in ["VENUE_CLUB", "VENUE_BAR", "VENUE_GENERAL"]:
+        if not player.current_poi:
             return {"ok": False, "reason": "wrong_location"}
 
+        # Check if the engine actually offers this action at this location
+        offered_actions = self.game.location_action_engine.generate_actions(player, player.current_poi, player.current_location)
+        if not any(a.action_id == "perform_open_mic" for a in offered_actions):
+            return {"ok": False, "reason": "wrong_location"}
+
+        # Hand off to the engine. Validation happens there.
         dummy_action = LocalAction("perform_open_mic", "Perform Open Mic", 60, tags=["performance"])
-        res = self.game.location_action_engine.execute_action(player, poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
+        res = self.game.location_action_engine.execute_action(player, player.current_poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
 
         if res.get("ok"):
             return {"ok": True, "tips": res.get("tips", 0), "fame_gain": res.get("fame_gain", 0), "score": res.get("open_mic_score", 0)}
@@ -231,9 +235,7 @@ class EarlyLifeLoop:
         """Deprecated: Wraps abstract purchase into location-aware presence."""
         from game.place_presence import LocalAction
         self.ensure_player_state(player)
-
-        poi = player.current_poi
-        if not poi or poi.category not in ["SHOP_MUSIC", "PAWN_SHOP"]:
+        if not player.current_poi:
             return {"ok": False, "reason": "wrong_location"}
 
         from game_data.gear_catalog import GEAR_CATALOG
@@ -243,18 +245,39 @@ class EarlyLifeLoop:
 
         cost = item.cost
 
-        dummy_action = LocalAction("buy_specific_item", f"Buy {item_id}", 15, cost=cost, tags=["shopping"])
-        res = self.game.location_action_engine.execute_action(player, poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
+        # For wrappers, the action must truthfully execute through the engine as one of the
+        # approved generated actions. If it's strings, use buy_strings. If gear, use buy_essential_gear.
+        # Otherwise, the engine does not support buying it here.
+        action_id_map = {
+            "guitar_strings_basic": "buy_strings",
+            "worn_acoustic_guitar": "buy_essential_gear"
+        }
+        mapped_action_id = action_id_map.get(item_id)
+        if not mapped_action_id:
+             return {"ok": False, "reason": "unsupported_item"}
 
-        # Grant the item manually here since we bypass handle_local_presence_action
+        # Check if the engine actually offers this action at this location to fail cleanly
+        offered_actions = self.game.location_action_engine.generate_actions(player, player.current_poi, player.current_location)
+        if not any(a.action_id == mapped_action_id for a in offered_actions):
+            return {"ok": False, "reason": "wrong_location"}
+
+        # Hand off to the engine. Validation happens there.
+        dummy_action = LocalAction(mapped_action_id, f"Buy {item_id}", 15, cost=cost, tags=["shopping"])
+        res = self.game.location_action_engine.execute_action(player, player.current_poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
+
         if res.get("ok"):
-            if player.add_gear(item):
-                 return {"ok": True, "item_id": item_id, "cost": cost, "reason": ""}
+            # Provide gear if granted
+            if item_id in res.get("item_grants", []):
+                if player.add_gear(item):
+                    return {"ok": True, "item_id": item_id, "cost": cost, "reason": ""}
+                else:
+                    # Rare failure, must refund
+                    player.money += cost
+                    return {"ok": False, "item_id": item_id, "reason": "inventory_full"}
             else:
-                 player.money += cost # refund
-                 return {"ok": False, "item_id": item_id, "reason": "inventory_full"}
+                return {"ok": False, "reason": "failed"}
 
-        return {"ok": False, "item_id": item_id, "cost": cost, "reason": res.get("reason_code", "")}
+        return {"ok": False, "item_id": item_id, "cost": cost, "reason": res.get("reason_code", "failed")}
 
     def apply_time_advance(self, player, start_time, end_time):
         if not player:

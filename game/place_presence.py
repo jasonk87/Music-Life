@@ -246,21 +246,32 @@ class LocationActionEngine:
                 "explanation": f"You need ${action.cost} for {action.label}.",
             }
 
-        if action.action_id == "sleep_rest" and profile.place_type in {"hotel", "motel"}:
-            # Check for active rental
-            rental = getattr(player, "rented_accommodation_info", None)
-            poi_id = getattr(place_obj, "poi_id", None)
-            if not rental or not poi_id or rental.get("poi_id") != poi_id:
-                return {"ok": False, "reason_code": "no_rental", "explanation": "You need to rent a room here first."}
-            checkout_time = rental.get("checkout_time_obj")
-            if checkout_time and current_game_time > checkout_time:
-                player.rented_accommodation_info = None
-                return {"ok": False, "reason_code": "rental_expired", "explanation": "Your room rental has expired."}
+        if action.action_id == "sleep_rest":
+            if profile.place_type == "home" and not getattr(player, "has_home", False):
+                return {"ok": False, "reason_code": "no_home", "explanation": "You do not have a home anymore."}
+            if profile.place_type in {"hotel", "motel"}:
+                # Check for active rental
+                rental = getattr(player, "rented_accommodation_info", None)
+                poi_id = getattr(place_obj, "poi_id", None)
+                if not rental or not poi_id or rental.get("poi_id") != poi_id:
+                    return {"ok": False, "reason_code": "no_rental", "explanation": "You need to rent a room here first."}
+                checkout_time = rental.get("checkout_time_obj")
+                if checkout_time and current_game_time > checkout_time:
+                    player.rented_accommodation_info = None
+                    return {"ok": False, "reason_code": "rental_expired", "explanation": "Your room rental has expired."}
+
+        if action.action_id.startswith("practice_music"):
+            if profile.place_type not in {"home", "hotel", "motel", "studio_recording"}:
+                return {"ok": False, "reason_code": "wrong_location", "explanation": "You cannot practice intensely here."}
 
         if action.action_id == "perform_open_mic":
             # Check if there is an actual event going on
             events = getattr(place_obj, "events", [])
             has_event = any(e.event_type == "OPEN_MIC" for e in events)
+            has_other_event = any(e.event_type != "OPEN_MIC" for e in events)
+
+            if has_other_event and not has_event:
+                return {"ok": False, "reason_code": "competing_event", "explanation": "There is already another event scheduled here."}
 
             if not has_event and current_game_time.hour < 18:
                 return {"ok": False, "reason_code": "wrong_time", "explanation": "There is no open mic event, and it doesn't start until evening (18:00+)."}
@@ -301,9 +312,9 @@ class LocationActionEngine:
             "explanation": f"You spend {action.minutes} minutes: {action.label}.",
         }
 
-        if action.action_id == "buy_strings":
+        if action.action_id == "buy_strings" or action.action_id == "buy_specific_item:guitar_strings_basic":
             result["item_grants"].append("guitar_strings_basic")
-        elif action.action_id == "buy_essential_gear":
+        elif action.action_id == "buy_essential_gear" or action.action_id == "buy_specific_item:worn_acoustic_guitar":
             result["item_grants"].append("worn_acoustic_guitar")
 
         if action.action_id.startswith("practice_music"):
