@@ -38,6 +38,7 @@ from game.visibility_system import VisibilitySystem, PublicSignal
 from game.delegation_roles import DelegationSystem
 from game.transit_phase import TransitLayer
 from game.ui_signals import UISignalLayer
+from game.ui_shell import PlayerUIShell
 from game.llm_interaction_layer import InteractionContextBuilder, LLMInteractionEngine, SocialMediaExpressionLayer
 from game.scarcity_interference import ScarcityAvailabilitySystem, PublicInterferenceSystem
 from game.npc_identity_system import NPCIdentitySystem
@@ -138,6 +139,7 @@ class Game:
         self.transit_layer = TransitLayer()
         self.transit_session = None
         self.ui_signals = UISignalLayer(self)
+        self.ui_shell = PlayerUIShell(self)
         self.llm_context_builder = InteractionContextBuilder(self)
         self.llm_interactions = LLMInteractionEngine(self)
         self.social_expression = SocialMediaExpressionLayer(self)
@@ -150,6 +152,9 @@ class Game:
         self.reputation_system = ReputationIdentitySystem(self)
         self._local_action_lookup = {}
         self.performance_requirement_penalty = 1.0
+
+    def get_ui_shell_state(self):
+        return self.ui_shell.build() if hasattr(self, "ui_shell") else {}
 
     def _build_poi_venue_id_map(self):
         self._poi_venue_id_map.clear()
