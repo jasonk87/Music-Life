@@ -17,7 +17,7 @@ class Contract:
         # Rough heuristic for "how good is this offer"
         return self.advance_money + (self.royalty_rate * 100000) + (self.marketing_budget_per_release * 5)
 
-    def negotiate(self, player_fame, player_charisma_trait=False):
+    def negotiate(self, player_fame, player_charisma_trait=False, manager_skill=0):
         """
         Attempts to improve the contract.
         Returns (success: bool, message: str, offer_pulled: bool)
@@ -39,6 +39,9 @@ class Contract:
         roll = random.random()
         if player_charisma_trait:
             roll += 0.15
+
+        # Manager skill adds a bonus directly to the roll (up to +0.25 at skill 5)
+        roll += (manager_skill * 0.05)
 
         if roll > difficulty:
             # Success: Improve one aspect randomly
