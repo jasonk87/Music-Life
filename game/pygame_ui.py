@@ -196,6 +196,48 @@ class PygameUI:
         for idx, line in enumerate(hint_lines[:2]):
             self.draw_text(line, self.FONT_LOG, WHITE if idx == 0 else LIGHT_GREY, 20, 152 + (idx * 18))
 
+    def draw_shell_backdrop_layout(self, shell_state, backdrop_renderer=None, backdrop_spec=None):
+        """Render a lightweight shell composition: backdrop top, shell text bottom."""
+        self.clear_screen()
+        self.draw_choice_background()
+
+        top_h = int(SCREEN_HEIGHT * 0.62)
+        if backdrop_renderer and backdrop_spec:
+            backdrop_renderer.draw(self.screen, backdrop_spec, (0, 0, SCREEN_WIDTH, top_h), tick=pygame.time.get_ticks())
+
+            title = backdrop_spec.overlay.get("title") or backdrop_spec.label
+            subtitle = backdrop_spec.overlay.get("subtitle", "")
+            self.draw_text(title, self.FONT_DEFAULT, WHITE, 18, 14)
+            if subtitle:
+                self.draw_text(subtitle, self.FONT_LOG, LIGHT_GREY, 18, 40)
+
+        bottom = pygame.Rect(0, top_h, SCREEN_WIDTH, SCREEN_HEIGHT - top_h)
+        self.draw_panel(bottom, title="Life")
+
+        context = shell_state.get("top_context", {})
+        self.draw_text(context.get("headline", ""), self.FONT_LOG, WHITE, 16, top_h + 28)
+        tag_line = " • ".join(context.get("tags", [])[:4])
+        if tag_line:
+            self.draw_text(tag_line, self.FONT_LOG, LIGHT_GREY, 16, top_h + 52)
+
+        # Three compact columns for schedule / actions / feed
+        col_w = SCREEN_WIDTH // 3
+        today = shell_state.get("schedule", {}).get("Today", [])[:4]
+        actions = shell_state.get("scene", {}).get("actions", [])[:4]
+        feed = shell_state.get("world_feed", [])[:4]
+
+        self.draw_text("Today", self.FONT_LOG, YELLOW, 16, top_h + 84)
+        for i, line in enumerate(today):
+            self.draw_text(f"- {line}", self.FONT_LOG, WHITE, 16, top_h + 106 + i * 20)
+
+        self.draw_text("Actions", self.FONT_LOG, YELLOW, 16 + col_w, top_h + 84)
+        for i, line in enumerate(actions):
+            self.draw_text(f"- {line}", self.FONT_LOG, WHITE, 16 + col_w, top_h + 106 + i * 20)
+
+        self.draw_text("World", self.FONT_LOG, YELLOW, 16 + col_w * 2, top_h + 84)
+        for i, line in enumerate(feed):
+            self.draw_text(f"- {line}", self.FONT_LOG, WHITE, 16 + col_w * 2, top_h + 106 + i * 20)
+
     def draw_ascii_art(self, art_lines, x, y, color=WHITE):
         line_height = FONT_ASCII.get_linesize()
         for i, line in enumerate(art_lines):
