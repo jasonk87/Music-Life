@@ -28,6 +28,12 @@ from game.feedback_generator import generate_feedback_for_song, SOURCES, generat
 from game.sound import SoundManager
 from game.ascii_art import ART
 from game.performance import PerformanceManager
+from game.obligation_resolver import ObligationResolver
+from game.obligation_consequences import ObligationConsequenceEngine
+from game.place_presence import LocationActionEngine
+from game.inventory_loadout import InventoryLoadoutService
+from game.npc_world_sim import NPCWorldSimulator
+from game.world_memory import WorldMemoryStore, WorldMemoryEntry
 from game.trends import TrendManager
 from game.band_drama import check_for_band_drama, resolve_weekly_wages
 from game.staff import StaffMember
@@ -58,6 +64,7 @@ class Game:
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
+        self._local_action_lookup = {}
         self.selected_contact_id = None
         self.selected_poi = None
         self.selected_npc = None
@@ -109,6 +116,14 @@ class Game:
         self._poi_venue_id_map = {}
 
         self.GAME_LOG = self.ui
+        self.obligation_resolver = ObligationResolver(self)
+        self.obligation_consequence_engine = ObligationConsequenceEngine()
+        self.location_action_engine = LocationActionEngine()
+        self.inventory_service = InventoryLoadoutService()
+        self.npc_world_sim = NPCWorldSimulator(self)
+        self.world_memory = WorldMemoryStore()
+        self._local_action_lookup = {}
+        self.performance_requirement_penalty = 1.0
 
     def _build_poi_venue_id_map(self):
         self._poi_venue_id_map.clear()
@@ -157,9 +172,53 @@ class Game:
     def _advance_time_with_needs(self, minutes):
         if minutes <= 0:
             return
+        if self.player:
+            resolution = self.obligation_resolver.resolve_before_time_advance(minutes)
+            self.obligation_consequence_engine.apply_resolution(self.player, resolution, self.GAME_LOG)
+            self._record_player_obligation_memory(resolution)
+            self.npc_world_sim.advance(minutes)
         advance_game_time(minutes)
         self.process_time_based_player_needs(self.player, minutes)
         self._check_player_survival_state()
+
+    def _record_player_obligation_memory(self, resolution):
+        if not resolution or not self.player:
+            return
+
+        event_type_map = {
+            "missed": "missed_gig",
+            "late_but_possible": "late_obligation",
+            "reachable": "reachable_obligation",
+            "requires_departure_now": "on_time_departure",
+        }
+        event_type = event_type_map.get(resolution.status)
+        if not event_type:
+            return
+
+        destination_id = None
+        if resolution.item and hasattr(resolution.item, "get_destination_id"):
+            destination_id = resolution.item.get_destination_id()
+
+        source_key = None
+        if isinstance(getattr(resolution.item, "details", None), dict):
+            source_key = resolution.item.details.get("obligation_evaluated_at")
+            if source_key:
+                source_key = f"{self.player.name}:{event_type}:{source_key}:{destination_id or 'none'}"
+
+        entry = WorldMemoryEntry(
+            event_type=event_type,
+            involved_entities=[self.player.name],
+            location=destination_id,
+            timestamp=current_game_time.copy(),
+            tags=["professionalism", "reliability"],
+            impact_score=3.0 if event_type == "missed_gig" else 1.5,
+            metadata={
+                "reason_code": getattr(resolution, "reason_code", None),
+                "status": resolution.status,
+            },
+            source_key=source_key,
+        )
+        self.world_memory.add(entry)
 
     def _get_max_genre_gear_boost(self, genre):
         """Finds the highest genre boost from the player's non-broken gear."""
@@ -239,6 +298,8 @@ class Game:
         self.web_menu_state = "main"
         self.character_menu_state = "main"
         self.band_menu_state = "main"
+        self._local_action_lookup = {}
+        self.performance_requirement_penalty = 1.0
 
     def _normalize_opportunity_state(self):
         normalized = {}
@@ -443,6 +504,18 @@ class Game:
             "data": chosen_band,
         }
 
+    def _player_memory_opportunity_bias(self):
+        if not self.player:
+            return 0.0
+        return self.world_memory.reliability_score(self.player.name, current_game_time.copy())
+
+    def _venue_memory_bias(self, venue_id: Optional[str]) -> float:
+        if not venue_id:
+            return 0.0
+        positive = self.world_memory.weighted_score(current_game_time.copy(), event_type="great_performance", location=venue_id)
+        negative = self.world_memory.weighted_score(current_game_time.copy(), event_type="missed_gig", location=venue_id)
+        return positive - negative
+
     def _calculate_song_visibility_score(self, song, channel_bonus=0):
         trend_bonus = 0
         if hasattr(self, "trend_manager") and self.trend_manager.get_top_genre() == song.genre:
@@ -613,6 +686,7 @@ class Game:
             - int(self.player.vocal_strain / 10)
             - int(self.player.wrist_strain / 10)
         ) - 35
+        score = int(score * getattr(self, "performance_requirement_penalty", 1.0))
 
         # Increase strain slightly per gig
         self.player.vocal_strain = min(100, self.player.vocal_strain + random.randint(3, 8))
@@ -628,6 +702,36 @@ class Game:
         base_fame = getattr(performance_event, "fame_reward", 5)
         outcome["money_gain"] = max(10, int(base_payout * outcome["data"]["pay_mult"]))
         outcome["fame_gain"] = max(1, int(base_fame * outcome["data"]["fame_mult"]))
+
+        venue_id = None
+        if hasattr(performance_event, "location"):
+            venue_id = getattr(performance_event.location, "venue_id", getattr(performance_event.location, "poi_id", None))
+        if outcome.get("band") in {"strong", "standout"}:
+            self.world_memory.add(
+                WorldMemoryEntry(
+                    event_type="great_performance",
+                    involved_entities=[self.player.name],
+                    location=venue_id,
+                    timestamp=current_game_time.copy(),
+                    tags=["momentum", "professionalism", "visibility"],
+                    impact_score=4.0 if outcome.get("band") == "standout" else 2.5,
+                    metadata={"hype": final_hype, "band": outcome.get("band")},
+                    source_key=f"gig:{venue_id}:{current_game_time.get_time_string_for_schedule()}:{outcome.get('band')}",
+                )
+            )
+        elif outcome.get("band") == "messy":
+            self.world_memory.add(
+                WorldMemoryEntry(
+                    event_type="poor_performance",
+                    involved_entities=[self.player.name],
+                    location=venue_id,
+                    timestamp=current_game_time.copy(),
+                    tags=["professionalism"],
+                    impact_score=2.5,
+                    metadata={"hype": final_hype, "band": outcome.get("band")},
+                    source_key=f"gig:{venue_id}:{current_game_time.get_time_string_for_schedule()}:messy",
+                )
+            )
 
         # Venue prestige impact
         if hasattr(performance_event, "location") and hasattr(performance_event.location, "update_prestige"):
@@ -1066,6 +1170,8 @@ class Game:
         self.LAST_CHART_UPDATE_DAY = current_game_time.day
 
     def check_for_new_opportunities(self):
+        reliability_bias = self._player_memory_opportunity_bias()
+
         # Check for static opportunities from the catalog
         for opp_id, opp_data in self.OPPORTUNITY_CATALOG.items():
             if opp_id not in self.player.active_opportunities:
@@ -1090,6 +1196,7 @@ class Game:
                 feature_score = min(12, int(self._calculate_npc_fame(npc) / 15))
                 if visible_song:
                     feature_score += min(16, int(self._calculate_song_visibility_score(visible_song, 0) / 10))
+                feature_score += int(max(-8, min(8, reliability_bias / 4)))
                 if self._passes_contextual_threshold(feature_score, 103):
                     opp_id = f"guest_feature_{npc.npc_id}"
                     if opp_id not in self.player.active_opportunities:
@@ -1105,10 +1212,12 @@ class Game:
                     if tour['tour_id'] not in self.player.completed_tour_ids:
                         opp_id = f"tour_offer_{tour['tour_id']}"
                         if opp_id not in self.player.active_opportunities:
-                            self.player.active_opportunities[opp_id] = {"status": "available"}
-                            self.GAME_LOG.add_log_message(f"Your manager found a potential tour for you: '{tour['name']}'!")
-                            self.GAME_LOG.add_log_message("Check your phone for the offer.")
-                            break # Only offer one tour at a time
+                            manager_roll = random.randint(1, 100) + int(max(-12, min(14, reliability_bias)))
+                            if manager_roll >= 55:
+                                self.player.active_opportunities[opp_id] = {"status": "available"}
+                                self.GAME_LOG.add_log_message(f"Your manager found a potential tour for you: '{tour['name']}'!")
+                                self.GAME_LOG.add_log_message("Check your phone for the offer.")
+                                break # Only offer one tour at a time
 
     def _find_scheduled_event(self, event_id, venue_id=None):
         venue = self.get_poi_or_venue_by_id(venue_id) if venue_id else None
@@ -1141,10 +1250,36 @@ class Game:
                     elif self.game_state == "performance":
                         self.GAME_LOG.add_log_message(f"'{event.description}' is happening now, but you're already busy.")
                     else:
-                        self.active_performance = scheduled_event
-                        self.performance_stage = "choose_song"
-                        self.game_state = "performance"
-                        self.GAME_LOG.add_log_message(f"It's time for '{scheduled_event.name}' at {scheduled_event.location.name}.")
+                        expected_dest = event.details.get("destination_id") or event.details.get("venue_id")
+                        current_dest = None
+                        if self.player.current_poi:
+                            current_dest = getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
+
+                        if expected_dest and expected_dest != current_dest:
+                            miss_reason = event.details.get("obligation_explanation") or "you were not at the venue when doors opened"
+                            root_cause = event.details.get("obligation_reason_code")
+                            if root_cause:
+                                self.GAME_LOG.add_log_message(f"You missed '{event.description}' [{root_cause}]: {miss_reason}.")
+                            else:
+                                self.GAME_LOG.add_log_message(f"You missed '{event.description}': {miss_reason}.")
+                        else:
+                            gig_req = self._assess_gig_requirements()
+                            self.performance_requirement_penalty = 1.0
+                            if gig_req.status == "missing_and_severe":
+                                self.GAME_LOG.add_log_message(
+                                    f"You missed '{event.description}' due to missing critical loadout: {', '.join(gig_req.missing_severe)}."
+                                )
+                            else:
+                                if gig_req.status in {"partially_satisfied", "missing_but_recoverable"}:
+                                    self.performance_requirement_penalty = 0.82
+                                    self.player.stress = min(100, self.player.stress + 7)
+                                    self.GAME_LOG.add_log_message(
+                                        f"You improvise with an incomplete kit ({', '.join(gig_req.missing)}). Performance quality will suffer."
+                                    )
+                                self.active_performance = scheduled_event
+                                self.performance_stage = "choose_song"
+                                self.game_state = "performance"
+                                self.GAME_LOG.add_log_message(f"It's time for '{scheduled_event.name}' at {scheduled_event.location.name}.")
 
                     self.player.schedule.scheduled_items.remove(event)
 
@@ -1214,7 +1349,12 @@ class Game:
                 self.player.current_tour_id = None
                 return
 
-            venue = random.choice(city_venues)
+            city_venues = sorted(
+                city_venues,
+                key=lambda v: v.prestige + self._venue_memory_bias(getattr(v, "venue_id", None)),
+                reverse=True,
+            )
+            venue = city_venues[0]
 
             # Create a temporary event for this gig
             gig_event = Event(
@@ -1238,7 +1378,7 @@ class Game:
                 gig_end_time,
                 gig_event.name,
                 "Gig (Tour)",
-                {"event_id": gig_event.event_id, "venue_id": venue.venue_id},
+                {"event_id": gig_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
             )
             self.GAME_LOG.add_log_message(f"Booked: {gig_event.name} on {gig_start_time.get_time_string_for_schedule()}")
 
@@ -1615,6 +1755,13 @@ class Game:
 
                 interaction_options = {str(i): option for i, option in enumerate(self.selected_poi.get_interactions())}
 
+                local_actions = self.location_action_engine.generate_actions(self.player, self.selected_poi, location)
+                self._local_action_lookup = {}
+                for idx, local_action in enumerate(local_actions):
+                    action_key = f"local_{idx}"
+                    interaction_options[action_key] = f"Local: {local_action.menu_label()}"
+                    self._local_action_lookup[action_key] = local_action
+
                 # Add dynamic opportunities for this POI
                 for opp_id, opp_details in self.player.active_opportunities.items():
                     if opp_details["status"] == "available":
@@ -1637,6 +1784,10 @@ class Game:
                     self.explore_menu_state = "location"
                     self.selected_poi = None
                     self.game_state = "main_menu"
+                elif choice in self._local_action_lookup:
+                    self.handle_local_presence_action(self._local_action_lookup[choice])
+                    self.explore_menu_state = "location"
+                    self.selected_poi = None
                 elif choice == "wander":
                     self.GAME_LOG.add_log_message("You take a moment to look around...")
                     self._advance_time_with_needs(15)
@@ -2386,6 +2537,95 @@ class Game:
         self.GAME_LOG.add_log_message(f"Jam session finished. Stress -15.")
 
 
+    def _current_poi_id(self):
+        if not self.player or not self.player.current_poi:
+            return None
+        return getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
+
+    def _assess_local_action_requirements(self, local_action):
+        requirements_map = {
+            "pawn_item": [{"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": False}],
+            "network_scene": [{"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": False}],
+        }
+        reqs = requirements_map.get(local_action.action_id, [])
+        if not reqs:
+            return None
+        return self.inventory_service.assess_requirements(
+            self.player,
+            reqs,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _assess_gig_requirements(self):
+        gig_requirements = [
+            {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+            {"match_type": "semantic", "key": "strings", "count": 1, "mandatory": True},
+        ]
+        return self.inventory_service.assess_requirements(
+            self.player,
+            gig_requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def handle_local_presence_action(self, local_action):
+        if not self.selected_poi:
+            self.GAME_LOG.add_log_message("No active place selected for local actions.")
+            return
+
+        local_req = self._assess_local_action_requirements(local_action)
+        if local_req and local_req.status == "missing_and_severe":
+            self.GAME_LOG.add_log_message(
+                f"You cannot {local_action.label.lower()} right now. Missing: {', '.join(local_req.missing_severe)}."
+            )
+            return
+
+        result = self.location_action_engine.execute_action(
+            player=self.player,
+            place_obj=self.selected_poi,
+            location_obj=self.player.current_location,
+            action=local_action,
+            advance_time=self._advance_time_with_needs,
+            logger=self.GAME_LOG,
+        )
+
+        if not result.get("ok"):
+            self.GAME_LOG.add_log_message(result.get("explanation", "You cannot do that right now."))
+            return
+
+        self.GAME_LOG.add_log_message(result.get("explanation", "You spend time locally."))
+
+        for granted_item_id in result.get("item_grants", []):
+            granted_item = GEAR_CATALOG.get(granted_item_id)
+            if granted_item:
+                self.player.add_gear(granted_item)
+                self.GAME_LOG.add_log_message(f"You obtain {granted_item.name} and add it to your carry.")
+
+        if local_action.action_id == "stash_belongings" and self.player.gear_inventory:
+            poi_id = getattr(self.selected_poi, "poi_id", None)
+            if poi_id:
+                self.inventory_service.ensure_player_fields(self.player)
+                stash = self.player.temporary_stashes.setdefault(poi_id, [])
+                item = self.player.gear_inventory.pop()
+                stash.append(item)
+                self.GAME_LOG.add_log_message(f"You stash {item.name} at this lodging for later.")
+        elif local_action.action_id == "rent_room":
+            checkout_time = current_game_time.copy()
+            checkout_time.add_hours(16)
+            self.player.rented_accommodation_info = {
+                "poi_id": getattr(self.selected_poi, "poi_id", None),
+                "checkout_time_obj": checkout_time,
+            }
+
+        encounter = result.get("encounter")
+        if encounter:
+            encounter_type = encounter.get("encounter_type", "encounter")
+            reason_code = encounter.get("reason_code", "unknown")
+            self.GAME_LOG.add_log_message(f"Encounter: {encounter_type} [{reason_code}].")
+
+
+
     def handle_interaction(self, interaction_text, time_cost=15):
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
 
@@ -3107,7 +3347,12 @@ class Game:
             if not city_venues:
                 continue # Skip if no suitable venue
 
-            venue = random.choice(city_venues)
+            city_venues = sorted(
+                city_venues,
+                key=lambda v: v.prestige + self._venue_memory_bias(getattr(v, "venue_id", None)),
+                reverse=True,
+            )
+            venue = city_venues[0]
             gig_name = f"TOUR: {npc.name} at {venue.name} ({gig_date.get_time_string_for_schedule(date_only=True)})"
 
             new_gig = Event(
@@ -3348,7 +3593,8 @@ class Game:
                 self.GAME_LOG.add_log_message("Agent: 'I found a slot at a club for tomorrow night!'")
                 candidate_venues = sorted(
                     self.player.current_location.venues,
-                    key=lambda venue: venue.prestige,
+                    key=lambda venue: venue.prestige + self._venue_memory_bias(getattr(venue, "venue_id", None)),
+                    reverse=True,
                 ) if self.player.current_location else []
                 if not candidate_venues:
                     self.GAME_LOG.add_log_message("Agent: 'Actually, I couldn't lock down a venue in your current city.'")
@@ -3371,7 +3617,7 @@ class Game:
                     gig_end_time,
                     booked_event.name,
                     "Gig",
-                    {"event_id": booked_event.event_id, "venue_id": venue.venue_id},
+                    {"event_id": booked_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
                 )
             else:
                 self.GAME_LOG.add_log_message("Agent: 'Sorry, nothing available right now.'")
@@ -3444,7 +3690,7 @@ class Game:
                             gig_end_time,
                             f"Tour: {venue.name}",
                             "Gig",
-                            {"event_id": booked_event.event_id, "venue_id": venue.venue_id},
+                            {"event_id": booked_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
                         )
                     self.GAME_LOG.add_log_message("Check your Schedule for the new tour dates!")
                 else:
