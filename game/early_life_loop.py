@@ -207,7 +207,7 @@ class EarlyLifeLoop:
             return {"ok": False, "reason": "wrong_location"}
 
         # Hand off to the engine.
-        dummy_action = LocalAction("practice_music", "Practice", int(hours * 60), tags=["practice"])
+        dummy_action = LocalAction(f"practice_music:{skill_name}", "Practice", int(hours * 60), tags=["practice"])
         res = self.game.location_action_engine.execute_action(player, player.current_poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
         return {"ok": res.get("ok", False), "skill_name": skill_name, "hours": hours, "reason": res.get("reason_code", "")}
 
@@ -236,22 +236,25 @@ class EarlyLifeLoop:
         if not poi or poi.category not in ["SHOP_MUSIC", "PAWN_SHOP"]:
             return {"ok": False, "reason": "wrong_location"}
 
-        # Hardcoding the map for legacy wrappers.
-        cost = 12 if item_id == "guitar_strings_basic" else 50
-        action_name = "buy_strings" if item_id == "guitar_strings_basic" else "buy_essential_gear"
+        from game_data.gear_catalog import GEAR_CATALOG
+        item = GEAR_CATALOG.get(item_id)
+        if not item:
+            return {"ok": False, "reason": "missing_item"}
 
-        dummy_action = LocalAction(action_name, f"Buy {item_id}", 15, cost=cost, tags=["shopping"])
+        cost = item.cost
+
+        dummy_action = LocalAction("buy_specific_item", f"Buy {item_id}", 15, cost=cost, tags=["shopping"])
         res = self.game.location_action_engine.execute_action(player, poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
 
         # Grant the item manually here since we bypass handle_local_presence_action
         if res.get("ok"):
-            from game_data.gear_catalog import GEAR_CATALOG
-            for granted_item_id in res.get("item_grants", []):
-                granted_item = GEAR_CATALOG.get(granted_item_id)
-                if granted_item:
-                    player.add_gear(granted_item)
+            if player.add_gear(item):
+                 return {"ok": True, "item_id": item_id, "cost": cost, "reason": ""}
+            else:
+                 player.money += cost # refund
+                 return {"ok": False, "item_id": item_id, "reason": "inventory_full"}
 
-        return {"ok": res.get("ok", False), "item_id": item_id, "cost": cost, "reason": res.get("reason_code", "")}
+        return {"ok": False, "item_id": item_id, "cost": cost, "reason": res.get("reason_code", "")}
 
     def apply_time_advance(self, player, start_time, end_time):
         if not player:

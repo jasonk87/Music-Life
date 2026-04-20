@@ -237,6 +237,8 @@ class LocationActionEngine:
         visibility_pressure: float = 0.0,
     ) -> Dict:
         profile = PlaceProfileBuilder.build(place_obj, location_obj)
+
+        # --- VALIDATION PHASE ---
         if action.cost > player.money:
             return {
                 "ok": False,
@@ -244,6 +246,28 @@ class LocationActionEngine:
                 "explanation": f"You need ${action.cost} for {action.label}.",
             }
 
+        if action.action_id == "sleep_rest" and profile.place_type in {"hotel", "motel"}:
+            # Check for active rental
+            rental = getattr(player, "rented_accommodation_info", None)
+            poi_id = getattr(place_obj, "poi_id", None)
+            if not rental or not poi_id or rental.get("poi_id") != poi_id:
+                return {"ok": False, "reason_code": "no_rental", "explanation": "You need to rent a room here first."}
+            checkout_time = rental.get("checkout_time_obj")
+            if checkout_time and current_game_time > checkout_time:
+                player.rented_accommodation_info = None
+                return {"ok": False, "reason_code": "rental_expired", "explanation": "Your room rental has expired."}
+
+        if action.action_id == "perform_open_mic":
+            # Check if there is an actual event going on
+            events = getattr(place_obj, "events", [])
+            has_event = any(e.event_type == "OPEN_MIC" for e in events)
+
+            if not has_event and current_game_time.hour < 18:
+                return {"ok": False, "reason_code": "wrong_time", "explanation": "There is no open mic event, and it doesn't start until evening (18:00+)."}
+            if player.energy < 10:
+                return {"ok": False, "reason_code": "exhausted", "explanation": "You are too exhausted to perform."}
+
+        # --- EXECUTION PHASE ---
         if action.cost:
             player.money -= action.cost
 
@@ -282,17 +306,21 @@ class LocationActionEngine:
         elif action.action_id == "buy_essential_gear":
             result["item_grants"].append("worn_acoustic_guitar")
 
-        if action.action_id == "practice_music":
+        if action.action_id.startswith("practice_music"):
+            parts = action.action_id.split(":")
+            target_skill = parts[1] if len(parts) > 1 else "guitar"
+            hours = action.minutes / 60.0
+
             if profile.place_type == "studio_recording":
-                player.practice_skill("guitar", 1.0)
-                player.practice_skill("vocals", 1.0)
-                result["explanation"] = "You practice intensely in the studio."
+                player.practice_skill(target_skill, hours * 1.0)
+                if target_skill == "guitar": player.practice_skill("vocals", hours * 1.0)
+                result["explanation"] = f"You practice intensely in the studio."
             elif profile.place_type == "home":
-                player.practice_skill("guitar", 0.8)
-                result["explanation"] = "You practice at home."
+                player.practice_skill(target_skill, hours * 0.8)
+                result["explanation"] = f"You practice {target_skill} at home."
             else:
-                player.practice_skill("guitar", 0.5)
-                result["explanation"] = "You squeeze in some light practice."
+                player.practice_skill(target_skill, hours * 0.5)
+                result["explanation"] = f"You squeeze in some light practice."
 
         if action.action_id == "test_instrument":
             player.practice_skill("guitar", 0.2)
@@ -308,12 +336,6 @@ class LocationActionEngine:
             result["explanation"] = f"You sleep for {int(hours)} hours."
 
         if action.action_id == "perform_open_mic":
-            # Very basic check, detailed event logic might exist higher up or in early_life
-            if current_game_time.hour < 18:
-                return {"ok": False, "reason_code": "wrong_time", "explanation": "Open mic doesn't start until evening (18:00+)."}
-            if player.energy < 10:
-                return {"ok": False, "reason_code": "exhausted", "explanation": "You are too exhausted to perform."}
-
             stage = player.skills.get("stage_presence", 0)
             vocals = player.skills.get("vocals", 0)
             songwriting = player.skills.get("songwriting", 0)
