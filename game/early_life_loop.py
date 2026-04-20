@@ -200,69 +200,58 @@ class EarlyLifeLoop:
         return result
 
     def run_practice_block(self, player, skill_name, hours):
+        """Deprecated: Wraps abstract practice into location-aware presence."""
+        from game.place_presence import LocalAction
         self.ensure_player_state(player)
-        if hours <= 0:
-            return {"ok": False, "reason": "invalid_hours"}
-        if player.energy <= 5:
-            return {"ok": False, "reason": "too_exhausted"}
-        self.game._advance_time_with_needs(int(hours * 60))
-        player.practice_skill(skill_name, hours)
-        player.energy = max(0, player.energy - int(4 * hours))
-        player.hunger = min(100, player.hunger + int(2 * hours))
-        if hours >= 3:
-            player.stress = min(100, player.stress + 3)
-        self._record_memory(
-            event_type="grind_practice_session",
-            player=player,
-            impact=1.0 + (0.2 * min(4, hours)),
-            metadata={"skill_name": skill_name, "hours": hours},
-        )
-        return {"ok": True, "skill_name": skill_name, "hours": hours}
+        if not player.current_poi or player.current_poi.category not in ["HOME", "ACCOMMODATION_HOTEL", "ACCOMMODATION_MOTEL", "STUDIO_RECORDING"]:
+            return {"ok": False, "reason": "wrong_location"}
+
+        # Hand off to the engine.
+        dummy_action = LocalAction("practice_music", "Practice", int(hours * 60), tags=["practice"])
+        res = self.game.location_action_engine.execute_action(player, player.current_poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
+        return {"ok": res.get("ok", False), "skill_name": skill_name, "hours": hours, "reason": res.get("reason_code", "")}
 
     def run_open_mic_set(self, player):
+        """Deprecated: Wraps abstract open mic into location-aware presence."""
+        from game.place_presence import LocalAction
         self.ensure_player_state(player)
-        if player.energy < 10:
-            return {"ok": False, "reason": "too_exhausted"}
-        self.game._advance_time_with_needs(120)
-        stage = player.skills.get("stage_presence", 0)
-        vocals = player.skills.get("vocals", 0)
-        songwriting = player.skills.get("songwriting", 0)
-        score = (stage * 2.2) + (vocals * 1.8) + (songwriting * 1.4) + random.uniform(-2.5, 2.5)
-        score += max(-3, int((player.energy - 40) / 20))
-        score -= int(player.stress / 25)
-        tips = max(0, int(score * 1.3))
-        fame_gain = 2 if score >= 16 else 1 if score >= 10 else 0
-        stress_shift = -2 if score >= 14 else 2
-        player.money += tips
-        player.fame += fame_gain
-        player.energy = max(0, player.energy - 14)
-        player.stress = max(0, min(100, player.stress + stress_shift))
-        self.game.GAME_LOG.add_log_message(f"OPEN MIC: You play a short set. Tips: ${tips}. Fame +{fame_gain}.")
-        self._record_memory(
-            event_type="open_mic_set",
-            player=player,
-            impact=max(0.5, min(3.0, score / 8.0)),
-            metadata={"score": round(score, 2), "tips": tips, "fame_gain": fame_gain},
-        )
-        return {"ok": True, "tips": tips, "fame_gain": fame_gain, "score": score}
+
+        poi = player.current_poi
+        if not poi or poi.category not in ["VENUE_CLUB", "VENUE_BAR", "VENUE_GENERAL"]:
+            return {"ok": False, "reason": "wrong_location"}
+
+        dummy_action = LocalAction("perform_open_mic", "Perform Open Mic", 60, tags=["performance"])
+        res = self.game.location_action_engine.execute_action(player, poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
+
+        if res.get("ok"):
+            return {"ok": True, "tips": res.get("tips", 0), "fame_gain": res.get("fame_gain", 0), "score": res.get("open_mic_score", 0)}
+        return {"ok": False, "reason": res.get("reason_code", "failed")}
 
     def purchase_essential_item(self, player, item_id):
+        """Deprecated: Wraps abstract purchase into location-aware presence."""
+        from game.place_presence import LocalAction
         self.ensure_player_state(player)
-        item = GEAR_CATALOG.get(item_id)
-        if not item:
-            return {"ok": False, "reason": "missing_item"}
-        if player.money < item.cost:
-            return {"ok": False, "reason": "insufficient_funds", "cost": item.cost}
-        if not player.add_gear(item):
-            return {"ok": False, "reason": "inventory_full"}
-        player.money -= item.cost
-        self._record_memory(
-            event_type="essential_purchase",
-            player=player,
-            impact=0.8,
-            metadata={"item_id": item_id, "item_name": item.name, "cost": item.cost},
-        )
-        return {"ok": True, "item_id": item_id, "cost": item.cost}
+
+        poi = player.current_poi
+        if not poi or poi.category not in ["SHOP_MUSIC", "PAWN_SHOP"]:
+            return {"ok": False, "reason": "wrong_location"}
+
+        # Hardcoding the map for legacy wrappers.
+        cost = 12 if item_id == "guitar_strings_basic" else 50
+        action_name = "buy_strings" if item_id == "guitar_strings_basic" else "buy_essential_gear"
+
+        dummy_action = LocalAction(action_name, f"Buy {item_id}", 15, cost=cost, tags=["shopping"])
+        res = self.game.location_action_engine.execute_action(player, poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
+
+        # Grant the item manually here since we bypass handle_local_presence_action
+        if res.get("ok"):
+            from game_data.gear_catalog import GEAR_CATALOG
+            for granted_item_id in res.get("item_grants", []):
+                granted_item = GEAR_CATALOG.get(granted_item_id)
+                if granted_item:
+                    player.add_gear(granted_item)
+
+        return {"ok": res.get("ok", False), "item_id": item_id, "cost": cost, "reason": res.get("reason_code", "")}
 
     def apply_time_advance(self, player, start_time, end_time):
         if not player:

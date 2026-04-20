@@ -9,6 +9,8 @@ CATEGORY_TO_PLACE_TYPE = {
     "PAWN_SHOP": "pawn_shop",
     "ACCOMMODATION_HOTEL": "hotel",
     "ACCOMMODATION_MOTEL": "motel",
+    "HOME": "home",
+    "STUDIO_RECORDING": "studio_recording",
     "VENUE_CLUB": "club",
     "VENUE_BAR": "bar",
     "VENUE_GENERAL": "venue",
@@ -164,14 +166,28 @@ class LocationActionEngine:
             actions.extend([
                 LocalAction("browse_gear", "Browse gear shelves", 20, tags=["shopping"]),
                 LocalAction("buy_strings", "Buy strings", 15, cost=12, tags=["shopping"]),
+                LocalAction("buy_essential_gear", "Buy essential gear", 30, cost=50, tags=["shopping"]),
                 LocalAction("pawn_item", "Pawn an item", 25, tags=["cash"]),
             ])
         elif profile.place_type in {"hotel", "motel"}:
             nightly = 80 if profile.place_type == "hotel" else 45
             actions.extend([
                 LocalAction("rent_room", "Rent a room", 15, cost=nightly, tags=["rest"]),
+                LocalAction("sleep_rest", "Sleep/Rest", 120, tags=["rest", "recovery"]),
+                LocalAction("practice_music", "Practice lightly", 60, tags=["practice"]),
                 LocalAction("shower_reset", "Take a shower", 20, tags=["recovery"]),
                 LocalAction("stash_belongings", "Stash belongings", 20, tags=["logistics"]),
+            ])
+        elif profile.place_type == "home":
+            actions.extend([
+                LocalAction("sleep_rest", "Sleep/Rest", 120, tags=["rest", "recovery"]),
+                LocalAction("practice_music", "Practice music", 60, tags=["practice"]),
+                LocalAction("shower_reset", "Take a shower", 20, tags=["recovery"]),
+                LocalAction("stash_belongings", "Stash belongings", 20, tags=["logistics"]),
+            ])
+        elif profile.place_type == "studio_recording":
+            actions.extend([
+                LocalAction("practice_music", "Intensive practice", 60, tags=["practice"]),
             ])
         elif profile.place_type in {"street", "downtown"}:
             actions.extend([
@@ -184,17 +200,21 @@ class LocationActionEngine:
                 LocalAction("go_inside", "Go inside", 20, cost=10, tags=["public"]),
                 LocalAction("network_scene", "Network with the scene", 45, tags=["network", "public"]),
                 LocalAction("have_drink", "Have a drink", 25, cost=9, tags=["public"]),
+                LocalAction("perform_open_mic", "Perform Open Mic", 60, tags=["performance", "public"]),
             ])
         elif profile.place_type == "venue":
             actions.extend([
                 LocalAction("check_in", "Check in at venue", 20, tags=["logistics"]),
                 LocalAction("wait_backstage", "Wait near stage", 30, tags=["public"]),
                 LocalAction("explore_area", "Explore nearby blocks", 30, tags=["public"]),
+                LocalAction("perform_open_mic", "Perform Open Mic", 60, tags=["performance", "public"]),
             ])
         elif profile.place_type == "music_store":
             actions.extend([
                 LocalAction("browse_instruments", "Browse instruments", 25, tags=["shopping"]),
                 LocalAction("buy_strings", "Buy strings", 15, cost=12, tags=["shopping"]),
+                LocalAction("buy_essential_gear", "Buy essential gear", 30, cost=50, tags=["shopping"]),
+                LocalAction("test_instrument", "Test instrument", 15, tags=["practice", "shopping"]),
                 LocalAction("talk_staff", "Talk to staff", 20, tags=["network"]),
             ])
         else:
@@ -259,6 +279,56 @@ class LocationActionEngine:
 
         if action.action_id == "buy_strings":
             result["item_grants"].append("guitar_strings_basic")
+        elif action.action_id == "buy_essential_gear":
+            result["item_grants"].append("worn_acoustic_guitar")
+
+        if action.action_id == "practice_music":
+            if profile.place_type == "studio_recording":
+                player.practice_skill("guitar", 1.0)
+                player.practice_skill("vocals", 1.0)
+                result["explanation"] = "You practice intensely in the studio."
+            elif profile.place_type == "home":
+                player.practice_skill("guitar", 0.8)
+                result["explanation"] = "You practice at home."
+            else:
+                player.practice_skill("guitar", 0.5)
+                result["explanation"] = "You squeeze in some light practice."
+
+        if action.action_id == "test_instrument":
+            player.practice_skill("guitar", 0.2)
+            result["explanation"] = "You noodle around on a display instrument."
+
+        if action.action_id == "sleep_rest":
+            rest_quality = getattr(place_obj, "rest_quality", 0.5)
+            hours = action.minutes / 60.0
+            energy_gain = int(hours * 5 * (1 + rest_quality))
+            stress_reduction = int(hours * 3 * (1 + rest_quality))
+            player.energy = min(100, player.energy + energy_gain)
+            player.stress = max(0, player.stress - stress_reduction)
+            result["explanation"] = f"You sleep for {int(hours)} hours."
+
+        if action.action_id == "perform_open_mic":
+            # Very basic check, detailed event logic might exist higher up or in early_life
+            if current_game_time.hour < 18:
+                return {"ok": False, "reason_code": "wrong_time", "explanation": "Open mic doesn't start until evening (18:00+)."}
+            if player.energy < 10:
+                return {"ok": False, "reason_code": "exhausted", "explanation": "You are too exhausted to perform."}
+
+            stage = player.skills.get("stage_presence", 0)
+            vocals = player.skills.get("vocals", 0)
+            songwriting = player.skills.get("songwriting", 0)
+            score = (stage * 2.2) + (vocals * 1.8) + (songwriting * 1.4) + random.uniform(-2.5, 2.5)
+            score += max(-3, int((player.energy - 40) / 20))
+            score -= int(player.stress / 25)
+            tips = max(0, int(score * 1.3))
+            fame_gain = 2 if score >= 16 else 1 if score >= 10 else 0
+
+            player.money += tips
+            player.fame += fame_gain
+            result["explanation"] = f"You played a short open mic set. Tips: ${tips}. Fame +{fame_gain}."
+            result["open_mic_score"] = score
+            result["tips"] = tips
+            result["fame_gain"] = fame_gain
 
         if encounter:
             result["encounter"] = {

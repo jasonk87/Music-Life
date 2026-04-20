@@ -42,6 +42,9 @@ class TestTimeProgression(unittest.TestCase):
         self.assertEqual(current_game_time.minute, 0)
 
     def test_rest_advances_only_requested_hours(self):
+        # We need a home location for rest to work properly now
+        from game.poi import PointOfInterest
+        self.game.player.current_poi = PointOfInterest("home_poi", "Home", "Home", category="HOME")
         self.game.rest(8)
 
         self.assertEqual(current_game_time.hour, 16)
