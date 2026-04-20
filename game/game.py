@@ -28,6 +28,10 @@ from game.feedback_generator import generate_feedback_for_song, SOURCES, generat
 from game.sound import SoundManager
 from game.ascii_art import ART
 from game.performance import PerformanceManager
+from game.obligation_resolver import ObligationResolver
+from game.obligation_consequences import ObligationConsequenceEngine
+from game.place_presence import LocationActionEngine
+from game.inventory_loadout import InventoryLoadoutService
 from game.trends import TrendManager
 from game.band_drama import check_for_band_drama, resolve_weekly_wages
 from game.staff import StaffMember
@@ -58,6 +62,7 @@ class Game:
         self.performance_log = []
         self.performance_stage = None
         self.band_menu_state = "main"
+        self._local_action_lookup = {}
         self.selected_contact_id = None
         self.selected_poi = None
         self.selected_npc = None
@@ -109,6 +114,12 @@ class Game:
         self._poi_venue_id_map = {}
 
         self.GAME_LOG = self.ui
+        self.obligation_resolver = ObligationResolver(self)
+        self.obligation_consequence_engine = ObligationConsequenceEngine()
+        self.location_action_engine = LocationActionEngine()
+        self.inventory_service = InventoryLoadoutService()
+        self._local_action_lookup = {}
+        self.performance_requirement_penalty = 1.0
 
     def _build_poi_venue_id_map(self):
         self._poi_venue_id_map.clear()
@@ -157,6 +168,9 @@ class Game:
     def _advance_time_with_needs(self, minutes):
         if minutes <= 0:
             return
+        if self.player:
+            resolution = self.obligation_resolver.resolve_before_time_advance(minutes)
+            self.obligation_consequence_engine.apply_resolution(self.player, resolution, self.GAME_LOG)
         advance_game_time(minutes)
         self.process_time_based_player_needs(self.player, minutes)
         self._check_player_survival_state()
@@ -239,6 +253,8 @@ class Game:
         self.web_menu_state = "main"
         self.character_menu_state = "main"
         self.band_menu_state = "main"
+        self._local_action_lookup = {}
+        self.performance_requirement_penalty = 1.0
 
     def _normalize_opportunity_state(self):
         normalized = {}
@@ -613,6 +629,7 @@ class Game:
             - int(self.player.vocal_strain / 10)
             - int(self.player.wrist_strain / 10)
         ) - 35
+        score = int(score * getattr(self, "performance_requirement_penalty", 1.0))
 
         # Increase strain slightly per gig
         self.player.vocal_strain = min(100, self.player.vocal_strain + random.randint(3, 8))
@@ -1141,10 +1158,36 @@ class Game:
                     elif self.game_state == "performance":
                         self.GAME_LOG.add_log_message(f"'{event.description}' is happening now, but you're already busy.")
                     else:
-                        self.active_performance = scheduled_event
-                        self.performance_stage = "choose_song"
-                        self.game_state = "performance"
-                        self.GAME_LOG.add_log_message(f"It's time for '{scheduled_event.name}' at {scheduled_event.location.name}.")
+                        expected_dest = event.details.get("destination_id") or event.details.get("venue_id")
+                        current_dest = None
+                        if self.player.current_poi:
+                            current_dest = getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
+
+                        if expected_dest and expected_dest != current_dest:
+                            miss_reason = event.details.get("obligation_explanation") or "you were not at the venue when doors opened"
+                            root_cause = event.details.get("obligation_reason_code")
+                            if root_cause:
+                                self.GAME_LOG.add_log_message(f"You missed '{event.description}' [{root_cause}]: {miss_reason}.")
+                            else:
+                                self.GAME_LOG.add_log_message(f"You missed '{event.description}': {miss_reason}.")
+                        else:
+                            gig_req = self._assess_gig_requirements()
+                            self.performance_requirement_penalty = 1.0
+                            if gig_req.status == "missing_and_severe":
+                                self.GAME_LOG.add_log_message(
+                                    f"You missed '{event.description}' due to missing critical loadout: {', '.join(gig_req.missing_severe)}."
+                                )
+                            else:
+                                if gig_req.status in {"partially_satisfied", "missing_but_recoverable"}:
+                                    self.performance_requirement_penalty = 0.82
+                                    self.player.stress = min(100, self.player.stress + 7)
+                                    self.GAME_LOG.add_log_message(
+                                        f"You improvise with an incomplete kit ({', '.join(gig_req.missing)}). Performance quality will suffer."
+                                    )
+                                self.active_performance = scheduled_event
+                                self.performance_stage = "choose_song"
+                                self.game_state = "performance"
+                                self.GAME_LOG.add_log_message(f"It's time for '{scheduled_event.name}' at {scheduled_event.location.name}.")
 
                     self.player.schedule.scheduled_items.remove(event)
 
@@ -1238,7 +1281,7 @@ class Game:
                 gig_end_time,
                 gig_event.name,
                 "Gig (Tour)",
-                {"event_id": gig_event.event_id, "venue_id": venue.venue_id},
+                {"event_id": gig_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
             )
             self.GAME_LOG.add_log_message(f"Booked: {gig_event.name} on {gig_start_time.get_time_string_for_schedule()}")
 
@@ -1615,6 +1658,13 @@ class Game:
 
                 interaction_options = {str(i): option for i, option in enumerate(self.selected_poi.get_interactions())}
 
+                local_actions = self.location_action_engine.generate_actions(self.player, self.selected_poi, location)
+                self._local_action_lookup = {}
+                for idx, local_action in enumerate(local_actions):
+                    action_key = f"local_{idx}"
+                    interaction_options[action_key] = f"Local: {local_action.menu_label()}"
+                    self._local_action_lookup[action_key] = local_action
+
                 # Add dynamic opportunities for this POI
                 for opp_id, opp_details in self.player.active_opportunities.items():
                     if opp_details["status"] == "available":
@@ -1637,6 +1687,10 @@ class Game:
                     self.explore_menu_state = "location"
                     self.selected_poi = None
                     self.game_state = "main_menu"
+                elif choice in self._local_action_lookup:
+                    self.handle_local_presence_action(self._local_action_lookup[choice])
+                    self.explore_menu_state = "location"
+                    self.selected_poi = None
                 elif choice == "wander":
                     self.GAME_LOG.add_log_message("You take a moment to look around...")
                     self._advance_time_with_needs(15)
@@ -2384,6 +2438,95 @@ class Game:
         self.player.energy -= 10
         self.player.stress = max(0, self.player.stress - 15) # Jamming relieves stress
         self.GAME_LOG.add_log_message(f"Jam session finished. Stress -15.")
+
+
+    def _current_poi_id(self):
+        if not self.player or not self.player.current_poi:
+            return None
+        return getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
+
+    def _assess_local_action_requirements(self, local_action):
+        requirements_map = {
+            "pawn_item": [{"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": False}],
+            "network_scene": [{"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": False}],
+        }
+        reqs = requirements_map.get(local_action.action_id, [])
+        if not reqs:
+            return None
+        return self.inventory_service.assess_requirements(
+            self.player,
+            reqs,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _assess_gig_requirements(self):
+        gig_requirements = [
+            {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+            {"match_type": "semantic", "key": "strings", "count": 1, "mandatory": True},
+        ]
+        return self.inventory_service.assess_requirements(
+            self.player,
+            gig_requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def handle_local_presence_action(self, local_action):
+        if not self.selected_poi:
+            self.GAME_LOG.add_log_message("No active place selected for local actions.")
+            return
+
+        local_req = self._assess_local_action_requirements(local_action)
+        if local_req and local_req.status == "missing_and_severe":
+            self.GAME_LOG.add_log_message(
+                f"You cannot {local_action.label.lower()} right now. Missing: {', '.join(local_req.missing_severe)}."
+            )
+            return
+
+        result = self.location_action_engine.execute_action(
+            player=self.player,
+            place_obj=self.selected_poi,
+            location_obj=self.player.current_location,
+            action=local_action,
+            advance_time=self._advance_time_with_needs,
+            logger=self.GAME_LOG,
+        )
+
+        if not result.get("ok"):
+            self.GAME_LOG.add_log_message(result.get("explanation", "You cannot do that right now."))
+            return
+
+        self.GAME_LOG.add_log_message(result.get("explanation", "You spend time locally."))
+
+        for granted_item_id in result.get("item_grants", []):
+            granted_item = GEAR_CATALOG.get(granted_item_id)
+            if granted_item:
+                self.player.add_gear(granted_item)
+                self.GAME_LOG.add_log_message(f"You obtain {granted_item.name} and add it to your carry.")
+
+        if local_action.action_id == "stash_belongings" and self.player.gear_inventory:
+            poi_id = getattr(self.selected_poi, "poi_id", None)
+            if poi_id:
+                self.inventory_service.ensure_player_fields(self.player)
+                stash = self.player.temporary_stashes.setdefault(poi_id, [])
+                item = self.player.gear_inventory.pop()
+                stash.append(item)
+                self.GAME_LOG.add_log_message(f"You stash {item.name} at this lodging for later.")
+        elif local_action.action_id == "rent_room":
+            checkout_time = current_game_time.copy()
+            checkout_time.add_hours(16)
+            self.player.rented_accommodation_info = {
+                "poi_id": getattr(self.selected_poi, "poi_id", None),
+                "checkout_time_obj": checkout_time,
+            }
+
+        encounter = result.get("encounter")
+        if encounter:
+            encounter_type = encounter.get("encounter_type", "encounter")
+            reason_code = encounter.get("reason_code", "unknown")
+            self.GAME_LOG.add_log_message(f"Encounter: {encounter_type} [{reason_code}].")
+
 
 
     def handle_interaction(self, interaction_text, time_cost=15):
@@ -3371,7 +3514,7 @@ class Game:
                     gig_end_time,
                     booked_event.name,
                     "Gig",
-                    {"event_id": booked_event.event_id, "venue_id": venue.venue_id},
+                    {"event_id": booked_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
                 )
             else:
                 self.GAME_LOG.add_log_message("Agent: 'Sorry, nothing available right now.'")
@@ -3444,7 +3587,7 @@ class Game:
                             gig_end_time,
                             f"Tour: {venue.name}",
                             "Gig",
-                            {"event_id": booked_event.event_id, "venue_id": venue.venue_id},
+                            {"event_id": booked_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
                         )
                     self.GAME_LOG.add_log_message("Check your Schedule for the new tour dates!")
                 else:
