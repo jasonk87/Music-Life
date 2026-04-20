@@ -51,6 +51,17 @@ class NPC:
         self.romance_status = "Single" # "Single", "Dating", "Married"
         self.romance_partner_id = None
         self.romance_interest = 0 # 0-100 Interest in Player
+        self.role_tags = set()  # unified temporary/social/professional role tags
+        self.status = "active"
+        self.is_persistent = False
+        self.contact_access = {
+            "known_contact": False,
+            "has_phone_number": False,
+            "blocked": False,
+            "mediated_by": None,   # npc_id of manager/security/assistant gatekeeper
+            "public_only": True,
+        }
+        self.role_history = []  # list of {"from": ..., "to": ..., "reason": ..., "timestamp": ...}
 
     def __str__(self):
         return f"NPC: {self.name} (ID: {self.npc_id}, Personality: {self.personality_key}, Relationship: {self.relationship_with_player.name} ({self.relationship_score}))"
@@ -59,6 +70,16 @@ class NPC:
         self.memories.append(memory_string)
         # Optional: Limit memory size, e.g., self.memories = self.memories[-20:]
         print(f"Memory added for {self.name}: '{memory_string}'")
+
+    def add_role_tag(self, role_tag):
+        self.role_tags.add(role_tag)
+
+    def remove_role_tag(self, role_tag):
+        if role_tag in self.role_tags:
+            self.role_tags.remove(role_tag)
+
+    def has_role_tag(self, role_tag):
+        return role_tag in self.role_tags
 
     def update_relationship(self, points):
         new_score = self.relationship_score + points
