@@ -40,6 +40,7 @@ from game.transit_phase import TransitLayer
 from game.ui_signals import UISignalLayer
 from game.llm_interaction_layer import InteractionContextBuilder, LLMInteractionEngine, SocialMediaExpressionLayer
 from game.scarcity_interference import ScarcityAvailabilitySystem, PublicInterferenceSystem
+from game.npc_identity_system import NPCIdentitySystem
 from game.trends import TrendManager
 from game.band_drama import check_for_band_drama, resolve_weekly_wages
 from game.staff import StaffMember
@@ -138,6 +139,7 @@ class Game:
         self.social_expression = SocialMediaExpressionLayer()
         self.scarcity_system = ScarcityAvailabilitySystem()
         self.public_interference_system = PublicInterferenceSystem()
+        self.npc_identity = NPCIdentitySystem(self)
         self._local_action_lookup = {}
         self.performance_requirement_penalty = 1.0
 
@@ -1125,6 +1127,7 @@ class Game:
             if not home_loc_obj: self.GAME_LOG.add_message(f"Warning: No home location for NPC {npc_data['name']}.")
             if not current_loc_obj: self.GAME_LOG.add_message(f"Warning: No current location for NPC {npc_data['name']}.")
             npc = NPC(npc_id=npc_data["npc_id"], name=npc_data["name"], personality_key=npc_data["personality_key"], home_location=home_loc_obj, current_location=current_loc_obj)
+            self.npc_identity.ensure_identity_fields(npc)
             for time_slot, loc_id_str in npc_data.get("schedule", {}).items():
                 scheduled_loc_obj = self.get_poi_or_venue_by_id(loc_id_str)
                 if scheduled_loc_obj: npc.schedule[time_slot] = scheduled_loc_obj
@@ -1135,6 +1138,8 @@ class Game:
                 npc.gift_preferences = npc_data["gift_preferences"]
             if "career_stage" in npc_data:
                 npc.career_stage = npc_data["career_stage"]
+                if npc.career_stage in {"unsigned", "signed"}:
+                    npc.role_tags.add("artist")
             self.NPC_REGISTRY[npc.npc_id] = npc
 
         for loc in self.WORLD_MAP.values():

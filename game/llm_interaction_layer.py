@@ -255,6 +255,8 @@ class LLMInteractionEngine:
                 text += "Good timing. I'm listening."
             else:
                 text += "Yeah?"
+            if context.recent_memory and context.emotional_stance in {"competitive", "critical"}:
+                text += f" I remember: {self._memory_phrase(context.recent_memory[0])}."
         else:
             text += "Good to see you."
 

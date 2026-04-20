@@ -9,6 +9,7 @@ from game.game_time import current_game_time
 @dataclass
 class DelegationRole:
     role_type: str
+    npc_id: Optional[str] = None
     active: bool = True
     upkeep: int = 0
     competence: float = 0.5
@@ -30,7 +31,7 @@ class DelegationSystem:
         if not hasattr(player, "delegation_roles"):
             player.delegation_roles = {}
 
-    def add_or_update_role(self, player, role_type: str, active=True, competence=None, reliability=None, upkeep=None, experience=None):
+    def add_or_update_role(self, player, role_type: str, active=True, competence=None, reliability=None, upkeep=None, experience=None, npc_id=None):
         self.ensure_player_support(player)
         base = self.DEFAULTS.get(role_type, {"upkeep": 100, "competence": 0.5, "reliability": 0.5, "experience": 0.5})
         c = competence if competence is not None else base["competence"]
@@ -40,6 +41,7 @@ class DelegationSystem:
         scaled_upkeep = upkeep if upkeep is not None else int(base["upkeep"] * (0.7 + quality))
         role = DelegationRole(
             role_type=role_type,
+            npc_id=npc_id,
             active=active,
             upkeep=scaled_upkeep,
             competence=c,
