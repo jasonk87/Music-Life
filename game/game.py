@@ -3395,16 +3395,19 @@ class Game:
                 self.game_state = "main_menu"
 
     def rest(self, hours=8):
-        if self.player.current_poi and getattr(self.player.current_poi, "poi_id", None) == self.PLAYER_HOME_POI_ID_GLOBAL and not self.player.has_home:
-            self.GAME_LOG.add_log_message("You do not have that apartment anymore.")
-            return
-
         poi = self.player.current_poi
-        if not poi or poi.category not in ["HOME", "ACCOMMODATION_HOTEL", "ACCOMMODATION_MOTEL"]:
+        if not poi:
             self.GAME_LOG.add_log_message("You cannot rest fully here. Find lodging or go home.")
             return
 
         from game.place_presence import LocalAction
+
+        # Check if the engine actually offers this action at this location
+        offered_actions = self.location_action_engine.generate_actions(self.player, poi, self.player.current_location)
+        if not any(a.action_id == "sleep_rest" for a in offered_actions):
+             self.GAME_LOG.add_log_message("You cannot rest fully here. Find lodging or go home.")
+             return
+
         dummy_action = LocalAction("sleep_rest", "Sleep/Rest", int(hours * 60), tags=["rest", "recovery"])
         result = self.location_action_engine.execute_action(self.player, poi, self.player.current_location, dummy_action, self._advance_time_with_needs, self.GAME_LOG)
 
