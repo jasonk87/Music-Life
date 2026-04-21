@@ -266,7 +266,7 @@ class LocationActionEngine:
 
         if action.action_id == "perform_open_mic":
             # Check if there is an actual event going on
-            events = getattr(place_obj, "events", [])
+            events = getattr(place_obj, "events", getattr(place_obj, "events_hosted", []))
             has_event = any(e.event_type == "OPEN_MIC" for e in events)
             has_other_event = any(e.event_type != "OPEN_MIC" for e in events)
 

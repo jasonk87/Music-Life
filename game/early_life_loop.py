@@ -206,6 +206,11 @@ class EarlyLifeLoop:
         if not player.current_poi:
             return {"ok": False, "reason": "wrong_location"}
 
+        # Check if the engine actually offers this action at this location
+        offered_actions = self.game.location_action_engine.generate_actions(player, player.current_poi, player.current_location)
+        if not any(a.action_id == "practice_music" for a in offered_actions):
+            return {"ok": False, "reason": "wrong_location"}
+
         # Hand off to the engine. Validation happens there.
         dummy_action = LocalAction(f"practice_music:{skill_name}", "Practice", int(hours * 60), tags=["practice"])
         res = self.game.location_action_engine.execute_action(player, player.current_poi, player.current_location, dummy_action, self.game._advance_time_with_needs, self.game.GAME_LOG)
