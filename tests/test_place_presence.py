@@ -1,6 +1,6 @@
 import unittest
 
-from game.place_presence import LocationActionEngine
+from game.place_presence import LocationActionEngine, LocalAction
 from game.poi import PointOfInterest
 from game.venue import Venue
 from game.player import Player
@@ -76,6 +76,43 @@ class TestPlacePresence(unittest.TestCase):
         self.assertIsNotNone(result["encounter"])
         self.assertEqual(result["encounter"]["encounter_type"], "fan_encounter")
         self.assertEqual(result["encounter"]["reason_code"], "public_visibility_pressure")
+
+    def test_execute_action_blocks_unavailable_actions(self):
+        street = PointOfInterest("street_1", "Main St", "", category="DOWNTOWN", parent_location_id="Downtown")
+        forged = LocalAction("buy_strings", "Buy strings", 1, cost=1, tags=["shopping"])
+        advanced = {"minutes": 0}
+
+        result = self.engine.execute_action(
+            player=self.player,
+            place_obj=street,
+            location_obj=None,
+            action=forged,
+            advance_time=lambda minutes: advanced.__setitem__("minutes", advanced["minutes"] + minutes),
+            logger=None,
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason_code"], "action_not_available_here")
+        self.assertEqual(advanced["minutes"], 0)
+
+    def test_execute_action_uses_canonical_cost_and_minutes(self):
+        store = PointOfInterest("music_1", "Strings Shop", "", category="SHOP_MUSIC", parent_location_id="Downtown")
+        forged = LocalAction("buy_strings", "Cheap strings", 1, cost=0, tags=["shopping"])
+        advanced = {"minutes": 0}
+        money_before = self.player.money
+
+        result = self.engine.execute_action(
+            player=self.player,
+            place_obj=store,
+            location_obj=None,
+            action=forged,
+            advance_time=lambda minutes: advanced.__setitem__("minutes", advanced["minutes"] + minutes),
+            logger=None,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(advanced["minutes"], 15)
+        self.assertEqual(self.player.money, money_before - 12)
 
 
 if __name__ == "__main__":

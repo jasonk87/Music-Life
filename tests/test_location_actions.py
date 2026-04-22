@@ -4,12 +4,23 @@ from game.player import Player
 from game.poi import PointOfInterest
 from game.place_presence import LocalAction
 from game.location import Location
+from game_data.gear_catalog import GEAR_CATALOG
 
 class DummyLog:
     def add_log_message(self, *args, **kwargs): pass
     def add_message(self, *args, **kwargs): pass
     def print_recent_logs(self, *args, **kwargs): pass
     def clear(self): pass
+
+class CaptureLog(DummyLog):
+    def __init__(self):
+        self.messages = []
+
+    def add_log_message(self, message, *args, **kwargs):
+        self.messages.append(str(message))
+
+    def add_message(self, message, *args, **kwargs):
+        self.messages.append(str(message))
 
 class DummyUI:
     def draw_ascii_art(self, *args, **kwargs): pass
@@ -58,6 +69,7 @@ def test_practice_requires_valid_location(game_env):
 def test_open_mic_requires_venue_and_time(game_env):
     player = game_env.player
     player.energy = 50
+    player.gear_inventory = []
     home_poi = PointOfInterest("home_poi", "Home", "Home", category="HOME")
     player.current_poi = home_poi
 
@@ -80,8 +92,16 @@ def test_open_mic_requires_venue_and_time(game_env):
     assert res.get("reason") == "wrong_time"
     assert current_game_time.minute == time_before.minute and current_game_time.hour == time_before.hour # Time not consumed on failure
 
-    # Succeed evening
+    # Fail evening without required loadout
     current_game_time.hour = 20
+    res = game_env.do_open_mic_set()
+    assert not res.get("ok")
+    assert res.get("reason") == "missing_required_loadout"
+
+    # Add required loadout (instrument + strings)
+    player.gear_inventory = [GEAR_CATALOG["worn_acoustic_guitar"], GEAR_CATALOG["guitar_strings_basic"]]
+
+    # Succeed evening
     res = game_env.do_open_mic_set()
     assert res.get("ok")
 
@@ -156,3 +176,24 @@ def test_purchase_essential_item_grants_gear(game_env):
     res = game_env.buy_essential_item("guitar_strings_basic")
     assert not res.get("ok")
     assert res.get("reason") == "wrong_location"
+
+def test_rehearsal_booking_requires_instrument_loadout(game_env):
+    player = game_env.player
+    capture_log = CaptureLog()
+    game_env.GAME_LOG = capture_log
+
+    studio = PointOfInterest("studio_a", "Studio A", "Rehearsal space", category="STUDIO_RECORDING")
+    player.current_poi = studio
+    game_env.selected_poi = studio
+    player.gear_inventory = []  # Explicitly no instrument on person.
+
+    money_before = player.money
+    guitar_before = player.skills.get("guitar", 0)
+    stage_before = player.skills.get("stage_presence", 0)
+
+    game_env.handle_interaction("Book Rehearsal Slot ($25/hr)")
+
+    assert player.money == money_before
+    assert player.skills.get("guitar", 0) == guitar_before
+    assert player.skills.get("stage_presence", 0) == stage_before
+    assert any("cannot start rehearsal" in msg.lower() for msg in capture_log.messages)
