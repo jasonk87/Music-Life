@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -64,7 +65,82 @@ class TestEventFlow(unittest.TestCase):
         location = MockLocation("Test City", [venue])
         game.WORLD_MAP = {location.name: location}
         game._poi_venue_id_map = {venue.venue_id: venue}
+        game.player.current_location = location
+        game.player.current_poi = venue
         game.player.schedule = PlayerSchedule()
+        start = GameTime(2024, 1, 1, 8, 0)
+        game.player.schedule.add_event(
+            start,
+            start,
+            venue_event.name,
+            "Gig",
+            {"event_id": venue_event.event_id, "venue_id": venue.venue_id},
+        )
+
+        gig_req_ok = type("GigReq", (), {"status": "satisfied", "missing": [], "missing_severe": []})()
+        with patch.object(game, "_assess_gig_requirements", return_value=gig_req_ok):
+            game.check_for_scheduled_events()
+
+        self.assertEqual(game.game_state, "performance")
+        self.assertEqual(game.performance_stage, "choose_song")
+        self.assertIs(game.active_performance, venue_event)
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+
+    def test_scheduled_gig_requires_presence_at_real_venue_even_without_destination_metadata(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        target_venue = Venue("venue_target", "Target Venue")
+        other_venue = Venue("venue_other", "Other Venue")
+        venue_event = Event("Scheduled Set", target_venue, event_type="OPEN_MIC")
+        target_venue.add_event(venue_event)
+
+        location = MockLocation("Test City", [target_venue, other_venue])
+        game.WORLD_MAP = {location.name: location}
+        game._poi_venue_id_map = {
+            target_venue.venue_id: target_venue,
+            other_venue.venue_id: other_venue,
+        }
+        game.player.current_location = location
+        game.player.current_poi = other_venue
+        game.player.schedule = PlayerSchedule()
+
+        start = GameTime(2024, 1, 1, 8, 0)
+        game.player.schedule.add_event(
+            start,
+            start,
+            venue_event.name,
+            "Gig",
+            {"event_id": venue_event.event_id, "location_name": location.name},
+        )
+
+        game.check_for_scheduled_events()
+
+        self.assertNotEqual(game.game_state, "performance")
+        self.assertIsNone(game.active_performance)
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertTrue(any("missed" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_gig", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+
+    def test_scheduled_gig_missing_loadout_fails_terminally_and_records_memory(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        venue = Venue("venue_1", "Test Venue")
+        venue_event = Event("Scheduled Set", venue, event_type="OPEN_MIC")
+        venue.add_event(venue_event)
+
+        location = MockLocation("Test City", [venue])
+        game.WORLD_MAP = {location.name: location}
+        game._poi_venue_id_map = {venue.venue_id: venue}
+        game.player.current_location = location
+        game.player.current_poi = venue
+        game.player.gear_inventory = []
+        game.player.schedule = PlayerSchedule()
+
         start = GameTime(2024, 1, 1, 8, 0)
         game.player.schedule.add_event(
             start,
@@ -76,10 +152,188 @@ class TestEventFlow(unittest.TestCase):
 
         game.check_for_scheduled_events()
 
-        self.assertEqual(game.game_state, "performance")
-        self.assertEqual(game.performance_stage, "choose_song")
-        self.assertIs(game.active_performance, venue_event)
+        self.assertNotEqual(game.game_state, "performance")
         self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertTrue(any("missing critical loadout" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_gig", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+        self.assertEqual(memory_hits[-1].metadata.get("reason_code"), "missing_required_loadout")
+
+    def test_scheduled_gig_window_elapsed_is_terminal_failure_even_at_correct_venue(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        venue = Venue("venue_1", "Test Venue")
+        venue_event = Event("Scheduled Set", venue, event_type="OPEN_MIC")
+        venue.add_event(venue_event)
+
+        location = MockLocation("Test City", [venue])
+        game.WORLD_MAP = {location.name: location}
+        game._poi_venue_id_map = {venue.venue_id: venue}
+        game.player.current_location = location
+        game.player.current_poi = venue
+        game.player.schedule = PlayerSchedule()
+
+        start = GameTime(2024, 1, 1, 7, 0)
+        end = GameTime(2024, 1, 1, 7, 30)
+        game.player.schedule.add_event(
+            start,
+            end,
+            venue_event.name,
+            "Gig",
+            {"event_id": venue_event.event_id, "venue_id": venue.venue_id},
+        )
+
+        game.check_for_scheduled_events()
+
+        self.assertNotEqual(game.game_state, "performance")
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertTrue(any("window already closed" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_gig", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+        self.assertEqual(memory_hits[-1].metadata.get("reason_code"), "window_elapsed")
+
+    def test_booked_creative_meeting_fails_explicitly_when_not_at_booked_poi(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        location = Location("Test City", "City")
+        booked_poi = PointOfInterest("studio_a", "Studio A", "Studio", category="STUDIO_RECORDING")
+        other_poi = PointOfInterest("cafe_a", "Cafe A", "Cafe", category="POI_CAFE")
+        location.add_poi(booked_poi)
+        location.add_poi(other_poi)
+
+        game.player.current_location = location
+        game.player.current_poi = other_poi
+        game.player.schedule = PlayerSchedule()
+
+        start = GameTime(2024, 1, 1, 8, 0)
+        game.player.schedule.add_event(
+            start,
+            start,
+            "Songwriting Session",
+            "Meeting",
+            {"destination_id": booked_poi.poi_id, "requires_presence": True},
+        )
+
+        due_event = game.player.schedule.scheduled_items[0]
+        game.check_for_scheduled_events()
+
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertEqual(due_event.details.get("creative_obligation_status"), "failed_absent")
+        self.assertTrue(any("missed" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_obligation", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+        self.assertEqual(memory_hits[-1].location, booked_poi.poi_id)
+
+    def test_booked_rehearsal_at_correct_poi_still_fails_without_required_loadout(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        location = Location("Test City", "City")
+        rehearsal_poi = PointOfInterest("rehearsal_a", "Rehearsal A", "Room", category="STUDIO_RECORDING")
+        location.add_poi(rehearsal_poi)
+
+        game.player.current_location = location
+        game.player.current_poi = rehearsal_poi
+        game.player.gear_inventory = []
+        game.player.schedule = PlayerSchedule()
+
+        start = GameTime(2024, 1, 1, 8, 0)
+        game.player.schedule.add_event(
+            start,
+            start,
+            "Booked Rehearsal Session",
+            "Rehearsal",
+            {"destination_id": rehearsal_poi.poi_id, "requires_presence": True},
+        )
+
+        due_event = game.player.schedule.scheduled_items[0]
+        game.check_for_scheduled_events()
+
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertEqual(due_event.details.get("creative_obligation_status"), "failed_readiness")
+        self.assertEqual(due_event.details.get("creative_obligation_reason_code"), "missing_required_loadout")
+        self.assertTrue(any("required loadout missing" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_obligation", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+        self.assertEqual(memory_hits[-1].metadata.get("reason_code"), "missing_required_loadout")
+
+    def test_booked_creative_window_elapsed_is_explicit_terminal_failure(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        location = Location("Test City", "City")
+        studio = PointOfInterest("studio_a", "Studio A", "Studio", category="STUDIO_RECORDING")
+        location.add_poi(studio)
+
+        game.player.current_location = location
+        game.player.current_poi = studio
+        game.player.schedule = PlayerSchedule()
+
+        start = GameTime(2024, 1, 1, 7, 0)
+        end = GameTime(2024, 1, 1, 7, 30)
+        game.player.schedule.add_event(
+            start,
+            end,
+            "Booked Studio Session",
+            "Studio Session",
+            {"destination_id": studio.poi_id, "requires_presence": True},
+        )
+
+        due_event = game.player.schedule.scheduled_items[0]
+        game.check_for_scheduled_events()
+
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertEqual(due_event.details.get("creative_obligation_status"), "failed_window_elapsed")
+        self.assertEqual(due_event.details.get("creative_obligation_reason_code"), "window_elapsed")
+        self.assertTrue(any("window closed" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_obligation", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+        self.assertEqual(memory_hits[-1].metadata.get("reason_code"), "window_elapsed")
+
+    def test_failed_contract_linked_meeting_reduces_contract_standing(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        location = Location("Test City", "City")
+        booked_poi = PointOfInterest("label_office", "Label Office", "Office", category="OFFICE_RECORD_LABEL")
+        other_poi = PointOfInterest("coffee", "Coffee Shop", "Cafe", category="POI_CAFE")
+        location.add_poi(booked_poi)
+        location.add_poi(other_poi)
+
+        game.player.current_location = location
+        game.player.current_poi = other_poi
+        game.player.schedule = PlayerSchedule()
+
+        game.organization_contracts.create_organization("label_x", "Label X", home_city="Test City", tier=0.7)
+        contract = game.organization_contracts.sign_contract("label_x", game.player.name)
+        standing_before = contract.standing
+        misses_before = contract.misses
+
+        start = GameTime(2024, 1, 1, 8, 0)
+        game.player.schedule.add_event(
+            start,
+            start,
+            "Label X media appearance",
+            "Meeting",
+            {
+                "destination_id": booked_poi.poi_id,
+                "requires_presence": True,
+                "contract_id": contract.contract_id,
+                "organization_id": "label_x",
+            },
+        )
+
+        game.check_for_scheduled_events()
+
+        self.assertEqual(contract.misses, misses_before + 1)
+        self.assertLess(contract.standing, standing_before)
 
     def test_arrival_poi_prefers_transport_hub(self):
         game = Game(DummyUI())

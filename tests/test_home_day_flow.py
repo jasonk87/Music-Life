@@ -13,6 +13,7 @@ from game.location import Location
 from game.player import Player
 from game.poi import PointOfInterest
 from game.song import Song
+from game_data.gear_catalog import GEAR_CATALOG
 
 
 class DummyUI:
@@ -128,11 +129,37 @@ class TestHomeDayFlow(unittest.TestCase):
         game.player.current_poi = home
         game.selected_poi = home
         game.explore_menu_state = "record_song"
+        game.player.gear_inventory = [GEAR_CATALOG["worn_acoustic_guitar"], GEAR_CATALOG["guitar_strings_basic"]]
         game.player.songs_written.append(Song("First Draft", game.player.name, "Rock", 0.65))
 
         game.handle_explore_menu()
 
         self.assertTrue(game.player.songs_written[0].is_recorded)
+        self.assertEqual(game.explore_menu_state, "poi")
+
+    def test_home_demo_fails_without_recording_loadout(self):
+        ui = DummyUI(choices=["0"])
+        game = Game(ui)
+        game.player = Player("Tester")
+        home = PointOfInterest(
+            "home",
+            "Home",
+            "Apartment",
+            category="HOME",
+            studio_quality=0.3,
+        )
+        game.player.current_location = Location("Test City", "City")
+        game.player.current_poi = home
+        game.selected_poi = home
+        game.explore_menu_state = "record_song"
+        game.player.gear_inventory = []
+        game.player.songs_written.append(Song("No Gear Draft", game.player.name, "Rock", 0.6))
+        money_before = game.player.money
+
+        game.handle_explore_menu()
+
+        self.assertFalse(game.player.songs_written[0].is_recorded)
+        self.assertEqual(game.player.money, money_before)
         self.assertEqual(game.explore_menu_state, "poi")
 
 
