@@ -121,6 +121,43 @@ class TestEventFlow(unittest.TestCase):
         self.assertIsNone(game.active_performance)
         self.assertEqual(len(game.player.schedule.scheduled_items), 0)
         self.assertTrue(any("missed" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_gig", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+
+    def test_scheduled_gig_missing_loadout_fails_terminally_and_records_memory(self):
+        ui = DummyUI()
+        game = Game(ui)
+        game.player = Player("Tester")
+
+        venue = Venue("venue_1", "Test Venue")
+        venue_event = Event("Scheduled Set", venue, event_type="OPEN_MIC")
+        venue.add_event(venue_event)
+
+        location = MockLocation("Test City", [venue])
+        game.WORLD_MAP = {location.name: location}
+        game._poi_venue_id_map = {venue.venue_id: venue}
+        game.player.current_location = location
+        game.player.current_poi = venue
+        game.player.gear_inventory = []
+        game.player.schedule = PlayerSchedule()
+
+        start = GameTime(2024, 1, 1, 8, 0)
+        game.player.schedule.add_event(
+            start,
+            start,
+            venue_event.name,
+            "Gig",
+            {"event_id": venue_event.event_id, "venue_id": venue.venue_id},
+        )
+
+        game.check_for_scheduled_events()
+
+        self.assertNotEqual(game.game_state, "performance")
+        self.assertEqual(len(game.player.schedule.scheduled_items), 0)
+        self.assertTrue(any("missing critical loadout" in msg.lower() for msg in ui.messages))
+        memory_hits = game.world_memory.query(event_type="missed_gig", entity_id=game.player.name)
+        self.assertTrue(memory_hits)
+        self.assertEqual(memory_hits[-1].metadata.get("reason_code"), "missing_required_loadout")
 
     def test_booked_creative_meeting_fails_explicitly_when_not_at_booked_poi(self):
         ui = DummyUI()

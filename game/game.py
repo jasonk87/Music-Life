@@ -1427,6 +1427,7 @@ class Game:
                                 self.GAME_LOG.add_log_message(f"You missed '{event.description}' [{root_cause}]: {miss_reason}.")
                             else:
                                 self.GAME_LOG.add_log_message(f"You missed '{event.description}': {miss_reason}.")
+                            self._record_missed_gig_memory(event, expected_dest, root_cause or "absent_at_start")
                         else:
                             gig_req = self._assess_gig_requirements()
                             self.performance_requirement_penalty = 1.0
@@ -1434,6 +1435,7 @@ class Game:
                                 self.GAME_LOG.add_log_message(
                                     f"You missed '{event.description}' due to missing critical loadout: {', '.join(gig_req.missing_severe)}."
                                 )
+                                self._record_missed_gig_memory(event, expected_dest, "missing_required_loadout")
                             else:
                                 if gig_req.status in {"partially_satisfied", "missing_but_recoverable"}:
                                     self.performance_requirement_penalty = 0.82
@@ -2839,6 +2841,24 @@ class Game:
                     "reason_code": reason_code,
                 },
                 source_key=f"missed_obligation:{self.player.name}:{event.category}:{event.description}:{expected_dest}:{reason_code}:{current_game_time.get_time_string_for_schedule()}",
+            )
+        )
+
+    def _record_missed_gig_memory(self, event, expected_dest, reason_code):
+        self.world_memory.add(
+            WorldMemoryEntry(
+                event_type="missed_gig",
+                involved_entities=[self.player.name],
+                location=expected_dest,
+                timestamp=current_game_time.copy(),
+                tags=["professionalism", "reliability", "performance"],
+                impact_score=3.0,
+                metadata={
+                    "category": event.category,
+                    "description": event.description,
+                    "reason_code": reason_code,
+                },
+                source_key=f"missed_gig:{self.player.name}:{event.description}:{expected_dest}:{reason_code}:{current_game_time.get_time_string_for_schedule()}",
             )
         )
 

@@ -86,6 +86,7 @@ class TestPerformanceFlow(unittest.TestCase):
         game.active_performance = event
         game.performance_stage = "finish"
         game.player = type("PlayerStub", (), {})()
+        game.player.name = "Tester"
         game.player.money = 0
         game.player.fame = 0
         game.player.skills = {"stage_presence": 10}

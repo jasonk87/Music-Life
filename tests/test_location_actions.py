@@ -4,6 +4,7 @@ from game.player import Player
 from game.poi import PointOfInterest
 from game.place_presence import LocalAction
 from game.location import Location
+from game_data.gear_catalog import GEAR_CATALOG
 
 class DummyLog:
     def add_log_message(self, *args, **kwargs): pass
@@ -68,6 +69,7 @@ def test_practice_requires_valid_location(game_env):
 def test_open_mic_requires_venue_and_time(game_env):
     player = game_env.player
     player.energy = 50
+    player.gear_inventory = []
     home_poi = PointOfInterest("home_poi", "Home", "Home", category="HOME")
     player.current_poi = home_poi
 
@@ -90,8 +92,16 @@ def test_open_mic_requires_venue_and_time(game_env):
     assert res.get("reason") == "wrong_time"
     assert current_game_time.minute == time_before.minute and current_game_time.hour == time_before.hour # Time not consumed on failure
 
-    # Succeed evening
+    # Fail evening without required loadout
     current_game_time.hour = 20
+    res = game_env.do_open_mic_set()
+    assert not res.get("ok")
+    assert res.get("reason") == "missing_required_loadout"
+
+    # Add required loadout (instrument + strings)
+    player.gear_inventory = [GEAR_CATALOG["worn_acoustic_guitar"], GEAR_CATALOG["guitar_strings_basic"]]
+
+    # Succeed evening
     res = game_env.do_open_mic_set()
     assert res.get("ok")
 

@@ -158,6 +158,21 @@ class LocationActionEngine:
     def __init__(self):
         self.encounters = ContextualEncounterEngine()
 
+    def _has_performance_loadout(self, player) -> bool:
+        has_instrument = False
+        has_strings = False
+        for item in getattr(player, "gear_inventory", []) or []:
+            if getattr(item, "is_broken", False):
+                continue
+            gear_type = str(getattr(item, "gear_type", "") or "")
+            item_id = str(getattr(item, "item_id", "") or "").lower()
+            item_name = str(getattr(item, "name", "") or "").lower()
+            if gear_type.startswith("INSTRUMENT"):
+                has_instrument = True
+            if "string" in item_id or "string" in item_name:
+                has_strings = True
+        return has_instrument and has_strings
+
     def _canonicalize_action(self, player, place_obj, location_obj, requested_action: LocalAction) -> Optional[LocalAction]:
         offered_actions = self.generate_actions(player, place_obj, location_obj)
         requested_id = requested_action.action_id
@@ -316,6 +331,12 @@ class LocationActionEngine:
                 return {"ok": False, "reason_code": "wrong_time", "explanation": "There is no open mic event, and it doesn't start until evening (18:00+)."}
             if player.energy < 10:
                 return {"ok": False, "reason_code": "exhausted", "explanation": "You are too exhausted to perform."}
+            if not self._has_performance_loadout(player):
+                return {
+                    "ok": False,
+                    "reason_code": "missing_required_loadout",
+                    "explanation": "You need a working instrument and spare strings to perform.",
+                }
 
         # --- EXECUTION PHASE ---
         if action.cost:
