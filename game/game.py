@@ -1413,6 +1413,9 @@ class Game:
                         self.GAME_LOG.add_log_message(f"'{event.description}' is happening now, but you're already busy.")
                     else:
                         expected_dest = event.details.get("destination_id") or event.details.get("venue_id")
+                        if not expected_dest and scheduled_event and getattr(scheduled_event, "location", None):
+                            event_location = scheduled_event.location
+                            expected_dest = getattr(event_location, "poi_id", getattr(event_location, "venue_id", None))
                         current_dest = None
                         if self.player.current_poi:
                             current_dest = getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
@@ -1446,6 +1449,42 @@ class Game:
                     self.player.schedule.scheduled_items.remove(event)
                 elif event.category == "Job":
                     self.early_life.resolve_shift_event(self.player, event)
+                    self.player.schedule.scheduled_items.remove(event)
+                elif event.category in {"Meeting", "Rehearsal", "Studio Session", "Label Visit"}:
+                    expected_dest = event.details.get("destination_id") or event.details.get("venue_id") or event.details.get("poi_id")
+                    current_dest = None
+                    if self.player.current_poi:
+                        current_dest = getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
+
+                    if not expected_dest:
+                        event.details["creative_obligation_status"] = "failed_missing_destination"
+                        event.details["creative_obligation_reason_code"] = "missing_destination"
+                        self.GAME_LOG.add_log_message(
+                            f"Missed '{event.description}': no precise POI/venue destination was booked for this obligation."
+                        )
+                    elif expected_dest != current_dest:
+                        event.details["creative_obligation_status"] = "failed_absent"
+                        event.details["creative_obligation_reason_code"] = "absent_at_start"
+                        self.GAME_LOG.add_log_message(
+                            f"Missed '{event.description}': you were not at the booked location when it started."
+                        )
+                        self._record_creative_obligation_failure_memory(event, expected_dest, "absent_at_start")
+                    else:
+                        readiness = self._assess_creative_obligation_requirements(event)
+                        if readiness and readiness.status == "missing_and_severe":
+                            event.details["creative_obligation_status"] = "failed_readiness"
+                            event.details["creative_obligation_reason_code"] = "missing_required_loadout"
+                            self.GAME_LOG.add_log_message(
+                                f"Missed '{event.description}': required loadout missing ({', '.join(readiness.missing_severe)})."
+                            )
+                            self._record_creative_obligation_failure_memory(event, expected_dest, "missing_required_loadout")
+                        else:
+                            event.details["creative_obligation_status"] = "completed_on_site"
+                            event.details["creative_obligation_reason_code"] = "completed_on_site"
+                            self.GAME_LOG.add_log_message(
+                                f"You check in for '{event.description}' at the booked location."
+                            )
+
                     self.player.schedule.scheduled_items.remove(event)
 
     def handle_label_response(self, event):
@@ -2746,6 +2785,63 @@ class Game:
             self.player.stress = min(100, self.player.stress + 3)
         return assessment
 
+    def _assess_rehearsal_requirements(self):
+        rehearsal_requirements = [
+            {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+        ]
+        return self.inventory_service.assess_requirements(
+            self.player,
+            rehearsal_requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _assess_creative_obligation_requirements(self, event):
+        if not event or not isinstance(getattr(event, "details", None), dict):
+            return None
+
+        category = str(getattr(event, "category", "") or "").lower()
+        work_category = str(event.details.get("work_category", "") or "").lower()
+        description = str(getattr(event, "description", "") or "").lower()
+        text = f"{category} {work_category} {description}"
+
+        requirements = []
+        if "rehears" in text:
+            requirements = [{"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True}]
+        elif category == "studio session" or "record" in text:
+            requirements = [
+                {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+                {"match_type": "semantic", "key": "strings", "count": 1, "mandatory": True},
+            ]
+
+        if not requirements:
+            return None
+
+        return self.inventory_service.assess_requirements(
+            self.player,
+            requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _record_creative_obligation_failure_memory(self, event, expected_dest, reason_code):
+        self.world_memory.add(
+            WorldMemoryEntry(
+                event_type="missed_obligation",
+                involved_entities=[self.player.name],
+                location=expected_dest,
+                timestamp=current_game_time.copy(),
+                tags=["professionalism", "reliability", "creative_work"],
+                impact_score=2.0,
+                metadata={
+                    "category": event.category,
+                    "description": event.description,
+                    "reason_code": reason_code,
+                },
+                source_key=f"missed_obligation:{self.player.name}:{event.category}:{event.description}:{expected_dest}:{reason_code}:{current_game_time.get_time_string_for_schedule()}",
+            )
+        )
+
     def handle_local_presence_action(self, local_action):
         if not self.selected_poi:
             self.GAME_LOG.add_log_message("No active place selected for local actions.")
@@ -2978,6 +3074,12 @@ class Game:
             else:
                 self.GAME_LOG.add_log_message("You need to rent a room here before you can sleep.")
         elif interaction_text.startswith("Book Rehearsal Slot"):
+            rehearsal_req = self._assess_rehearsal_requirements()
+            if rehearsal_req.status == "missing_and_severe":
+                self.GAME_LOG.add_log_message(
+                    f"You cannot start rehearsal without required gear: {', '.join(rehearsal_req.missing_severe)}."
+                )
+                return
             rehearsal_cost = 25 if "$25" in interaction_text else 10
             if self.player.money < rehearsal_cost:
                 self.GAME_LOG.add_log_message(f"You need ${rehearsal_cost} to book rehearsal time.")

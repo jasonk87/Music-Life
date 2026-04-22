@@ -67,6 +67,37 @@ class ProductionPipelineSystem:
     def stage_sequence(self, project: CreativeProject) -> List[str]:
         return self.STAGE_MAP.get(project.project_type, self.STAGE_MAP["song"])
 
+    def _resolve_destination_id(self, location_name: Optional[str]) -> Optional[str]:
+        if not location_name:
+            return None
+
+        resolver = getattr(self.game, "get_poi_or_venue_by_id", None)
+        if callable(resolver):
+            obj = resolver(location_name)
+            if obj:
+                return getattr(obj, "poi_id", getattr(obj, "venue_id", None))
+
+        target_name = str(location_name).strip().lower()
+        if not target_name:
+            return None
+
+        locations = []
+        if getattr(self.game, "player", None) and getattr(self.game.player, "current_location", None):
+            locations.append(self.game.player.current_location)
+        world_map = getattr(self.game, "WORLD_MAP", None)
+        if isinstance(world_map, dict):
+            locations.extend(world_map.values())
+
+        for loc in locations:
+            for poi in getattr(loc, "points_of_interest", []) or []:
+                if str(getattr(poi, "name", "")).strip().lower() == target_name:
+                    return getattr(poi, "poi_id", None)
+            for venue in getattr(loc, "venues", []) or []:
+                if str(getattr(venue, "name", "")).strip().lower() == target_name:
+                    return getattr(venue, "venue_id", None)
+
+        return None
+
     def schedule_work_item(
         self,
         project_id: str,
@@ -93,6 +124,18 @@ class ProductionPipelineSystem:
             "work_minutes": minutes,
             "work_category": category,
         }
+        if requires_presence and self.game.player and self.game.player.current_poi:
+            current_ref = getattr(
+                self.game.player.current_poi,
+                "poi_id",
+                getattr(self.game.player.current_poi, "venue_id", None),
+            )
+            if current_ref:
+                details["destination_id"] = current_ref
+        if requires_presence and not details.get("destination_id"):
+            resolved_dest = self._resolve_destination_id(location_name)
+            if resolved_dest:
+                details["destination_id"] = resolved_dest
         if project.organization_id:
             details["organization_id"] = project.organization_id
         if cost > 0:
