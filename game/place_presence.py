@@ -158,6 +158,52 @@ class LocationActionEngine:
     def __init__(self):
         self.encounters = ContextualEncounterEngine()
 
+    def _has_performance_loadout(self, player) -> bool:
+        has_instrument = False
+        has_strings = False
+        for item in getattr(player, "gear_inventory", []) or []:
+            if getattr(item, "is_broken", False):
+                continue
+            gear_type = str(getattr(item, "gear_type", "") or "")
+            item_id = str(getattr(item, "item_id", "") or "").lower()
+            item_name = str(getattr(item, "name", "") or "").lower()
+            if gear_type.startswith("INSTRUMENT"):
+                has_instrument = True
+            if "string" in item_id or "string" in item_name:
+                has_strings = True
+        return has_instrument and has_strings
+
+    def _canonicalize_action(self, player, place_obj, location_obj, requested_action: LocalAction) -> Optional[LocalAction]:
+        offered_actions = self.generate_actions(player, place_obj, location_obj)
+        requested_id = requested_action.action_id
+
+        # Dynamic practice actions can encode a target skill (e.g. practice_music:vocals)
+        lookup_id = "practice_music" if requested_id.startswith("practice_music") else requested_id
+
+        canonical = next((a for a in offered_actions if a.action_id == lookup_id), None)
+        if not canonical:
+            return None
+
+        if requested_id.startswith("practice_music"):
+            minutes = max(1, int(requested_action.minutes))
+            return LocalAction(
+                action_id=requested_id,
+                label=canonical.label,
+                minutes=minutes,
+                cost=canonical.cost,
+                description=canonical.description,
+                tags=list(canonical.tags),
+            )
+
+        return LocalAction(
+            action_id=canonical.action_id,
+            label=canonical.label,
+            minutes=canonical.minutes,
+            cost=canonical.cost,
+            description=canonical.description,
+            tags=list(canonical.tags),
+        )
+
     def generate_actions(self, player, place_obj, location_obj=None) -> List[LocalAction]:
         profile = PlaceProfileBuilder.build(place_obj, location_obj)
         actions: List[LocalAction] = []
@@ -237,6 +283,14 @@ class LocationActionEngine:
         visibility_pressure: float = 0.0,
     ) -> Dict:
         profile = PlaceProfileBuilder.build(place_obj, location_obj)
+        canonical_action = self._canonicalize_action(player, place_obj, location_obj, action)
+        if canonical_action is None:
+            return {
+                "ok": False,
+                "reason_code": "action_not_available_here",
+                "explanation": "That action is not available at this location.",
+            }
+        action = canonical_action
 
         # --- VALIDATION PHASE ---
         if action.cost > player.money:
@@ -277,6 +331,12 @@ class LocationActionEngine:
                 return {"ok": False, "reason_code": "wrong_time", "explanation": "There is no open mic event, and it doesn't start until evening (18:00+)."}
             if player.energy < 10:
                 return {"ok": False, "reason_code": "exhausted", "explanation": "You are too exhausted to perform."}
+            if not self._has_performance_loadout(player):
+                return {
+                    "ok": False,
+                    "reason_code": "missing_required_loadout",
+                    "explanation": "You need a working instrument and spare strings to perform.",
+                }
 
         # --- EXECUTION PHASE ---
         if action.cost:
