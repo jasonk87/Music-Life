@@ -26,6 +26,7 @@ class ReputationIdentitySystem:
         "great_performance": [("reliable", 0.8), ("professional", 0.6), ("live_respected", 1.0), ("exciting", 0.45), ("rising", 0.35)],
         "poor_performance": [("fading", 0.6), ("chaotic", 0.35)],
         "missed_gig": [("flaky", 1.0), ("chaotic", 0.8), ("hard_to_work_with", 0.5)],
+        "missed_obligation": [("flaky", 0.85), ("difficult", 0.45), ("hard_to_work_with", 0.35)],
         "late_obligation": [("flaky", 0.6), ("difficult", 0.3)],
         "contract_warning": [("difficult", 0.9), ("hard_to_work_with", 0.8)],
         "contract_dropped": [("hard_to_work_with", 1.2), ("fading", 0.7)],
