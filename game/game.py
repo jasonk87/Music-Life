@@ -620,7 +620,7 @@ class Game:
             return 0.0
         return self.world_memory.reliability_score(self.player.name, current_game_time.copy())
 
-    def _venue_memory_bias(self, venue_id: Optional[str]) -> float:
+    def _venue_memory_bias(self, venue_id: str) -> float:
         if not venue_id:
             return 0.0
         positive = self.world_memory.weighted_score(current_game_time.copy(), event_type="great_performance", location=venue_id)
@@ -2943,13 +2943,9 @@ class Game:
             except Exception as e:
                 self.GAME_LOG.add_log_message(f"Error starting shift: {e}")
         elif interaction_text == "Practice guitar (at home)":
-            hours = 2
-            self.GAME_LOG.add_log_message("You settle in for a focused practice session.")
-            self._advance_time_with_needs(hours * 60)
-            self.player.practice_skill("guitar", hours)
-            self.player.energy = max(0, self.player.energy - 8)
-            self.player.inspiration = min(100, self.player.inspiration + 5)
-            self.GAME_LOG.add_log_message("Your playing feels a little tighter. (+5 Inspiration)")
+            res = self.do_practice_grind("guitar", 2)
+            if not res.get("ok"):
+                self.GAME_LOG.add_log_message(f"Could not practice: {res.get('reason')}")
         elif interaction_text == "Relax at home (2 hours)":
             self.GAME_LOG.add_log_message("You take some time to decompress at home.")
             self._advance_time_with_needs(120)
@@ -3402,22 +3398,20 @@ class Game:
         if self.player.current_poi and getattr(self.player.current_poi, "poi_id", None) == self.PLAYER_HOME_POI_ID_GLOBAL and not self.player.has_home:
             self.GAME_LOG.add_log_message("You do not have that apartment anymore.")
             return
-        self.GAME_LOG.add_log_message(f"You rest for {hours} hours.")
-        minutes_to_advance = hours * 60
 
-        # Get rest quality from current POI, default to 0.5
-        rest_quality = getattr(self.player.current_poi, 'rest_quality', 0.5)
+        poi = self.player.current_poi
+        if not poi or poi.category not in ["HOME", "ACCOMMODATION_HOTEL", "ACCOMMODATION_MOTEL"]:
+            self.GAME_LOG.add_log_message("You cannot rest fully here. Find lodging or go home.")
+            return
 
-        # Energy and stress recovery are now based on rest quality
-        energy_gain = int(hours * 5 * (1 + rest_quality)) # Base 5/hr, max 10/hr at quality 1.0
-        stress_reduction = int(hours * 3 * (1 + rest_quality)) # Base 3/hr, max 6/hr
+        from game.place_presence import LocalAction
+        dummy_action = LocalAction("sleep_rest", "Sleep/Rest", int(hours * 60), tags=["rest", "recovery"])
+        result = self.location_action_engine.execute_action(self.player, poi, self.player.current_location, dummy_action, self._advance_time_with_needs, self.GAME_LOG)
 
-        self.player.energy = min(100, self.player.energy + energy_gain)
-        self.player.stress = max(0, self.player.stress - stress_reduction)
-
-        self.GAME_LOG.add_log_message(f"You recovered {energy_gain} energy and lost {stress_reduction} stress.")
-
-        self._advance_time_with_needs(minutes_to_advance)
+        if result.get("ok"):
+            self.GAME_LOG.add_log_message(result.get("explanation", f"You rest for {hours} hours."))
+        else:
+            self.GAME_LOG.add_log_message(result.get("explanation", "Could not rest."))
 
     def process_time_based_player_needs(self, player, minutes_just_passed):
         if minutes_just_passed <= 0: return
