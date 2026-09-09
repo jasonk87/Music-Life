@@ -1,0 +1,77 @@
+{
+  "location_id": "new_york_ny",
+  "points_of_interest": [
+    {
+      "poi_id": "nyc_transit_hub",
+      "name": "Grand Central Fleet & Transit Hub",
+      "description": "NYC's primary transit agency for vehicle purchases, rentals, taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "nyc_east_village_records",
+      "name": "East Village Vinyl Vault",
+      "description": "Legendary vinyl store specializing in punk, hip-hop, and rare pressings.",
+      "category": "SHOP_MUSIC",
+      "interaction_options": ["Browse items for sale", "Sell Vinyl / Merch", "Talk to Store Owner"],
+      "properties": {
+        "shop_inventory_item_ids": ["basic_electric_guitar", "pro_electric_guitar", "practice_amp_small", "guitar_strings_basic"]
+      }
+    },
+    {
+      "poi_id": "nyc_powerstation_studios",
+      "name": "PowerStation NYC Studios",
+      "description": "World-class recording complex for major album releases.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $350)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.95,
+        "hourly_rate": 88
+      }
+    },
+    {
+      "poi_id": "nyc_times_square_agency",
+      "name": "Times Square Talent Management",
+      "description": "Skyscraper office of elite talent agents and major record executives.",
+      "category": "OFFICE_PR_AGENCY",
+      "interaction_options": ["Inquire about Label Deals", "Talk to Executive"]
+    },
+    {
+      "poi_id": "nyc_plaza_hotel",
+      "name": "The Manhattan Plaza Hotel",
+      "description": "Five-star luxury hotel in midtown Manhattan.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($250)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "nyc_cbgb_club",
+      "name": "CBGB Punk Underground",
+      "description": "Gritty Bowery club legendary for punk, new wave, and raw rock shows.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 350,
+      "prestige": 4,
+      "genre_bias": {"Punk": 1.5, "Rock": 1.3, "Indie": 1.2},
+      "properties": {
+        "booking_fee": 150,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "nyc_madison_square_garden",
+      "name": "Madison Square Garden",
+      "description": "The World's Most Famous Arena (20,000 capacity).",
+      "venue_type": "ARENA",
+      "category": "VENUE",
+      "capacity": 20000,
+      "prestige": 5,
+      "genre_bias": {"Pop": 1.4, "Rock": 1.4, "Hip-Hop": 1.4, "Electronic": 1.3},
+      "properties": {
+        "booking_fee": 2500,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

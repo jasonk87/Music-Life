@@ -17,6 +17,7 @@ class Player:
 
         self.skills = {"songwriting": 5, "guitar": 2, "vocals": 1, "stage_presence": 1, "electronic": 1} # Start with some basic skills
         self.fame = 0
+        self.street_cred = 50 # 0-100 street credibility (indie vs commercial sellout)
         self.money = 500 # Starting money
 
         self.gear_inventory = [] # List of GearItem objects
@@ -145,6 +146,10 @@ class Player:
             print(f"Error: Cannot add '{gear_item}'. Not a valid GearItem.")
             return False
         if self.can_carry_gear(gear_item): # Checks against default capacity
+            from game_data.gear_catalog import GEAR_CATALOG
+            if GEAR_CATALOG.get(gear_item.item_id) is gear_item:
+                import copy
+                gear_item = copy.deepcopy(gear_item)
             self.gear_inventory.append(gear_item)
             print(f"{gear_item.name} added to inventory.")
             return True
@@ -417,7 +422,10 @@ class Player:
 
     @property
     def has_manager(self):
-        return any(staff.role == "Manager" for staff in self.staff)
+        if any(staff.role == "Manager" for staff in self.staff):
+            return True
+        roles = getattr(self, "delegation_roles", {})
+        return bool(roles.get("manager") and roles["manager"].active)
 
     def check_for_manager_unlock(self):
         if not self.has_manager and self.fame >= self.manager_unlocked_fame_threshold:
@@ -528,8 +536,8 @@ if __name__ == '__main__':
         def __init__(self, name):
             self.name = name
 
-    hometown = MockLocation("Hometown")
-    citycenter = MockLocation("City Center")
+    hometown = MockLocation("Asbury Park, NJ")
+    citycenter = MockLocation("Philadelphia, PA")
     p.current_location = hometown
 
     # Updated Travel Test

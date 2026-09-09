@@ -1,0 +1,112 @@
+{
+  "location_id": "asbury_park_nj",
+  "points_of_interest": [
+    {
+      "poi_id": "asbury_music_shop_oldtimers",
+      "name": "Asbury Shore Music Shop",
+      "description": "Sells guitars, bass gear, and instruments for shore musicians.",
+      "category": "SHOP_MUSIC",
+      "interaction_options": ["Browse items for sale", "Repair Instrument", "Talk to Old Timer Joe"],
+      "properties": {
+        "shop_inventory_item_ids": ["worn_acoustic_guitar", "guitar_strings_basic", "guitar_picks_assorted"],
+        "owner_npc_id": "joe001"
+      }
+    },
+    {
+      "poi_id": "asbury_transit_hub",
+      "name": "Asbury Park Fleet & Transit Station",
+      "description": "Buy/rent vehicles, hail city taxis, and pre-book tour transport.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "asbury_rehearsal_garage",
+      "name": "Boardwalk Garage Rehearsal Space",
+      "description": "A bit rough and salty, but it's cheap.",
+      "category": "REHEARSAL_STUDIO",
+      "interaction_options": ["Book Rehearsal Slot (1 hour, $10)", "Record a rough demo"],
+      "properties": {
+        "studio_quality": 0.42,
+        "hourly_rate": 15
+      }
+    },
+    {
+      "poi_id": "asbury_player_home",
+      "name": "Your Apartment",
+      "description": "Your starting digs near the boardwalk. A bit small, but it's home.",
+      "category": "HOME",
+      "interaction_options": ["Rest / Sleep", "Practice Guitar", "Write Song"]
+    },
+    {
+      "poi_id": "asbury_bus_stop",
+      "name": "Asbury Park Transit Terminal",
+      "description": "Bus stop for regional travel to Philadelphia, NY, and beyond.",
+      "category": "BUS_STOP",
+      "interaction_options": ["View bus schedule", "Buy ticket to Philadelphia ($20)", "Buy ticket to Austin ($120)"]
+    },
+    {
+      "poi_id": "asbury_bodega",
+      "name": "Corner Boardwalk Bodega",
+      "description": "Quick snacks, coffee, and basic energy bars.",
+      "category": "SHOP_CONVENIENCE",
+      "interaction_options": ["Buy snacks", "Buy energy drink", "Chat with cashier"],
+      "properties": {
+        "menu_items": [
+          {"item_id": "energy_drink", "display_text": "Buy Energy Drink ($3)", "cost": 3, "hunger_reduction": 5, "energy_boost": 30},
+          {"item_id": "chips", "display_text": "Buy Bag of Chips ($2)", "cost": 2, "hunger_reduction": 15, "energy_boost": 5}
+        ]
+      }
+    },
+    {
+      "poi_id": "asbury_greasy_spoon",
+      "name": "Ocean Ave Diner",
+      "description": "Classic NJ diner with hot breakfast plates and coffee.",
+      "category": "RESTAURANT_DINER",
+      "interaction_options": ["Order All-Day Breakfast ($8)", "Order Coffee ($2)", "Read local paper"],
+      "properties": {
+        "menu_items": [
+          {"item_id": "breakfast", "display_text": "Order All-Day Breakfast ($8)", "cost": 8, "hunger_reduction": 45, "energy_boost": 20},
+          {"item_id": "coffee", "display_text": "Order Drip Coffee ($2)", "cost": 2, "hunger_reduction": 2, "energy_boost": 15}
+        ]
+      }
+    },
+    {
+      "poi_id": "asbury_barber",
+      "name": "Shore Style Barber Shop",
+      "description": "Get a haircut or styling to boost your street cred.",
+      "category": "BARBER_SALON",
+      "interaction_options": ["Get Haircut ($15)", "Talk to Barber"]
+    },
+    {
+      "poi_id": "asbury_pawn",
+      "name": "Asbury Pawn & Exchange",
+      "description": "Buy used gear or pawn your extra equipment for cash.",
+      "category": "PAWN_SHOP",
+      "interaction_options": ["Browse used items", "Pawn gear for quick cash"]
+    },
+    {
+      "poi_id": "asbury_clinic",
+      "name": "Community Shore Free Clinic",
+      "description": "Affordable healthcare and recovery when exhaustion hits.",
+      "category": "HEALTH_CLINIC",
+      "interaction_options": ["Get Checkup ($20)", "Rest & Recover"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "asbury_stone_pony",
+      "name": "The Stone Pony Stage",
+      "description": "Historic seaside music club famous for legendary rock breakouts.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 450,
+      "prestige": 3,
+      "genre_bias": {"Rock": 1.4, "Indie": 1.3, "Punk": 1.2},
+      "properties": {
+        "booking_fee": 50,
+        "allows_player_booking": true
+      },
+      "events_hosted_ids": ["open_mic_hometown_hall"]
+    }
+  ]
+}

@@ -69,7 +69,8 @@ class ObligationResolver:
             if obligation.details.get("obligation_consequence_applied_at") != obligation.details["obligation_evaluated_at"]:
                 obligation.details.pop("obligation_consequence_applied_at", None)
         if resolution.status in {"requires_departure_now", "late_but_possible"}:
-            self._apply_travel(resolution)
+            if getattr(self.game, "autopilot_schedule", False):
+                self._apply_travel(resolution)
 
             if resolution.risk_flags:
                 self.game.GAME_LOG.add_log_message(

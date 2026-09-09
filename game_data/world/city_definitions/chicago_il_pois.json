@@ -1,0 +1,70 @@
+{
+  "location_id": "chicago_il",
+  "points_of_interest": [
+    {
+      "poi_id": "chicago_transit_hub",
+      "name": "O'Hare & Loop Fleet Agency",
+      "description": "Midwest hub for vehicle sales, touring van rentals, taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "chicago_chess_studios",
+      "name": "Chess Records Studio",
+      "description": "Historic recording studio where Chicago blues and rock legends cut master tapes.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $220)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.88,
+        "hourly_rate": 55
+      }
+    },
+    {
+      "poi_id": "chicago_deep_dish_diner",
+      "name": "The Loop Deep Dish Diner",
+      "description": "Hearty Chicago-style dining to fill up between shows.",
+      "category": "RESTAURANT",
+      "interaction_options": ["Eat Deep Dish ($20)", "Drink Coffee ($4)"],
+      "properties": {
+        "menu_items": [{"item_id": "deepdish", "display_text": "Buy Deep Dish Slice ($20)", "cost": 20, "hunger_reduction": 65, "energy_boost": 30}]
+      }
+    },
+    {
+      "poi_id": "chicago_motel",
+      "name": "Windy City Park Motel",
+      "description": "Clean, comfortable lodging near Grant Park.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($50)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "chicago_metro_club",
+      "name": "Metro Cabaret Club",
+      "description": "Iconic Clark Street venue famous for indie rock, emo, and alt-rock shows.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 1100,
+      "prestige": 4,
+      "genre_bias": {"Rock": 1.4, "Indie": 1.4, "Punk": 1.3},
+      "properties": {
+        "booking_fee": 200,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "chicago_united_center",
+      "name": "United Center Stadium",
+      "description": "Massive 20,000-seat stadium for world arena tours.",
+      "venue_type": "ARENA",
+      "category": "VENUE",
+      "capacity": 20000,
+      "prestige": 5,
+      "genre_bias": {"Rock": 1.4, "Pop": 1.4, "Hip-Hop": 1.3},
+      "properties": {
+        "booking_fee": 2400,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

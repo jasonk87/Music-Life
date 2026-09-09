@@ -54,15 +54,107 @@ from game.staff import StaffMember
 from game.themes import THEME_CATALOG
 from game.album import Album
 from game.marketing import CAMPAIGN_TYPES
-from game.merch import MerchItem, MERCH_TEMPLATES
+from game.merch import MerchItem as LegacyMerchItem, MERCH_TEMPLATES
+from game.merch_system import MerchSystem, MerchItem
+from game.save_manager import JSONSaveManager
 from game.rivals import simulate_rivals, get_news_feed
 from game.celebrity_events import check_for_celebrity_event
+from game.festival_system import FestivalSystem
+from game.social_media_drama import SocialMediaDramaSystem
+from game.superstardom import SuperstardomSystem
+from game.label_imprint import IndieLabelImprint
+from game.lodging import LodgingSystem
+from game.food_system import FoodSystem
+from game.vehicle_system import VehicleMarket, PlayerVehicle
+from game.transit_hub import TransitHubSystem
+from game.album_system import AlbumProductionSystem
+from game.music_video import MusicVideoSystem
+from game.streaming_dsp import StreamingPlatformSystem
+from game.live_concert_sim import LiveConcertSimulator
+from game.tour_life_sim import TourLifeSimulation
+from game.real_estate import RealEstateSystem
+from game.major_label_system import MajorLabelSystem
+from game.media_and_festivals import MediaAndFestivalsSystem
+from game.producers_and_sessions import ProducersAndSessionsSystem
+from game.vintage_gear_network import VintageGearNetworkSystem
+from game.billboard_charts import BillboardChartSystem
+from game.sync_licensing import SyncLicensingSystem
+from game.wellness_and_vices import WellnessAndVicesSystem
+from game.finance_and_legal import FinanceAndLegalSystem
+from game.tour_logistics import TourLogisticsSystem
+from game.gear_maintenance import GearMaintenanceSystem
+from game.fan_club_and_pr import FanClubAndPRSystem
+from game.relationships_and_family import RelationshipsAndFamilySystem
+from game.pets_system import PetsSystem
+from game.hobbies_and_leisure import HobbiesAndLeisureSystem
+from game.fitness_and_outdoors import FitnessAndOutdoorsSystem
+from game.investments_and_wealth import InvestmentsAndWealthSystem
+from game.community_charity import CommunityCharitySystem
+from game.weather_and_seasons import WeatherAndSeasonsSystem
+from game.rival_bands_and_trends import RivalBandsAndTrendsSystem
+from game.stage_production import StageProductionSystem
+from game.music_press_reviews import MusicPressReviewsSystem
+from game.press_podcasts import PressPodcastsSystem
+from game.npc_system import NPCSystem
+from game.dynamic_musicians import DynamicWorldMusiciansSystem
+from game.live_concert_dynamics import LiveConcertDynamicsEngine
+from game.studio_production_engineering import StudioEngineeringSystem
+from game.international_touring import InternationalTouringSystem
+from game.physical_vinyl_drops import PhysicalVinylDropSystem
+from game.band_creative_tension import BandCreativeTensionSystem
 
 class Game:
     def __init__(self, ui):
         self.ui = ui
+        if self.ui is not None:
+            self.ui.game = self
+        self.festival_system = FestivalSystem()
+        self.social_media_drama = SocialMediaDramaSystem()
         self.sound_manager = SoundManager()
+        self.superstardom = SuperstardomSystem(self)
+        self.label_imprint: Optional[IndieLabelImprint] = None
+        self.lodging_system = LodgingSystem()
+        self.food_system = FoodSystem()
+        self.transit_hub_system = TransitHubSystem()
+        self.album_system = AlbumProductionSystem()
+        self.music_video_system = MusicVideoSystem()
+        self.streaming_system = StreamingPlatformSystem()
+        self.concert_simulator = LiveConcertSimulator()
+        self.tour_life_simulation = TourLifeSimulation()
+        self.real_estate_system = RealEstateSystem()
+        self.major_label_system = MajorLabelSystem()
+        self.media_and_festivals_system = MediaAndFestivalsSystem()
+        self.producers_and_sessions_system = ProducersAndSessionsSystem()
+        self.vintage_gear_network = VintageGearNetworkSystem()
+        self.billboard_charts = BillboardChartSystem()
+        self.sync_licensing_system = SyncLicensingSystem()
+        self.wellness_and_vices_system = WellnessAndVicesSystem()
+        self.finance_and_legal_system = FinanceAndLegalSystem()
+        self.tour_logistics_system = TourLogisticsSystem()
+        self.gear_maintenance_system = GearMaintenanceSystem()
+        self.fan_club_and_pr_system = FanClubAndPRSystem()
+        self.relationships_and_family = RelationshipsAndFamilySystem()
+        self.pets_system = PetsSystem()
+        self.hobbies_and_leisure = HobbiesAndLeisureSystem()
+        self.fitness_and_outdoors = FitnessAndOutdoorsSystem()
+        self.investments_and_wealth = InvestmentsAndWealthSystem()
+        self.community_charity = CommunityCharitySystem()
+        self.weather_and_seasons = WeatherAndSeasonsSystem()
+        self.rival_bands_and_trends = RivalBandsAndTrendsSystem()
+        self.stage_production = StageProductionSystem()
+        self.music_press_reviews = MusicPressReviewsSystem()
+        self.press_podcasts = PressPodcastsSystem()
+        self.npc_system = NPCSystem()
+        self.dynamic_musicians = DynamicWorldMusiciansSystem()
+        self.live_concert_dynamics = LiveConcertDynamicsEngine()
+        self.studio_engineering = StudioEngineeringSystem()
+        self.international_touring = InternationalTouringSystem()
+        self.physical_vinyl_drops = PhysicalVinylDropSystem()
+        self.band_creative_tension = BandCreativeTensionSystem()
         self.player = None
+        self.last_world_day = current_game_time.day_index()
+        self.recurring_work = False
+        self.autopilot_schedule = False
         self.running = True
         self.game_state = "title_screen"
         self.character_menu_state = "main"
@@ -153,6 +245,7 @@ class Game:
         self.production_pipeline = ProductionPipelineSystem(self)
         self.life_flow = LifeFlowOrchestrator(self)
         self.reputation_system = ReputationIdentitySystem(self)
+        self.merch_system = MerchSystem()
         self.early_life = EarlyLifeLoop(self)
         self._local_action_lookup = {}
         self.performance_requirement_penalty = 1.0
@@ -212,6 +305,15 @@ class Game:
         return normalized_quality
 
     def _advance_time_with_needs(self, minutes):
+        remaining = max(0, int(minutes))
+        while remaining:
+            until_midnight = 1440 - (current_game_time.hour * 60 + current_game_time.minute)
+            step = min(remaining, until_midnight)
+            self._advance_time_segment(step)
+            self._process_calendar_updates()
+            remaining -= step
+
+    def _advance_time_segment(self, minutes):
         if minutes <= 0:
             return
         start_time = current_game_time.copy()
@@ -350,7 +452,8 @@ class Game:
         gear_bonus = self._get_max_genre_gear_boost(song.genre)
 
         base_quality = (song.song_quality * 0.6) + (studio_quality * 0.4)
-        return min(1.0, base_quality + skill_bonus + producer_bonus + gear_bonus)
+        from game.creative_work import condition_multiplier
+        return min(1.0, (base_quality + skill_bonus + producer_bonus + gear_bonus) * condition_multiplier(self.player))
 
     def _get_recording_setup(self, poi):
         if not poi:
@@ -443,6 +546,7 @@ class Game:
             return {}
 
         mode_options = {}
+        tag_map = {"walk": "[WALK]", "bike": "[BIKE]", "taxi": "[TAXI]"}
         for mode_key in ["walk", "bike", "taxi"]:
             details = connection_details.get(mode_key)
             if not details:
@@ -450,18 +554,19 @@ class Game:
 
             time_cost = details.get("time", 0)
             money_cost = details.get("cost", 0)
+            tag = tag_map.get(mode_key, "[TRAVEL]")
             if details.get("requires_bike") and not self.player.has_bike:
-                mode_options[f"{mode_key}_locked"] = f"{mode_key.capitalize()} ({time_cost} min, ${money_cost}) - Need a bike"
+                mode_options[f"{mode_key}_locked"] = f"{tag} {mode_key.capitalize()} ({time_cost} min, ${money_cost}) - Need a bike"
             else:
                 price_text = "Free" if money_cost == 0 else f"${money_cost}"
-                mode_options[mode_key] = f"{mode_key.capitalize()} ({time_cost} min, {price_text})"
+                mode_options[mode_key] = f"{tag} {mode_key.capitalize()} ({time_cost} min, {price_text})"
         return mode_options
 
     def _get_public_travel_mode(self, travel_details, departure_poi):
         route_method = str(travel_details.get("method", "")).strip().lower()
         if route_method in {"bus", "train", "plane"}:
             return route_method
-        if departure_poi and getattr(departure_poi, "category", "") == "TRANSPORT_AIRPORT":
+        if departure_poi and getattr(departure_poi, "category", "") in {"TRANSPORT_AIRPORT", "AIRPORT"}:
             return "plane"
         return "bus"
 
@@ -470,9 +575,9 @@ class Game:
             return False
         category = getattr(departure_poi, "category", "")
         if travel_mode == "plane":
-            return category == "TRANSPORT_AIRPORT"
+            return category in {"TRANSPORT_AIRPORT", "AIRPORT"}
         if travel_mode in {"bus", "train"}:
-            return category in {"TRANSPORT_BUS", "TRANSPORT_AIRPORT"}
+            return category in {"TRANSPORT_BUS", "TRANSPORT_AIRPORT", "BUS_STOP", "AIRPORT", "TRANSPORT_HUB"}
         return False
 
     def _open_direct_npc_interaction(self, npc):
@@ -487,25 +592,20 @@ class Game:
         self.explore_menu_state = "npc_interaction_menu"
 
     def _get_progress_hint(self):
-        released_songs = [song for song in self.player.songs_written if song.is_released]
-        recorded_songs = [song for song in self.player.songs_written if song.is_recorded]
-        if not self.player.has_home and not self.player.rented_accommodation_info:
-            return "You need cash, shelter, and a place to recover before the rest of the run collapses."
-        if self.player.money < 40 and self.player.fame < 20:
-            return "Take survival shifts, eat, and stay functional while you build your first real opening."
-        if not self.player.songs_written:
-            return "Write your first song at home or in a quiet spot."
-        if not recorded_songs:
-            return "Travel to a recording studio and record your strongest song."
-        if not released_songs:
-            return "Open Phone > Music and release your recorded single."
-        if self.player.fame < 20:
-            return "Promote your release, play open mics, and build to 20 fame."
-        if self.player.current_location and self.player.current_location.name == "Your Hometown":
-            return "Head to City Center for studios, PR, labels, and club gigs."
-        if self.player.fame < 40:
-            return "Build to 40 fame for label demos and stronger media opportunities."
-        return "Use contacts, marketing, and gigs to turn momentum into bigger offers."
+        """Observable circumstances, never instructions about how to play."""
+        if not self.player:
+            return "No active career"
+        if not self.player.has_home:
+            return "No permanent address"
+        if self.player.energy < 20:
+            return "Exhausted"
+        if self.player.hunger > 75:
+            return "Hungry"
+        if self.player.stress > 75:
+            return "Under strain"
+        city = getattr(self.player.current_location, 'name', 'On the road')
+        weather = self.weather_and_seasons.get_city_weather(city)
+        return f"{weather.condition.replace('_', ' ').title()} / {weather.temperature_f} F"
 
     def _get_progress_milestones(self):
         songs_written = len(self.player.songs_written)
@@ -533,7 +633,7 @@ class Game:
                 "detail": "Reach 20 fame for local radio and stronger scene visibility.",
             },
             {
-                "label": "City Center demo-ready",
+                "label": "Philadelphia demo-ready",
                 "done": self.player.fame >= 40,
                 "detail": "Reach 40 fame to submit demos and push into bigger opportunities.",
             },
@@ -569,7 +669,7 @@ class Game:
         base_cost = 50
         if self.player.has_home:
             base_cost += 35
-        if self.player.current_location and self.player.current_location.name == "City Center":
+        if self.player.current_location and self.player.current_location.name == "Philadelphia, PA":
             base_cost += 20
         if self.player.rented_accommodation_info:
             base_cost += 35
@@ -995,26 +1095,10 @@ class Game:
             ("Top Buzz", top_buzz),
         ]
         opportunities = [
-            {
-                "label": "Next radio unlock",
-                "value": "Ready" if self.player.fame >= 20 else f"{max(0, 20 - self.player.fame)} fame to go",
-            },
-            {
-                "label": "Next blog unlock",
-                "value": "Ready" if self.player.fame >= 35 else f"{max(0, 35 - self.player.fame)} fame to go",
-            },
-            {
-                "label": "Next label demo unlock",
-                "value": "Ready" if self.player.fame >= 40 else f"{max(0, 40 - self.player.fame)} fame to go",
-            },
-            {
-                "label": "Open opportunities",
-                "value": str(available_opportunities),
-            },
-            {
-                "label": "Next scheduled event",
-                "value": next_event_label,
-            },
+            {"label": "Contacts", "value": str(len(self.player.contacts))},
+            {"label": "Open opportunities", "value": str(available_opportunities)},
+            {"label": "Pending label offers", "value": str(len(self.player.pending_contracts))},
+            {"label": "Next scheduled event", "value": next_event_label},
         ]
         focus_items = [
             f"Current base: {self.player.current_location.name if self.player.current_location else 'Unknown'}",
@@ -1022,9 +1106,9 @@ class Game:
             f"Pending label offers: {len(self.player.pending_contracts)}",
         ]
         return {
-            "subtitle": f"{self.player.name}'s current momentum, bottlenecks, and next unlocks.",
+            "subtitle": f"{self.player.name}'s catalog, contacts and commitments.",
             "summary_rows": summary_rows,
-            "milestones": self._get_progress_milestones(),
+            "milestones": [],
             "opportunities": opportunities,
             "focus_items": focus_items,
             "focus_summary": self._get_progress_hint(),
@@ -1032,20 +1116,22 @@ class Game:
 
     def _get_main_menu_context(self):
         upcoming_events = self.player.schedule.get_upcoming_events(current_game_time, limit=2)
+        curr_poi_str = self.player.current_poi.name if getattr(self.player, "current_poi", None) else "Exploring"
+        city_str = self.player.current_location.name if getattr(self.player, "current_location", None) else "On the road"
         details = [
-            f"Location: {self.player.current_location.name if self.player.current_location else 'Unknown'}",
-            f"Cash and fame: ${self.player.money}, {self.player.fame} fame",
-            f"Health / Hunger / Stress: {self.player.health} / {self.player.hunger} / {self.player.stress}",
-            f"Next event: {str(upcoming_events[0]) if upcoming_events else 'Nothing scheduled'}",
-            f"Current focus: {self._get_progress_hint()}",
+            f"Scene: {curr_poi_str} ({city_str})",
+            f"Cash & Fame: ${self.player.money} • {self.player.fame} Fame",
+            f"Vitals: Energy {getattr(self.player, 'energy', 100)}% • Stress {getattr(self.player, 'stress', 0)}%",
+            f"Next Event: {str(upcoming_events[0]) if upcoming_events else 'Nothing scheduled'}",
+            f"Conditions: {self._get_progress_hint()}",
         ]
         return {
-            "eyebrow": "Career Hub",
-            "subtitle": "Choose the next move that pushes the run forward.",
-            "panel_title": "Right Now",
+            "eyebrow": "Your life",
+            "subtitle": "A living, a sound, a reputation. The rest is yours.",
+            "panel_title": "Current Status",
             "details": details,
             "accent": (255, 215, 90),
-            "footer": "Use arrow keys and Enter, or click.",
+            "footer": "1-6 Select • ↑/↓ Navigate • Enter Confirm",
         }
 
     def _get_explore_context(self, location, poi=None):
@@ -1066,7 +1152,7 @@ class Game:
                 f"Energy / Stress: {self.player.energy} / {self.player.stress}",
                 self._get_progress_hint(),
             ]
-            subtitle = "Use places intentionally. Each stop should either create momentum or restore your stats."
+            subtitle = getattr(poi, "description", "")
         else:
             title = f"{location.name} scene map"
             details = [
@@ -1075,7 +1161,7 @@ class Game:
                 f"Upcoming events: {len(self.player.schedule.get_upcoming_events(current_game_time, limit=5))}",
                 self._get_progress_hint(),
             ]
-            subtitle = "Pick a place that helps the next step in your current career arc."
+            subtitle = "Streets, stages, workplaces and people."
         return {
             "eyebrow": "Explore",
             "subtitle": subtitle,
@@ -1090,10 +1176,10 @@ class Game:
             return None
         preferred_categories = []
         if transport_mode == "plane":
-            preferred_categories.append("TRANSPORT_AIRPORT")
+            preferred_categories.extend(["TRANSPORT_AIRPORT", "AIRPORT"])
         elif transport_mode in ["bus", "train"]:
             preferred_categories.append("TRANSPORT_BUS")
-        preferred_categories.extend(["TRANSPORT_BUS", "TRANSPORT_AIRPORT"])
+        preferred_categories.extend(["TRANSPORT_BUS", "BUS_STOP", "TRANSPORT_HUB", "TRANSPORT_AIRPORT", "AIRPORT"])
 
         for category in preferred_categories:
             poi = next((poi for poi in destination.points_of_interest if getattr(poi, "category", "") == category), None)
@@ -1109,7 +1195,7 @@ class Game:
 
         try:
             with open(locations_json_path, 'r') as f: locations_data = json.load(f)
-        except Exception as e: self.GAME_LOG.add_message(f"FATAL ERROR loading {locations_json_path}: {e}"); return False
+        except Exception as e: self.GAME_LOG.add_log_message(f"FATAL ERROR loading {locations_json_path}: {e}"); return False
 
         temp_location_id_map = {}
         for loc_data in locations_data:
@@ -1118,12 +1204,12 @@ class Game:
 
         for loc_id_from_json, location_obj in temp_location_id_map.items():
             poi_file_name = next((ld["poi_definition_file"] for ld in locations_data if ld["id"] == loc_id_from_json), None)
-            if not poi_file_name: self.GAME_LOG.add_message(f"Warning: No POI file for {location_obj.name}."); continue
+            if not poi_file_name: self.GAME_LOG.add_log_message(f"Warning: No POI file for {location_obj.name}."); continue
 
             city_def_json_path = os.path.join(self.SCRIPT_DIR, "..", "game_data", "world", "city_definitions", poi_file_name)
             try:
                 with open(city_def_json_path, 'r') as f: city_def_data = json.load(f)
-            except Exception as e: self.GAME_LOG.add_message(f"ERROR loading {city_def_json_path}: {e}"); continue
+            except Exception as e: self.GAME_LOG.add_log_message(f"ERROR loading {city_def_json_path}: {e}"); continue
 
             for poi_data in city_def_data.get("points_of_interest", []):
                 props = poi_data.get("properties", {}).copy()
@@ -1168,25 +1254,27 @@ class Game:
             # Ensure all points are connected so the player can always travel between them
             location_obj.ensure_intra_city_connectivity()
 
+        from game.world_actions import normalize_places
+        normalize_places(self)
         self._build_poi_venue_id_map()
 
         try:
             with open(npcs_json_path, 'r') as f: npcs_data = json.load(f)
-        except Exception as e: self.GAME_LOG.add_message(f"ERROR loading {npcs_json_path}: {e}"); return False
+        except Exception as e: self.GAME_LOG.add_log_message(f"ERROR loading {npcs_json_path}: {e}"); return False
 
         for npc_data in npcs_data:
             home_loc_obj = self.get_poi_or_venue_by_id(npc_data.get("home_location_poi_id")) or self.WORLD_MAP.get(npc_data.get("home_location_location_id"))
             current_loc_obj = self.get_poi_or_venue_by_id(npc_data.get("initial_current_location_poi_id")) or self.WORLD_MAP.get(npc_data.get("initial_current_location_location_id"))
             if not home_loc_obj and npc_data.get("schedule"): home_loc_obj = self.get_poi_or_venue_by_id(list(npc_data["schedule"].values())[0])
             if not current_loc_obj: current_loc_obj = home_loc_obj
-            if not home_loc_obj: self.GAME_LOG.add_message(f"Warning: No home location for NPC {npc_data['name']}.")
-            if not current_loc_obj: self.GAME_LOG.add_message(f"Warning: No current location for NPC {npc_data['name']}.")
+            if not home_loc_obj: self.GAME_LOG.add_log_message(f"Warning: No home location for NPC {npc_data['name']}.")
+            if not current_loc_obj: self.GAME_LOG.add_log_message(f"Warning: No current location for NPC {npc_data['name']}.")
             npc = NPC(npc_id=npc_data["npc_id"], name=npc_data["name"], personality_key=npc_data["personality_key"], home_location=home_loc_obj, current_location=current_loc_obj)
             self.npc_identity.ensure_identity_fields(npc)
             for time_slot, loc_id_str in npc_data.get("schedule", {}).items():
                 scheduled_loc_obj = self.get_poi_or_venue_by_id(loc_id_str)
                 if scheduled_loc_obj: npc.schedule[time_slot] = scheduled_loc_obj
-                else: self.GAME_LOG.add_message(f"Warning: Scheduled POI/Venue ID '{loc_id_str}' not found for {npc.name}'s schedule.")
+                else: self.GAME_LOG.add_log_message(f"Warning: Scheduled POI/Venue ID '{loc_id_str}' not found for {npc.name}'s schedule.")
             if "skills" in npc_data:
                 npc.skills = npc_data["skills"]
             if "gift_preferences" in npc_data:
@@ -1203,7 +1291,7 @@ class Game:
                     if hasattr(item, 'owner_npc_id') and isinstance(item.owner_npc_id, str):
                         owner_npc = self.NPC_REGISTRY.get(item.owner_npc_id)
                         if owner_npc: item.owner_npc_id = owner_npc
-                        else: self.GAME_LOG.add_message(f"Warning: Owner NPC ID '{item.owner_npc_id}' not found for POI/Venue '{item.name}'."); item.owner_npc_id = None
+                        else: self.GAME_LOG.add_log_message(f"Warning: Owner NPC ID '{item.owner_npc_id}' not found for POI/Venue '{item.name}'."); item.owner_npc_id = None
 
         for loc_data in locations_data:
             curr_loc_obj = temp_location_id_map.get(loc_data["id"])
@@ -1217,13 +1305,13 @@ class Game:
                         time_hours=conn_data["time_hours"],
                         method=conn_data.get("method"),
                     )
-                else: self.GAME_LOG.add_message(f"Warning: Target location ID '{conn_data['to_location_id']}' for travel from '{curr_loc_obj.name}' not found.")
+                else: self.GAME_LOG.add_log_message(f"Warning: Target location ID '{conn_data['to_location_id']}' for travel from '{curr_loc_obj.name}' not found.")
 
         event_defs = [
-            {"id": "open_mic_hometown_hall", "venue_id": "hometown_community_hall", "name": "Open Mic Night", "type": "OPEN_MIC", "skills": {"vocals": 1, "guitar": 1}, "gear": ["INSTRUMENT_ACOUSTIC"], "desc": "A chance to show your skills..."},
-            {"id": "debut_rusty_mug", "venue_id": "citycenter_rustymug", "name": "Debut at 'The Rusty Mug'", "type": "CLUB_GIG", "skills": {"vocals": 5, "guitar": 5, "stage_presence": 3}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"], "desc": "Your first real club gig!", "prep_tasks": {"Write Setlist (3 songs)": False, "Rehearse Set (2 hours)": False, "Promote Gig Locally": False}},
-            {"id": "opening_act_grande", "venue_id": "citycenter_grandetheater", "name": "Opening Act for Major Band", "type": "CONCERT", "skills": {"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "A huge opportunity...", "prep_tasks": {"Finalize Setlist (5 songs)": False, "Intensive Rehearsal (10 hours)": False, "Coordinate with Main Act": False, "Sound Check (2 hours)": False}},
-            {"id": "headliner_show_grande", "venue_id": "citycenter_grandetheater", "name": "Headliner Show", "type": "CONCERT", "skills": {"vocals": 25, "guitar": 25, "stage_presence": 20, "songwriting": 20}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "Your own headliner show at the Grande Concert Hall!", "required_fame": 500}
+            {"id": "open_mic_hometown_hall", "venue_id": "asbury_stone_pony", "name": "Open Mic Night", "type": "OPEN_MIC", "skills": {"vocals": 1, "guitar": 1}, "gear": ["INSTRUMENT_ACOUSTIC"], "desc": "A chance to show your skills..."},
+            {"id": "debut_rusty_mug", "venue_id": "philly_rusty_mug", "name": "Debut at 'The Rusty Pint Club'", "type": "CLUB_GIG", "skills": {"vocals": 5, "guitar": 5, "stage_presence": 3}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER"], "desc": "Your first real club gig!", "prep_tasks": {"Write Setlist (3 songs)": False, "Rehearse Set (2 hours)": False, "Promote Gig Locally": False}},
+            {"id": "opening_act_grande", "venue_id": "philly_grande_hall", "name": "Opening Act for Major Band", "type": "CONCERT", "skills": {"vocals": 15, "guitar": 15, "stage_presence": 10, "songwriting": 10}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "A huge opportunity...", "prep_tasks": {"Finalize Setlist (5 songs)": False, "Intensive Rehearsal (10 hours)": False, "Coordinate with Main Act": False, "Sound Check (2 hours)": False}},
+            {"id": "headliner_show_grande", "venue_id": "philly_grande_hall", "name": "Headliner Show", "type": "CONCERT", "skills": {"vocals": 25, "guitar": 25, "stage_presence": 20, "songwriting": 20}, "gear": ["INSTRUMENT_ELECTRIC", "AMPLIFIER", "INSTRUMENT_BASS", "INSTRUMENT_DRUMS"], "desc": "Your own headliner show at the Union Transfer Concert Hall!", "required_fame": 500}
         ]
         for ed in event_defs:
             vo = self.get_poi_or_venue_by_id(ed["venue_id"])
@@ -1232,15 +1320,15 @@ class Game:
                 evt = Event(name=ed["name"], event_type=ed["type"], location=vo, required_skills=ed["skills"], required_gear_types=ed["gear"], description=ed["desc"], is_tour_gig=is_tour_gig_flag, required_fame=ed.get("required_fame", 0))
                 if "prep_tasks" in ed: evt.preparation_tasks_required = ed["prep_tasks"]
                 vo.add_event(evt)
-            else: self.GAME_LOG.add_message(f"Warning: Venue ID '{ed['venue_id']}' for event '{ed['name']}' not found or not a Venue.")
+            else: self.GAME_LOG.add_log_message(f"Warning: Venue ID '{ed['venue_id']}' for event '{ed['name']}' not found or not a Venue.")
 
-        player_home_obj = self.get_poi_or_venue_by_id("hometown_player_home")
+        player_home_obj = self.get_poi_or_venue_by_id("asbury_player_home")
         if player_home_obj: self.PLAYER_HOME_POI_ID_GLOBAL = player_home_obj.poi_id
-        else: self.GAME_LOG.add_message("CRITICAL ERROR: Player home POI 'hometown_player_home' not found.")
+        else: self.GAME_LOG.add_log_message("CRITICAL ERROR: Player home POI 'asbury_player_home' not found.")
 
         self.ACTIVE_CHARTS.clear()
-        hometown_chart = Chart(name="Hometown Local Hits", max_size=10, chart_genre_preference="Indie")
-        city_chart = Chart(name="City Center Top Tracks", max_size=20)
+        hometown_chart = Chart(name="Asbury Park Local Hits", max_size=10, chart_genre_preference="Indie")
+        city_chart = Chart(name="Philadelphia Top Tracks", max_size=20)
         self.ACTIVE_CHARTS.append(hometown_chart); self.ACTIVE_CHARTS.append(city_chart)
         if self.GAME_LOG:
             self.GAME_LOG.add_log_message(f"Initialized {len(self.ACTIVE_CHARTS)} charts.")
@@ -1250,9 +1338,9 @@ class Game:
         if "label_citycenter" not in self.organization_contracts.organizations:
             self.organization_contracts.create_organization(
                 organization_id="label_citycenter",
-                name="City Center Records",
+                name="Philadelphia Records",
                 org_type="label",
-                home_city="City Center",
+                home_city="Philadelphia, PA",
                 tier=0.72,
                 pressure_style="demanding",
             )
@@ -1268,7 +1356,7 @@ class Game:
             if self.GAME_LOG:
                 self.GAME_LOG.add_log_message(f"Loaded {len(self.TOURS)} tour packages.")
         except Exception as e:
-            self.GAME_LOG.add_message(f"ERROR loading {tours_json_path}: {e}")
+            self.GAME_LOG.add_log_message(f"ERROR loading {tours_json_path}: {e}")
 
         return True
 
@@ -1276,7 +1364,7 @@ class Game:
         # Initial creation of player object, but details will be filled in character creation
         self.player = Player("Player")
         self.delegation_system.ensure_player_support(self.player)
-        hometown_loc = self.WORLD_MAP.get("Your Hometown")
+        hometown_loc = self.WORLD_MAP.get("Asbury Park, NJ")
         player_home_obj = self.get_poi_or_venue_by_id(self.PLAYER_HOME_POI_ID_GLOBAL) if self.PLAYER_HOME_POI_ID_GLOBAL else None
         if hometown_loc and player_home_obj:
             self.player.current_location = hometown_loc
@@ -1289,17 +1377,19 @@ class Game:
         self.game_state = "character_creation"
 
         self.update_npc_locations(current_game_time)
+        self._place_scene_musicians()
         self.process_time_based_player_needs(self.player, 0)
         self._normalize_opportunity_state()
         self.player.grit = random.randint(0, 15)
         self.early_life.bootstrap_player_jobs(self.player)
-        self.early_life.ensure_next_shift_exists(self.player)
+        self.player.active_survival_job_id = None
 
         # Gear will be added after character creation based on background
         # if GEAR_CATALOG.get("worn_acoustic_guitar"): self.player.add_gear(GEAR_CATALOG["worn_acoustic_guitar"])
         # if GEAR_CATALOG.get("guitar_picks_assorted"): self.player.add_gear(GEAR_CATALOG["guitar_picks_assorted"])
 
         self.LAST_CHART_UPDATE_DAY = current_game_time.day
+        self.last_world_day = current_game_time.day_index()
 
     def check_for_new_opportunities(self):
         reliability_bias = self._player_memory_opportunity_bias()
@@ -1347,7 +1437,19 @@ class Game:
 
                     self.player.active_opportunities[opp_id] = opp_details
                     self.GAME_LOG.add_log_message(f"A new opportunity has arisen: {opp_data['name']}!")
-                    self.GAME_LOG.add_log_message("Check your phone for more details.")
+                    if opp_data.get('type') == 'poi_interaction':
+                        place = self.get_poi_or_venue_by_id(opp_details.get('poi_id'))
+                        self.GAME_LOG.add_log_message(f"Visit {getattr(place, 'name', 'the host location')} to discuss the appearance.")
+                    else:
+                        self.GAME_LOG.add_log_message("Check your phone for more details.")
+
+        signing = self.player.active_opportunities.get('autograph_signing', {})
+        if signing.get('status') == 'completed' and self.OPPORTUNITY_CATALOG['autograph_signing']['trigger'](self.player, self):
+            recent_here = any(h['city'] == self.player.current_location.name and current_game_time.day_index() - h['day'] < 7
+                              for h in getattr(self.player, 'appearance_history', []))
+            if not recent_here:
+                signing['status'] = 'available'
+                signing['poi_id'] = self.OPPORTUNITY_CATALOG['autograph_signing']['poi_id_getter'](self)
 
         # Check for dynamic, NPC-driven opportunities
         for npc_id in self.player.contacts:
@@ -1407,12 +1509,32 @@ class Game:
                         event.details.get("venue_id"),
                     )
 
+                    if (scheduled_event and hasattr(self.ui, 'enter_live_club')
+                            and getattr(scheduled_event.location, 'venue_type', '') in {'CLUB', 'BAR_GIG'}
+                            and self.player.current_poi is scheduled_event.location
+                            and current_game_time <= event.end_time):
+                        # In a playable room the player approaches the stage.
+                        # Merely being backstage does not start the set.
+                        continue
+
                     if not scheduled_event:
                         self.GAME_LOG.add_log_message(f"You missed '{event.description}' because the booking data could not be found.")
                     elif self.game_state == "performance":
                         self.GAME_LOG.add_log_message(f"'{event.description}' is happening now, but you're already busy.")
+                    elif current_game_time > event.end_time:
+                        self.GAME_LOG.add_log_message(
+                            f"You missed '{event.description}': the performance window already closed before you arrived."
+                        )
+                        expected_dest = event.details.get("destination_id") or event.details.get("venue_id")
+                        if not expected_dest and getattr(scheduled_event, "location", None):
+                            event_location = scheduled_event.location
+                            expected_dest = getattr(event_location, "poi_id", getattr(event_location, "venue_id", None))
+                        self._record_missed_gig_memory(event, expected_dest, "window_elapsed")
                     else:
                         expected_dest = event.details.get("destination_id") or event.details.get("venue_id")
+                        if not expected_dest and scheduled_event and getattr(scheduled_event, "location", None):
+                            event_location = scheduled_event.location
+                            expected_dest = getattr(event_location, "poi_id", getattr(event_location, "venue_id", None))
                         current_dest = None
                         if self.player.current_poi:
                             current_dest = getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
@@ -1424,6 +1546,7 @@ class Game:
                                 self.GAME_LOG.add_log_message(f"You missed '{event.description}' [{root_cause}]: {miss_reason}.")
                             else:
                                 self.GAME_LOG.add_log_message(f"You missed '{event.description}': {miss_reason}.")
+                            self._record_missed_gig_memory(event, expected_dest, root_cause or "absent_at_start")
                         else:
                             gig_req = self._assess_gig_requirements()
                             self.performance_requirement_penalty = 1.0
@@ -1431,6 +1554,7 @@ class Game:
                                 self.GAME_LOG.add_log_message(
                                     f"You missed '{event.description}' due to missing critical loadout: {', '.join(gig_req.missing_severe)}."
                                 )
+                                self._record_missed_gig_memory(event, expected_dest, "missing_required_loadout")
                             else:
                                 if gig_req.status in {"partially_satisfied", "missing_but_recoverable"}:
                                     self.performance_requirement_penalty = 0.82
@@ -1443,9 +1567,58 @@ class Game:
                                 self.game_state = "performance"
                                 self.GAME_LOG.add_log_message(f"It's time for '{scheduled_event.name}' at {scheduled_event.location.name}.")
 
+                    if self.active_performance is not scheduled_event:
+                        from game.live_bookings import settle_show
+                        settle_show(self, scheduled_event, 'missed', reason='Performance window missed or required loadout unavailable')
                     self.player.schedule.scheduled_items.remove(event)
                 elif event.category == "Job":
                     self.early_life.resolve_shift_event(self.player, event)
+                    self.player.schedule.scheduled_items.remove(event)
+                elif event.category in {"Meeting", "Rehearsal", "Studio Session", "Label Visit"}:
+                    expected_dest = event.details.get("destination_id") or event.details.get("venue_id") or event.details.get("poi_id")
+                    current_dest = None
+                    if self.player.current_poi:
+                        current_dest = getattr(self.player.current_poi, "poi_id", getattr(self.player.current_poi, "venue_id", None))
+                    if current_game_time > event.end_time:
+                        event.details["creative_obligation_status"] = "failed_window_elapsed"
+                        event.details["creative_obligation_reason_code"] = "window_elapsed"
+                        self.GAME_LOG.add_log_message(
+                            f"Missed '{event.description}': the booked window closed before you checked in."
+                        )
+                        self._record_creative_obligation_failure_memory(event, expected_dest, "window_elapsed")
+                        self._apply_contract_obligation_outcome(event, success=False)
+                    elif not expected_dest:
+                        event.details["creative_obligation_status"] = "failed_missing_destination"
+                        event.details["creative_obligation_reason_code"] = "missing_destination"
+                        self.GAME_LOG.add_log_message(
+                            f"Missed '{event.description}': no precise POI/venue destination was booked for this obligation."
+                        )
+                    elif expected_dest != current_dest:
+                        event.details["creative_obligation_status"] = "failed_absent"
+                        event.details["creative_obligation_reason_code"] = "absent_at_start"
+                        self.GAME_LOG.add_log_message(
+                            f"Missed '{event.description}': you were not at the booked location when it started."
+                        )
+                        self._record_creative_obligation_failure_memory(event, expected_dest, "absent_at_start")
+                        self._apply_contract_obligation_outcome(event, success=False)
+                    else:
+                        readiness = self._assess_creative_obligation_requirements(event)
+                        if readiness and readiness.status == "missing_and_severe":
+                            event.details["creative_obligation_status"] = "failed_readiness"
+                            event.details["creative_obligation_reason_code"] = "missing_required_loadout"
+                            self.GAME_LOG.add_log_message(
+                                f"Missed '{event.description}': required loadout missing ({', '.join(readiness.missing_severe)})."
+                            )
+                            self._record_creative_obligation_failure_memory(event, expected_dest, "missing_required_loadout")
+                            self._apply_contract_obligation_outcome(event, success=False)
+                        else:
+                            event.details["creative_obligation_status"] = "completed_on_site"
+                            event.details["creative_obligation_reason_code"] = "completed_on_site"
+                            self.GAME_LOG.add_log_message(
+                                f"You check in for '{event.description}' at the booked location."
+                            )
+                            self._apply_contract_obligation_outcome(event, success=True)
+
                     self.player.schedule.scheduled_items.remove(event)
 
     def handle_label_response(self, event):
@@ -1483,72 +1656,222 @@ class Game:
             self.GAME_LOG.add_log_message("They pass for now.")
 
     def schedule_tour(self, tour_id):
-        tour_data = next((t for t in self.TOURS if t['tour_id'] == tour_id), None)
-        if not tour_data:
-            self.GAME_LOG.add_log_message(f"Error: Could not find data for tour ID {tour_id}")
+        from game.live_bookings import propose_tour, commit_tour
+        proposal = propose_tour(self, tour_id)
+        result = commit_tour(self, proposal)
+        self.GAME_LOG.add_log_message(result['explanation'])
+        return result
+
+    def _weekly_world_update(self):
+        # Venue Prestige Decay
+        from game.rivals import NEWS_FEED
+        for loc in self.WORLD_MAP.values():
+            for venue in loc.venues:
+                venue.weeks_without_events += 1
+                if venue.weeks_without_events > 4:
+                    # Venue is stagnant, lose prestige slowly
+                    venue.update_prestige(-0.1)
+
+                if venue.prestige < 1.0:
+                    # Management changes hands
+                    venue.prestige = venue.base_prestige
+                    venue.weeks_without_events = 0
+                    venue.events_hosted[:] = [e for e in venue.events_hosted if getattr(e, "booking_id", None) and e.is_active]
+                    venue.prestige_history.clear()
+                    NEWS_FEED.insert(0, f"SCENE: {venue.name} in {loc.name} closed its doors after a rough patch, but new management is attempting a reopening.")
+                    self.GAME_LOG.add_log_message(f"NEWS: {venue.name} is under new management.")
+
+        # Band Wages
+        wage_report = resolve_weekly_wages(self.player, self.player.band)
+        if wage_report:
+             self.GAME_LOG.add_log_message("--- Band Wages ---")
+             for line in wage_report.split('\n'):
+                 self.GAME_LOG.add_log_message(line)
+
+        # Staff Wages
+        total_staff_wages = sum(s.wage_per_week for s in self.player.staff)
+        if total_staff_wages > 0:
+            if self.player.money >= total_staff_wages:
+                self.player.money -= total_staff_wages
+                self.GAME_LOG.add_log_message(f"Paid staff wages: ${total_staff_wages}")
+            else:
+                # Unpaid staff leave?
+                self.GAME_LOG.add_log_message(f"Could not pay staff (${total_staff_wages}). They have quit!")
+                self.player.staff = []
+
+        self._pay_support_upkeep()
+        self._apply_weekly_life_event()
+
+        # NPCs progress in their careers
+        self.update_npc_careers()
+
+        # Rival Simulation
+        simulate_rivals(self.NPC_REGISTRY)
+
+        # Celebrity Events
+        cel_evt = check_for_celebrity_event(self.player)
+        if cel_evt:
+            self.GAME_LOG.add_log_message(f"INVITE: {cel_evt['desc']}")
+        # Update Trends
+        shift_happened = self.trend_manager.update_weekly()
+        if shift_happened:
+            top_genre = self.trend_manager.get_top_genre()
+            self.GAME_LOG.add_log_message(f"--- NEWS: A cultural shift! {top_genre} is the new wave! ---")
+        else:
+            top_genre = self.trend_manager.get_top_genre()
+            self.GAME_LOG.add_log_message(f"Trends: {top_genre} is currently popular.")
+
+        # Gather all released songs in the world
+        all_released_songs = list(self.player.songs_written)
+        for npc in self.NPC_REGISTRY.values():
+            all_released_songs.extend(npc.songs_written)
+
+        # Update charts with all songs
+        total_fame_gain = 0
+        total_money_gain = 0
+        all_feedback_events = []
+        for chart in self.ACTIVE_CHARTS:
+            # Pass trend_manager to chart update
+            feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time, self.trend_manager)
+            all_feedback_events.extend(feedback_events)
+            # Calculate fame and money from chart positions for the PLAYER only
+            for entry in chart.entries:
+                if entry['artist_name'] == self.player.name:
+                    fame_gain = max(0, (chart.max_size - entry['current_position'] + 1))
+                    money_gain = 0 # Chart placement earns attention; recordings earn royalties.
+                    total_fame_gain += fame_gain
+                    total_money_gain += money_gain
+
+        if total_money_gain > 0 or total_fame_gain > 0:
+            self.player.money += total_money_gain
+            self.player.fame += total_fame_gain
+            self.GAME_LOG.add_log_message(f"Your songs earned you ${total_money_gain} and {total_fame_gain} fame this week.")
+
+        # Process chart feedback events for log messages
+        for event in all_feedback_events:
+            details = event['chart_details']
+            artist = details['artist_name']
+            song = details['song_title']
+            chart_name = details['chart_name']
+            position = details['current_position']
+
+            if artist == self.player.name:
+                if event['type'] == 'chart_debut':
+                    self.GAME_LOG.add_log_message(f"Your song '{song}' has debuted on the {chart_name} chart at #{position}!")
+                elif event['type'] == 'hit_number_one':
+                    self.GAME_LOG.add_log_message(f"You've done it! '{song}' is the #1 song on the {chart_name} chart!")
+            else:
+                # Less intrusive gossip for NPCs
+                if event['type'] == 'chart_debut' and position <= 10: # Only report significant debuts
+                     self.GAME_LOG.add_log_message(f"GOSSIP: {artist}'s new song '{song}' entered the {chart_name} chart at #{position}.")
+                elif event['type'] == 'hit_number_one':
+                     self.GAME_LOG.add_log_message(f"GOSSIP: Wow, {artist} hit #1 on the {chart_name} chart with '{song}'!")
+
+    def _daily_world_update(self):
+        from game.live_bookings import reconcile_bookings
+        reconcile_bookings(self)
+        # Daily Logic
+        if self.player.has_bodyguard:
+            if self.player.money >= self.player.bodyguard_cost:
+                self.player.money -= self.player.bodyguard_cost
+                self.GAME_LOG.add_log_message(f"Paid bodyguard upkeep (${self.player.bodyguard_cost}).")
+            else:
+                self.player.has_bodyguard = False
+                self.GAME_LOG.add_log_message("Couldn't pay bodyguard. They quit!")
+
+        # Check for NPC Favors (Allies)
+        for npc_id in self.player.contacts:
+            npc = self.NPC_REGISTRY.get(npc_id)
+            if npc and npc.relationship_with_player == RelationshipStatus.ALLY:
+                ally_score = 8 + min(12, int(self._calculate_npc_fame(npc) / 20))
+                if self._passes_contextual_threshold(ally_score, 102):
+                    # Send a gift
+                    possible_gifts = ["food_energy_bar", "guitar_strings_basic", "guitar_picks_assorted"]
+                    gift_id = random.choice(possible_gifts)
+                    gift_item = GEAR_CATALOG.get(gift_id)
+                    if gift_item:
+                        self.player.add_gear(gift_item)
+                        self.GAME_LOG.add_log_message(f"MSG from {npc.name}: 'Hey, saw this and thought of you!' (Received {gift_item.name})")
+
+        # Check for Band Drama (Daily)
+        drama_result = check_for_band_drama(self.player, self.player.band)
+        if drama_result['event_triggered']:
+            self.GAME_LOG.add_log_message(f"BAND DRAMA: {drama_result['message']}")
+        for song in self.player.songs_written:
+            if song.is_released:
+                self.streaming_system.register_song_for_streaming(song, self.player.fame)
+        for line in self.streaming_system.process_daily_streams_and_royalties(self.player):
+            self.GAME_LOG.add_log_message(line)
+        for line in self.album_system.process_daily_vinyl_manufacturing_and_sales(self.player):
+            self.GAME_LOG.add_log_message(line)
+        self.dynamic_musicians.tick_daily_world_musicians()
+        self._place_scene_musicians()
+        self.dynamic_musicians.world_event_logs = self.dynamic_musicians.world_event_logs[-80:]
+        self.weather_and_seasons.cached_weather.clear()
+        for vehicle in list(self.player.vehicles):
+            expires = getattr(vehicle, 'rental_until', None)
+            if expires is not None and current_game_time.day_index() >= expires:
+                self.player.vehicles.remove(vehicle)
+                self.GAME_LOG.add_log_message(f'Rental ended: {vehicle.name}. The vehicle has been returned.')
+        if getattr(getattr(self.player, 'vehicle', None), 'rental_until', current_game_time.day_index()+1) <= current_game_time.day_index():
+            self.player.vehicle = None
+        self.check_for_new_opportunities()
+        self.last_opportunity_check_day = current_game_time.day
+        self.update_npc_locations(current_game_time)
+
+    def _place_scene_musicians(self):
+        for musician in self.dynamic_musicians.musicians.values():
+            musician.tour_itinerary = [c for c in musician.tour_itinerary if c in self.WORLD_MAP]
+            if musician.status == "IN_TRANSIT":
+                musician.current_poi_id = None
+                continue
+            location = self.WORLD_MAP.get(musician.current_city)
+            if not location: continue
+            targets = []
+            if musician.status in ("PERFORMING", "TOURING"):
+                targets = list(location.venues)
+            elif musician.status == "RECORDING":
+                targets = [p for p in location.points_of_interest if "STUDIO" in p.category]
+            elif musician.status == "RESTING":
+                targets = [p for p in location.points_of_interest if "HOTEL" in p.category or "MOTEL" in p.category]
+            if not targets:
+                targets = [p for p in location.points_of_interest if any(k in p.category for k in ("CAFE", "DINER", "SHOP_MUSIC"))]
+            if not targets: targets = list(location.points_of_interest)
+            if targets:
+                target = targets[sum(ord(c) for c in musician.artist_id) % len(targets)]
+                musician.current_poi_id = getattr(target, "poi_id", getattr(target, "venue_id", None))
+
+    def _pay_support_upkeep(self):
+        self.delegation_system.ensure_player_support(self.player)
+        for role in self.player.delegation_roles.values():
+            if role.active and role.upkeep:
+                if self.player.money >= role.upkeep:
+                    self.player.money -= role.upkeep
+                    self.GAME_LOG.add_log_message(f"{role.role_type.title()} retainer paid: ${role.upkeep}.")
+                else:
+                    role.active = False
+                    self.GAME_LOG.add_log_message(f"{role.role_type.title()} stopped work after an unpaid retainer.")
+
+    def _process_calendar_updates(self):
+        today = current_game_time.day_index()
+        last_day = getattr(self, 'last_world_day', today)
+        if last_day >= today:
             return
-
-        self.player.current_tour_id = tour_id
-        self.player.tour_ledgers[tour_id] = {
-            "name": tour_data['name'],
-            "expenses": 0,
-            "income": 0,
-            "status": "ongoing",
-            "completed_gigs": []
-        }
-        self.GAME_LOG.add_log_message(f"Your manager starts booking the '{tour_data['name']}' tour.")
-
-        last_gig_date = current_game_time.copy()
-
-        for i, gig_template in enumerate(tour_data['gig_templates']):
-            # Determine gig date
-            offset = random.randint(gig_template['days_offset_min'], gig_template['days_offset_max'])
-            gig_date = last_gig_date.copy()
-            gig_date.add_days(offset)
-
-            # Find a venue
-            city_name = random.choice(gig_template['city_options'])
-            city_venues = [v for v in self.WORLD_MAP[city_name].venues if v.venue_type in gig_template['venue_type_options']]
-            if not city_venues:
-                self.GAME_LOG.add_log_message(f"Manager couldn't find a suitable venue in {city_name} for leg {i+1}. Tour booking failed.")
-                self.player.current_tour_id = None
-                return
-
-            city_venues = sorted(
-                city_venues,
-                key=lambda v: v.prestige + self._venue_memory_bias(getattr(v, "venue_id", None)),
-                reverse=True,
-            )
-            venue = city_venues[0]
-
-            # Create a temporary event for this gig
-            gig_event = Event(
-                name=f"{tour_data['name']} @ {venue.name}",
-                event_type=gig_template['event_type'],
-                location=venue,
-                is_tour_gig=True
-            )
-            # Add to the venue's events for the duration of the gig
-            # This is a simplification; a real implementation might need a more robust temporary event system
-            venue.events_hosted.append(gig_event)
-
-            # Schedule it for the player
-            gig_start_time = gig_date
-            gig_start_time.hour = 19 # Gigs are in the evening
-            gig_end_time = gig_start_time.copy()
-            gig_end_time.add_hours(3)
-
-            self.player.schedule.add_event(
-                gig_start_time,
-                gig_end_time,
-                gig_event.name,
-                "Gig (Tour)",
-                {"event_id": gig_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
-            )
-            self.GAME_LOG.add_log_message(f"Booked: {gig_event.name} on {gig_start_time.get_time_string_for_schedule()}")
-
-            last_gig_date = gig_date
-
+        final_time = current_game_time.copy()
+        try:
+            for day in range(last_day + 1, today + 1):
+                year, remainder = divmod(day, 360)
+                month, zero_day = divmod(remainder, 30)
+                current_game_time.year, current_game_time.month, current_game_time.day = year, month + 1, zero_day + 1
+                current_game_time.hour = current_game_time.minute = 0
+                self._daily_world_update()
+                if day // 7 > (day - 1) // 7:
+                    self.GAME_LOG.add_log_message('The week in music')
+                    self._weekly_world_update()
+                self.last_world_day = day
+                self.LAST_CHART_UPDATE_DAY = current_game_time.day
+        finally:
+            current_game_time.__dict__.update(vars(final_time))
 
     def run(self):
         if not self.setup_world():
@@ -1556,165 +1879,15 @@ class Game:
             return
 
         self.GAME_LOG.add_log_message("Welcome to Music-Life Sim!")
-        self.GAME_LOG.add_log_message("Offline NPC dialogue is available by default. External AI dialogue is optional.")
+
 
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
 
-            if self.player and (current_game_time.day % 7 == 1) and (current_game_time.day != self.LAST_CHART_UPDATE_DAY):
-                self.GAME_LOG.add_log_message("--- Weekly World Update ---")
-
-                # Venue Prestige Decay
-                from game.rivals import NEWS_FEED
-                for loc in self.WORLD_MAP.values():
-                    for venue in loc.venues:
-                        venue.weeks_without_events += 1
-                        if venue.weeks_without_events > 4:
-                            # Venue is stagnant, lose prestige slowly
-                            venue.update_prestige(-0.1)
-
-                        if venue.prestige < 1.0:
-                            # Management changes hands
-                            venue.prestige = venue.base_prestige
-                            venue.weeks_without_events = 0
-                            venue.events_hosted.clear()
-                            venue.prestige_history.clear()
-                            NEWS_FEED.insert(0, f"SCENE: {venue.name} in {loc.name} closed its doors after a rough patch, but new management is attempting a reopening.")
-                            self.GAME_LOG.add_log_message(f"NEWS: {venue.name} is under new management.")
-
-                # Band Wages
-                wage_report = resolve_weekly_wages(self.player, self.player.band)
-                if wage_report:
-                     self.GAME_LOG.add_log_message("--- Band Wages ---")
-                     for line in wage_report.split('\n'):
-                         self.GAME_LOG.add_log_message(line)
-
-                # Staff Wages
-                total_staff_wages = sum(s.wage_per_week for s in self.player.staff)
-                if total_staff_wages > 0:
-                    if self.player.money >= total_staff_wages:
-                        self.player.money -= total_staff_wages
-                        self.GAME_LOG.add_log_message(f"Paid staff wages: ${total_staff_wages}")
-                    else:
-                        # Unpaid staff leave?
-                        self.GAME_LOG.add_log_message(f"Could not pay staff (${total_staff_wages}). They have quit!")
-                        self.player.staff = []
-
-                self._apply_weekly_survival_costs()
-                self._apply_weekly_life_event()
-
-                # NPCs progress in their careers
-                self.update_npc_careers()
-
-                # Rival Simulation
-                simulate_rivals(self.NPC_REGISTRY)
-
-                # Celebrity Events
-                cel_evt = check_for_celebrity_event(self.player)
-                if cel_evt:
-                    self.GAME_LOG.add_log_message(f"INVITE: {cel_evt['desc']}")
-                    # Auto-accept for now or add to opportunities?
-                    # Let's add fame immediately as 'attendance' abstractly
-                    self.player.fame += cel_evt['fame_gain']
-                    self.GAME_LOG.add_log_message(f"You attended and gained {cel_evt['fame_gain']} Fame!")
-
-                # Update Trends
-                shift_happened = self.trend_manager.update_weekly()
-                if shift_happened:
-                    top_genre = self.trend_manager.get_top_genre()
-                    self.GAME_LOG.add_log_message(f"--- NEWS: A cultural shift! {top_genre} is the new wave! ---")
-                else:
-                    top_genre = self.trend_manager.get_top_genre()
-                    self.GAME_LOG.add_log_message(f"Trends: {top_genre} is currently popular.")
-
-            # Daily Upkeep (e.g. Bodyguard)
-            # This check runs every frame, so we need a "last_upkeep_day" tracker.
-            # Using last_opportunity_check_day is decent but strictly for opportunities.
-            # Let's re-use it or add a specific daily update block.
-            if self.player and current_game_time.day != self.last_opportunity_check_day:
-                # Daily Logic
-                if self.player.has_bodyguard:
-                    if self.player.money >= self.player.bodyguard_cost:
-                        self.player.money -= self.player.bodyguard_cost
-                        self.GAME_LOG.add_log_message(f"Paid bodyguard upkeep (${self.player.bodyguard_cost}).")
-                    else:
-                        self.player.has_bodyguard = False
-                        self.GAME_LOG.add_log_message("Couldn't pay bodyguard. They quit!")
-
-                # Check for NPC Favors (Allies)
-                for npc_id in self.player.contacts:
-                    npc = self.NPC_REGISTRY.get(npc_id)
-                    if npc and npc.relationship_with_player == RelationshipStatus.ALLY:
-                        ally_score = 8 + min(12, int(self._calculate_npc_fame(npc) / 20))
-                        if self._passes_contextual_threshold(ally_score, 102):
-                            # Send a gift
-                            possible_gifts = ["food_energy_bar", "guitar_strings_basic", "guitar_picks_assorted"]
-                            gift_id = random.choice(possible_gifts)
-                            gift_item = GEAR_CATALOG.get(gift_id)
-                            if gift_item:
-                                self.player.add_gear(gift_item)
-                                self.GAME_LOG.add_log_message(f"MSG from {npc.name}: 'Hey, saw this and thought of you!' (Received {gift_item.name})")
-
-                # Check for Band Drama (Daily)
-                drama_result = check_for_band_drama(self.player, self.player.band)
-                if drama_result['event_triggered']:
-                    self.GAME_LOG.add_log_message(f"BAND DRAMA: {drama_result['message']}")
-
-                # Gather all released songs in the world
-                all_released_songs = list(self.player.songs_written)
-                for npc in self.NPC_REGISTRY.values():
-                    all_released_songs.extend(npc.songs_written)
-
-                # Update charts with all songs
-                total_fame_gain = 0
-                total_money_gain = 0
-                all_feedback_events = []
-                for chart in self.ACTIVE_CHARTS:
-                    # Pass trend_manager to chart update
-                    feedback_events = chart.update_weekly(all_released_songs, self.player, current_game_time, self.trend_manager)
-                    all_feedback_events.extend(feedback_events)
-                    # Calculate fame and money from chart positions for the PLAYER only
-                    for entry in chart.entries:
-                        if entry['artist_name'] == self.player.name:
-                            fame_gain = max(0, (chart.max_size - entry['current_position'] + 1))
-                            money_gain = fame_gain * 10 # $10 per "fame point" from charting
-                            total_fame_gain += fame_gain
-                            total_money_gain += money_gain
-
-                if total_money_gain > 0 or total_fame_gain > 0:
-                    self.player.money += total_money_gain
-                    self.player.fame += total_fame_gain
-                    self.GAME_LOG.add_log_message(f"Your songs earned you ${total_money_gain} and {total_fame_gain} fame this week.")
-
-                # Process chart feedback events for log messages
-                for event in all_feedback_events:
-                    details = event['chart_details']
-                    artist = details['artist_name']
-                    song = details['song_title']
-                    chart_name = details['chart_name']
-                    position = details['current_position']
-
-                    if artist == self.player.name:
-                        if event['type'] == 'chart_debut':
-                            self.GAME_LOG.add_log_message(f"Your song '{song}' has debuted on the {chart_name} chart at #{position}!")
-                        elif event['type'] == 'hit_number_one':
-                            self.GAME_LOG.add_log_message(f"You've done it! '{song}' is the #1 song on the {chart_name} chart!")
-                    else:
-                        # Less intrusive gossip for NPCs
-                        if event['type'] == 'chart_debut' and position <= 10: # Only report significant debuts
-                             self.GAME_LOG.add_log_message(f"GOSSIP: {artist}'s new song '{song}' entered the {chart_name} chart at #{position}.")
-                        elif event['type'] == 'hit_number_one':
-                             self.GAME_LOG.add_log_message(f"GOSSIP: Wow, {artist} hit #1 on the {chart_name} chart with '{song}'!")
-
-                self.LAST_CHART_UPDATE_DAY = current_game_time.day
-                self._check_player_survival_state()
-
-
-            if self.player and current_game_time.day != self.last_opportunity_check_day:
-                self.check_for_new_opportunities()
-                self.last_opportunity_check_day = current_game_time.day
+            if self.player:
+                self._process_calendar_updates()
 
             self.ui.clear_screen()
 
@@ -1769,7 +1942,7 @@ class Game:
         pygame.quit()
 
     def handle_title_screen(self):
-        has_save = os.path.exists("savegame.dat")
+        has_save = os.path.exists("savegame.json")
         title_options = {
             "new_game": "New Game",
             "load_game": "Load Game" if has_save else "Load Game (No save found)",
@@ -1802,6 +1975,11 @@ class Game:
                 if self.player is None:
                     self.game_state = "title_screen"
         else:
+            # A new career starts with a fresh world and clock, including NPCs.
+            ui = self.ui
+            current_game_time.__dict__.update(vars(GameTime()))
+            self.__init__(ui)
+            self.setup_world()
             self.initialize_player()
 
     def handle_character_creation(self):
@@ -1845,7 +2023,7 @@ class Game:
             self.player.skills['vocals'] = 10
             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
             self.player.add_gear(GEAR_CATALOG.get("guitar_picks_assorted"))
-            self.player.traits.append(TRAIT_CATALOG["resilient"])
+            self.player.traits.append(TRAIT_CATALOG["resilient_road_dog"])
         elif bg_choice == "pop_star":
             self.player.skills['vocals'] = 15
             self.player.skills['stage_presence'] = 10
@@ -1870,7 +2048,7 @@ class Game:
             self.player.energy = 100 # High stamina
             self.player.add_gear(GEAR_CATALOG.get("worn_acoustic_guitar"))
             self.player.money += 50 # Humble beginnings
-            self.player.traits.append(TRAIT_CATALOG["resilient"])
+            self.player.traits.append(TRAIT_CATALOG["resilient_road_dog"])
 
         # Fallback if catalog items missing or not assigned above
         if not self.player.gear_inventory and GEAR_CATALOG.get("worn_acoustic_guitar"):
@@ -1880,24 +2058,40 @@ class Game:
         self.game_state = "main_menu"
 
     def handle_main_menu(self):
+        curr_poi_name = self.player.current_poi.name if getattr(self.player, "current_poi", None) else (self.player.current_location.name if getattr(self.player, "current_location", None) else "Current Spot")
         main_menu_opts = {
-            "explore": "Explore",
-            "travel": "Travel",
-            "phone": "Phone",
-            "character": "Character",
-            "system": "System",
-            "quit": "Quit"
+            "explore": f"Current Location ({curr_poi_name})",
+            "travel": "City Map & Travel",
+            "music_menu": "Music & Creative Studio",
+            "phone": "Phone, Gigs & Contacts",
+            "character": "Character, Skills & Gear",
+            "system": "System & Save Game",
+            "quit": "Quit Game"
+        }
+
+        context = self._get_main_menu_context()
+        context["option_descriptions"] = {
+            "explore": f"Explore and interact with facilities, people, and opportunities at {curr_poi_name}.",
+            "travel": "Move between local venues, studios, motels, and shops, or travel to another city.",
+            "music_menu": "Write songs, view track catalog, release singles, assemble albums, or produce merch.",
+            "phone": "Browse social news feed, check incoming gig/tour offers, and message contacts.",
+            "character": "Inspect vitals, health, musical skill development, equipment loadout, and band lineup.",
+            "system": "Quick save, load existing runs, view activity history, or return to title screen.",
+            "quit": "Exit Music-Life and return to your desktop.",
         }
 
         choice = self.ui.present_choices(
             main_menu_opts,
             f"What would {self.player.name} like to do?",
-            context=self._get_main_menu_context(),
+            context=context,
         )
 
         if choice == "quit":
             self.running = False
-        else:
+        elif choice == "music_menu":
+            self.game_state = "music_menu"
+            self.music_menu_state = "main"
+        elif choice:
             self.game_state = choice
 
     def handle_explore_menu(self):
@@ -1912,38 +2106,94 @@ class Game:
             self.explore_menu_state = "poi"
         elif self.explore_menu_state == "poi":
             if self.selected_poi:
+                if self.selected_poi.category == 'SHOP_MUSIC' and hasattr(self.ui, 'enter_music_shop'):
+                    self.ui.enter_music_shop(self.selected_poi)
+                    self.selected_poi = None
+                    self.explore_menu_state = 'location'
+                    self.game_state = 'main_menu'
+                    return
+                if getattr(self.selected_poi, 'venue_type', '') in {'CLUB', 'BAR_GIG'} and hasattr(self.ui, 'enter_live_club'):
+                    self.ui.enter_live_club(self.selected_poi)
+                    if self.game_state == 'performance':
+                        return
+                    self.selected_poi = None
+                    self.explore_menu_state = 'location'
+                    self.game_state = 'main_menu'
+                    return
                 location = self.player.current_location
                 # Draw ASCII art for the location
                 poi_id = self.selected_poi.poi_id if hasattr(self.selected_poi, 'poi_id') else self.selected_poi.venue_id
                 art_to_display = ART.get(poi_id, ART['default'])
                 self.ui.draw_ascii_art(art_to_display, 450, 120)
 
-                interaction_options = {str(i): option for i, option in enumerate(self.selected_poi.get_interactions())}
+                interaction_options = {}
+                option_descriptions = {}
+                self._raw_interaction_map = {}
+
+                def tag_interaction(text):
+                    low = text.lower()
+                    if any(w in low for w in ["sleep", "rest", "nap", "bed"]):
+                        return f"[REST] {text}"
+                    if any(w in low for w in ["eat", "dine", "meal", "food", "coffee", "ramen", "curry", "breakfast", "dinner"]):
+                        return f"[EAT] {text}"
+                    if any(w in low for w in ["write", "song", "lyrics"]):
+                        return f"[SONG] {text}"
+                    if any(w in low for w in ["practice", "rehearse", "jam"]):
+                        return f"[PRACTICE] {text}"
+                    if any(w in low for w in ["record", "track", "demo", "master"]):
+                        return f"[RECORD] {text}"
+                    if any(w in low for w in ["gig", "perform", "show", "concert", "open mic", "play"]):
+                        return f"[GIG] {text}"
+                    if any(w in low for w in ["shop", "buy", "gear", "browse", "pawn", "purchase", "rent"]):
+                        return f"[SHOP] {text}"
+                    if any(w in low for w in ["talk", "chat", "bartender", "manager", "staff", "meet", "drink"]):
+                        return f"[SOCIAL] {text}"
+                    return text
+
+                for i, option in enumerate(self.selected_poi.get_interactions()):
+                    key = str(i)
+                    interaction_options[key] = tag_interaction(option)
+                    self._raw_interaction_map[key] = option
+                    option_descriptions[key] = f"Action at {self.selected_poi.name}."
 
                 local_actions = self.location_action_engine.generate_actions(self.player, self.selected_poi, location)
                 self._local_action_lookup = {}
                 for idx, local_action in enumerate(local_actions):
+                    # Keep distinct choices, collapse duplicated authored/generated rest and practice.
+                    raw = [v.lower() for v in self._raw_interaction_map.values()]
+                    if local_action.action_id == "sleep_rest" and any("sleep" in v or "rest" in v for v in raw):
+                        continue
+                    if local_action.action_id == "practice_music" and any("practice" in v for v in raw):
+                        continue
                     action_key = f"local_{idx}"
-                    interaction_options[action_key] = f"Local: {local_action.menu_label()}"
+                    interaction_options[action_key] = f"[LOCAL] {local_action.menu_label()}"
                     self._local_action_lookup[action_key] = local_action
+                    option_descriptions[action_key] = f"Local scene opportunity: {local_action.menu_label()}."
 
                 # Add dynamic opportunities for this POI
                 for opp_id, opp_details in self.player.active_opportunities.items():
                     if opp_details["status"] == "available":
                         opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
                         if opp_data and opp_data.get("type") == "poi_interaction" and opp_details.get("poi_id") == poi_id:
-                             interaction_options[opp_id] = opp_data["action_text"]
+                            interaction_options[opp_id] = f"[GIG] {opp_data['action_text']}"
+                            option_descriptions[opp_id] = opp_data.get("description", "A live opportunity available right now at this venue.")
 
                 if not self.player.has_home and getattr(self.selected_poi, "category", "") in ["TRANSPORT_BUS", "TRANSPORT_AIRPORT"]:
-                    interaction_options["rough_sleep"] = "Sleep Rough (4 hours)"
+                    interaction_options["rough_sleep"] = "[REST] Sleep Rough (4 hours)"
+                    option_descriptions["rough_sleep"] = "Sleep on a bench or terminal seat. Restores some energy but increases stress."
 
-                interaction_options["wander"] = "Look around (Trigger Events)"
-                interaction_options["back"] = "Back"
+                interaction_options["wander"] = "[EVENT] Spend time here / 15 min"
+                option_descriptions["wander"] = "Spend 15 minutes checking out the scene, gaining inspiration, and seeing what happens."
+                interaction_options["back"] = "Back to Main Menu"
+                option_descriptions["back"] = "Return to the main command hub."
+
+                context = self._get_explore_context(location, self.selected_poi) if location else {}
+                context["option_descriptions"] = option_descriptions
 
                 choice = self.ui.present_choices(
                     interaction_options,
                     f"Interact with {self.selected_poi.name}",
-                    context=self._get_explore_context(location, self.selected_poi) if location else None,
+                    context=context,
                 )
                 if choice == "back":
                     self.explore_menu_state = "location"
@@ -1966,8 +2216,9 @@ class Game:
                     if not event_result["event_triggered"]:
                         self.GAME_LOG.add_log_message("It seems quiet right now.")
                 else:
-                    self.handle_interaction(interaction_options[choice])
-                    if self.explore_menu_state not in ["shop", "write_song_menu", "talk", "dialogue", "dealership", "pawn_sell", "pawn_buy"]:
+                    raw_text = self._raw_interaction_map.get(choice, interaction_options.get(choice, choice))
+                    self.handle_interaction(raw_text)
+                    if self.explore_menu_state == "poi":
                         self.explore_menu_state = "location"
                         self.selected_poi = None
             else:
@@ -2128,8 +2379,8 @@ class Game:
                 insp_cost = 50
                 can_use_insp = self.player.inspiration >= insp_cost
 
-                start_label = f"Start writing '{title}' ({genre}) (Will take ~8 hours)"
-                start_insp_label = f"Start with Inspiration (Cost {insp_cost} Insp, Quality++)"
+                start_label = f"Start '{title}' ({genre}) / lyrics session, 2 hours"
+                start_insp_label = f"Write with inspiration / 2 hours / {insp_cost} inspiration"
 
                 confirm_options = {"yes": start_label}
                 if can_use_insp:
@@ -2141,6 +2392,9 @@ class Game:
                 choice = self.ui.present_choices(confirm_options, f"Ready to write? (Inspiration: {self.player.inspiration}/100)")
 
                 if choice in ["yes", "yes_insp", "band"]:
+                    if self.player.energy < 15:
+                        self.GAME_LOG.add_log_message("You are too exhausted to start a writing session.")
+                        return
                     if choice == "yes_insp":
                         self.player.inspiration -= insp_cost
                         self.song_in_progress['inspiration_bonus'] = 0.2 # 20% quality boost
@@ -2157,94 +2411,9 @@ class Game:
                     self.songwriting_stage = None
 
             if self.songwriting_stage == "writing_components":
-                # This is a non-interactive stage, so we do the work and then change state.
-                insp_bonus = self.song_in_progress.get('inspiration_bonus', 0.0)
-                is_collaborative = self.song_in_progress.get('is_collaborative', False)
-
-                if is_collaborative:
-                    self.GAME_LOG.add_log_message(f"You call a band meeting to write '{self.song_in_progress.get('title')}'.")
-                    band = self.player.band
-
-                    # Band chemistry determines how well skills blend and how likely conflicts are
-                    chem_bonus = (band.chemistry - 50) / 200.0 # From -0.25 to +0.25
-
-                    # Simulating conflicts
-                    conflict_chance = max(0.05, 0.5 - (band.chemistry / 150.0))
-                    if random.random() < conflict_chance:
-                        # Find two different members to argue
-                        if len(band.members) >= 2:
-                            m1, m2 = random.sample(band.members, 2)
-                            self.GAME_LOG.add_log_message(f"DRAMA: {m1.name} and {m2.name} argue over the creative direction!")
-                            band.update_chemistry(-5)
-                            chem_bonus -= 0.15 # Massive penalty to the song quality
-                            self.player.stress = min(100, self.player.stress + 10)
-                        else:
-                            self.GAME_LOG.add_log_message("DRAMA: Creative blocks and frustration hit the room.")
-                            chem_bonus -= 0.1
-                    elif random.random() < (band.chemistry / 150.0):
-                        self.GAME_LOG.add_log_message("SYNERGY: The band locks into a perfect groove!")
-                        chem_bonus += 0.15
-                        band.update_chemistry(2)
-                        self.player.stress = max(0, self.player.stress - 5)
-
-                    # Lyrics (2 hours)
-                    lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus + chem_bonus
-                    self.song_in_progress['lyrical_depth'] = max(0.1, min(1.0, lyrical_depth))
-                    self._advance_time_with_needs(120)
-                    self.GAME_LOG.add_log_message(f"The band hashes out the lyrics. (Quality: {self.song_in_progress['lyrical_depth']:.2f})")
-
-                    # Melody (3 hours)
-                    catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus + chem_bonus
-                    self.song_in_progress['catchiness'] = max(0.1, min(1.0, catchiness))
-                    self._advance_time_with_needs(180)
-                    self.GAME_LOG.add_log_message(f"Working out the vocal melodies together. (Quality: {self.song_in_progress['catchiness']:.2f})")
-
-                    # Arrangement / Complexity (3 hours)
-                    music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus + chem_bonus
-                    self.song_in_progress['music_complexity'] = max(0.1, min(1.0, music_complexity))
-
-                    originality = self._calculate_song_component_quality('songwriting') + insp_bonus + chem_bonus
-                    self.song_in_progress['originality'] = max(0.1, min(1.0, originality))
-
-                    self._advance_time_with_needs(180)
-                    self.GAME_LOG.add_log_message(f"The final arrangement comes together. (Complexity: {self.song_in_progress['music_complexity']:.2f}, Originality: {self.song_in_progress['originality']:.2f})")
-
-                else:
-                    self.GAME_LOG.add_log_message("You spend a long day writing solo...")
-
-                    # Lyrics (2 hours)
-                    # Temporarily force player skills if not collaborating
-                    old_band = self.player.band
-                    self.player.band = None
-                    lyrical_depth = self._calculate_song_component_quality('songwriting') + insp_bonus
-                    self.player.band = old_band
-                    self.song_in_progress['lyrical_depth'] = min(1.0, lyrical_depth)
-                    self._advance_time_with_needs(120)
-                    self.GAME_LOG.add_log_message(f"The lyrics are coming together (Quality: {lyrical_depth:.2f})")
-
-                    # Melody (3 hours)
-                    self.player.band = None
-                    catchiness = self._calculate_song_component_quality('songwriting', 'guitar') + insp_bonus
-                    self.player.band = old_band
-                    self.song_in_progress['catchiness'] = min(1.0, catchiness)
-                    self._advance_time_with_needs(180)
-                    self.GAME_LOG.add_log_message(f"You've got a catchy melody! (Quality: {catchiness:.2f})")
-
-                    # Arrangement / Complexity (3 hours)
-                    self.player.band = None
-                    music_complexity = self._calculate_song_component_quality('guitar', 'songwriting', weight=0.7) + insp_bonus
-                    originality = self._calculate_song_component_quality('songwriting') + insp_bonus
-                    self.player.band = old_band
-
-                    self.song_in_progress['music_complexity'] = min(1.0, music_complexity)
-                    self.song_in_progress['originality'] = min(1.0, originality)
-
-                    self._advance_time_with_needs(180)
-                    self.GAME_LOG.add_log_message(f"The arrangement is taking shape (Complexity: {music_complexity:.2f}, Originality: {originality:.2f})")
-
-                self.GAME_LOG.add_log_message("The song is written! Now to finalize it.")
-                self.songwriting_stage = "invite_feature"
-                # Fall through to the invite stage immediately
+                from game.creative_work import work_on_draft
+                if not work_on_draft(self):
+                    return
 
             if self.songwriting_stage == "invite_feature":
                 eligible_features = []
@@ -2424,13 +2593,28 @@ class Game:
                 song_options = {str(i): f"'{s.title}' (Quality: {s.song_quality:.2f})" for i, s in enumerate(unrecorded_songs)}
                 song_options["back"] = "Cancel"
 
-                choice = self.ui.present_choices(song_options, recording_setup["title"])
+                choice = self.ui.present_choices(song_options, recording_setup["title"], context={
+                    "subtitle": f"{recording_setup['minutes'] // 60} hours / ${recording_setup['base_session_cost']} before producer fees",
+                    "details": ["Recording consumes 6 energy per hour. Condition affects the take.",
+                                f"Energy {self.player.energy}/100; studio quality {recording_setup['studio_quality']:.2f}"],
+                })
 
                 if choice == "back":
                     self.explore_menu_state = "poi"
                 else:
+                    if self.player.energy < 15:
+                        self.GAME_LOG.add_log_message("You are too exhausted to record. No session booked.")
+                        self.explore_menu_state = "poi"
+                        return
                     selected_song = unrecorded_songs[int(choice)]
                     studio_quality = recording_setup["studio_quality"]
+                    recording_req = self._assess_recording_requirements()
+                    if recording_req.status == "missing_and_severe":
+                        self.GAME_LOG.add_log_message(
+                            f"You cannot start recording without required loadout: {', '.join(recording_req.missing_severe)}."
+                        )
+                        self.explore_menu_state = "poi"
+                        return
 
                     prod_cost = 0
                     prod_bonus = 0.0
@@ -2439,9 +2623,13 @@ class Game:
                         prod_options = {
                             "none": "Self-Produced (No Cost)",
                             "local": "Hire Local Producer (+$200, +Quality)",
-                            "pro": "Hire Pro Producer (+$1000, ++Quality)"
+                            "pro": "Hire Pro Producer (+$1000, ++Quality)",
+                            "back": "Cancel session"
                         }
                         prod_choice = self.ui.present_choices(prod_options, "Select Producer:")
+                        if prod_choice == "back":
+                            self.explore_menu_state = "poi"
+                            return
                         if prod_choice == "local":
                             prod_cost = 200
                             prod_bonus = 0.1
@@ -2457,7 +2645,8 @@ class Game:
                         return
 
                     self.player.money -= session_cost
-                    self._advance_time_with_needs(recording_setup["minutes"])
+                    from game.creative_work import spend_session
+                    spend_session(self, recording_setup["minutes"], effort=6)
                     if session_cost > 0:
                         self.GAME_LOG.add_log_message(f"{recording_setup['log']} (-${session_cost})")
                     else:
@@ -2746,6 +2935,101 @@ class Game:
             self.player.stress = min(100, self.player.stress + 3)
         return assessment
 
+    def _assess_rehearsal_requirements(self):
+        rehearsal_requirements = [
+            {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+        ]
+        return self.inventory_service.assess_requirements(
+            self.player,
+            rehearsal_requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _assess_recording_requirements(self):
+        recording_requirements = [
+            {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+            {"match_type": "semantic", "key": "strings", "count": 1, "mandatory": True},
+        ]
+        return self.inventory_service.assess_requirements(
+            self.player,
+            recording_requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _assess_creative_obligation_requirements(self, event):
+        if not event or not isinstance(getattr(event, "details", None), dict):
+            return None
+
+        category = str(getattr(event, "category", "") or "").lower()
+        work_category = str(event.details.get("work_category", "") or "").lower()
+        description = str(getattr(event, "description", "") or "").lower()
+        text = f"{category} {work_category} {description}"
+
+        requirements = []
+        if "rehears" in text:
+            requirements = [{"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True}]
+        elif category == "studio session" or "record" in text:
+            requirements = [
+                {"match_type": "semantic", "key": "instrument", "count": 1, "mandatory": True},
+                {"match_type": "semantic", "key": "strings", "count": 1, "mandatory": True},
+            ]
+
+        if not requirements:
+            return None
+
+        return self.inventory_service.assess_requirements(
+            self.player,
+            requirements,
+            self.PLAYER_HOME_POI_ID_GLOBAL,
+            self._current_poi_id(),
+        )
+
+    def _record_creative_obligation_failure_memory(self, event, expected_dest, reason_code):
+        self.world_memory.add(
+            WorldMemoryEntry(
+                event_type="missed_obligation",
+                involved_entities=[self.player.name],
+                location=expected_dest,
+                timestamp=current_game_time.copy(),
+                tags=["professionalism", "reliability", "creative_work"],
+                impact_score=2.0,
+                metadata={
+                    "category": event.category,
+                    "description": event.description,
+                    "reason_code": reason_code,
+                },
+                source_key=f"missed_obligation:{self.player.name}:{event.category}:{event.description}:{expected_dest}:{reason_code}:{current_game_time.get_time_string_for_schedule()}",
+            )
+        )
+
+    def _record_missed_gig_memory(self, event, expected_dest, reason_code):
+        self.world_memory.add(
+            WorldMemoryEntry(
+                event_type="missed_gig",
+                involved_entities=[self.player.name],
+                location=expected_dest,
+                timestamp=current_game_time.copy(),
+                tags=["professionalism", "reliability", "performance"],
+                impact_score=3.0,
+                metadata={
+                    "category": event.category,
+                    "description": event.description,
+                    "reason_code": reason_code,
+                },
+                source_key=f"missed_gig:{self.player.name}:{event.description}:{expected_dest}:{reason_code}:{current_game_time.get_time_string_for_schedule()}",
+            )
+        )
+
+    def _apply_contract_obligation_outcome(self, event, success: bool):
+        if not event or not isinstance(getattr(event, "details", None), dict):
+            return
+        contract_id = event.details.get("contract_id")
+        if not contract_id or not hasattr(self, "organization_contracts"):
+            return
+        self.organization_contracts.record_contract_outcome(contract_id, "success" if success else "miss")
+
     def handle_local_presence_action(self, local_action):
         if not self.selected_poi:
             self.GAME_LOG.add_log_message("No active place selected for local actions.")
@@ -2844,6 +3128,10 @@ class Game:
 
 
     def handle_interaction(self, interaction_text, time_cost=15):
+        from game.world_actions import normalize_action, dispatch
+        interaction_text = normalize_action(interaction_text)
+        if dispatch(self, interaction_text):
+            return
         self.GAME_LOG.add_log_message(f"Selected interaction: {interaction_text}")
 
         home_only_actions = {
@@ -2867,6 +3155,7 @@ class Game:
             self.explore_menu_state = "view_events"
             return
         no_time_cost = interaction_text in [
+            "Record a rough demo", "Record a home demo",
             "Browse items for sale",
             "Buy Food Items",
             "Write a new song",
@@ -2978,6 +3267,12 @@ class Game:
             else:
                 self.GAME_LOG.add_log_message("You need to rent a room here before you can sleep.")
         elif interaction_text.startswith("Book Rehearsal Slot"):
+            rehearsal_req = self._assess_rehearsal_requirements()
+            if rehearsal_req.status == "missing_and_severe":
+                self.GAME_LOG.add_log_message(
+                    f"You cannot start rehearsal without required gear: {', '.join(rehearsal_req.missing_severe)}."
+                )
+                return
             rehearsal_cost = 25 if "$25" in interaction_text else 10
             if self.player.money < rehearsal_cost:
                 self.GAME_LOG.add_log_message(f"You need ${rehearsal_cost} to book rehearsal time.")
@@ -3114,9 +3409,8 @@ class Game:
             else:
                 self.GAME_LOG.add_log_message(f"You need at least {min_fame} fame to submit a demo here. Current fame: {self.player.fame}.")
         elif interaction_text == "Write a new song":
-            self.explore_menu_state = "write_song_menu"
-            self.songwriting_stage = "choose_genre"
-            self.song_in_progress = {}
+            from game.creative_work import open_notebook
+            open_notebook(self)
         elif interaction_text == "Book recording session":
             self.explore_menu_state = "record_song"
         elif interaction_text in ["Record a rough demo", "Record a home demo"]:
@@ -3181,9 +3475,26 @@ class Game:
         travel_options = {
             "intra_city": f"Travel within {self.player.current_location.name}",
             "inter_city": "Travel to another city",
-            "back": "Back"
+            "back": "Back to Main Menu"
         }
-        choice = self.ui.present_choices(travel_options, "Travel")
+        context = {
+            "eyebrow": "City Transit & Navigation",
+            "subtitle": f"Current City: {self.player.current_location.name} • Location: {self.player.current_poi.name if self.player.current_poi else 'In Transit'}",
+            "panel_title": "Travel Options",
+            "details": [
+                f"Points of Interest: {len(self.player.current_location.points_of_interest)} places",
+                f"Venues in City: {len(self.player.current_location.venues)} stages",
+                f"Connected Cities: {len(self.player.current_location.travel_connections)} routes",
+                f"Available Cash: ${self.player.money}",
+            ],
+            "option_descriptions": {
+                "intra_city": f"Browse and travel to local POIs, venues, and shops in {self.player.current_location.name}.",
+                "inter_city": "Take a bus, train, or flight to another metropolitan music scene.",
+                "back": "Return to the main command hub.",
+            },
+            "accent": (255, 140, 70)
+        }
+        choice = self.ui.present_choices(travel_options, "City Map & Travel", context=context)
 
         if choice == "back":
             self.game_state = "main_menu"
@@ -3204,41 +3515,75 @@ class Game:
                     self.GAME_LOG.add_log_message("No direct local routes are available from here right now.")
                 else:
                     dest_map = {t.poi_id if hasattr(t, 'poi_id') else t.venue_id: t for t in reachable_targets}
-                    dest_disp = {k: v.name for k, v in dest_map.items()}
+                    dest_disp = {}
+                    dest_descriptions = {}
+
+                    for k, t in dest_map.items():
+                        cat = getattr(t, "category", "")
+                        venue_type = getattr(t, "venue_type", "")
+                        if venue_type or hasattr(t, "venue_id"):
+                            tag = "[VENUE]"
+                            desc = f"Live stage: {t.name}. Check for gigs, open mics, and crowds."
+                        elif "LODGING" in cat or "HOME" in cat or "Apartment" in t.name or "Motel" in t.name or "Hotel" in t.name:
+                            tag = "[LODGING]"
+                            desc = f"Living & Rest: {t.name}. Sleep, eat, and recover energy."
+                        elif "STUDIO" in cat or "Studio" in t.name or "Rehearsal" in t.name or "Garage" in t.name:
+                            tag = "[STUDIO]"
+                            desc = f"Creative Space: {t.name}. Practice, jam, and record."
+                        elif "TRANSPORT" in cat or "Transit" in t.name or "Terminal" in t.name or "Airport" in t.name or "Station" in t.name:
+                            tag = "[TRANSIT]"
+                            desc = f"Transit Hub: {t.name}. Access buses, trains, and flights."
+                        elif "SHOP" in cat or "Shop" in t.name or "Pawn" in t.name or "Audio" in t.name or "Guitar" in t.name:
+                            tag = "[SHOP]"
+                            desc = f"Commercial Shop: {t.name}. Buy gear, strings, and supplies."
+                        elif "DINER" in cat or "Diner" in t.name or "Cafe" in t.name or "Food" in t.name or "Bodega" in t.name:
+                            tag = "[DINER]"
+                            desc = f"Food & Dining: {t.name}. Eat meals to manage hunger and comfort."
+                        else:
+                            tag = "[PLACE]"
+                            desc = f"Point of interest in {self.player.current_location.name}."
+
+                        dest_disp[k] = f"{tag} {t.name}"
+                        dest_descriptions[k] = desc
+
                     dest_disp["back"] = "Cancel"
+                    dest_descriptions["back"] = "Return to travel selection."
 
                     chosen_dest_key = self.ui.present_choices(
                         dest_disp,
                         f"Travel from {self.player.current_poi.name}",
                         context={
-                            "eyebrow": "Local Movement",
-                            "subtitle": "Pick a reachable place first, then choose how you want to get there.",
-                            "panel_title": "Travel Notes",
+                            "eyebrow": "Local Destinations",
+                            "subtitle": f"Browse available spots in {self.player.current_location.name}.",
+                            "panel_title": "Destination Info",
                             "details": [
-                                "Walking is cheap but burns time.",
-                                "Bike routes only work if you actually own a bike.",
-                                "Taxis save time but cost cash you may need elsewhere.",
+                                "Walking is free but takes time.",
+                                "Bikes reduce travel time if owned.",
+                                "Taxis/cabs are fastest but cost money.",
                             ],
+                            "option_descriptions": dest_descriptions,
+                            "accent": (255, 140, 70),
                         },
                     )
                     if chosen_dest_key != "back":
                         chosen_dest_poi = dest_map[chosen_dest_key]
                         connection_details = self._get_intra_city_connection(self.player.current_poi, chosen_dest_poi)
                         mode_options = self._build_intra_city_mode_options(connection_details)
-                        mode_options["back"] = "Back"
+                        mode_options["back"] = "Cancel"
 
                         chosen_mode = self.ui.present_choices(
                             mode_options,
                             f"How do you want to get to {chosen_dest_poi.name}?",
                             context={
-                                "eyebrow": "Route Choice",
-                                "subtitle": f"Leaving from {self.player.current_poi.name}. Different transport choices trade time for money and access.",
-                                "panel_title": "Route Data",
+                                "eyebrow": "Transport Method",
+                                "subtitle": f"From {self.player.current_poi.name} -> {chosen_dest_poi.name}",
+                                "panel_title": "Trip Summary",
                                 "details": [
                                     f"Destination: {chosen_dest_poi.name}",
-                                    f"Current cash: ${self.player.money}",
-                                    "More transport types can plug into this same flow later.",
+                                    f"Current Cash: ${self.player.money}",
+                                    f"Current Energy: {self.player.energy}%",
                                 ],
+                                "accent": (255, 140, 70),
                             },
                         )
                         if chosen_mode in ("walk_locked", "bike_locked", "taxi_locked", "back"):
@@ -3334,7 +3679,8 @@ class Game:
                     class_opts = {
                         "economy": f"Economy (${travel_details['cost']})",
                         "business": f"Business (${travel_details['cost']*2}) - Less Stress",
-                        "first": f"First Class (${travel_details['cost']*5}) - Comfort"
+                        "first": f"First Class (${travel_details['cost']*5}) - Comfort",
+                        "back": "Cancel"
                     }
                     ticket_class = self.ui.present_choices(
                         class_opts,
@@ -3351,6 +3697,10 @@ class Game:
                         },
                     )
 
+                if ticket_class == "back":
+                    self.game_state = "main_menu"
+                    return
+
                 # Check money for public transport here (approx check)
                 base_cost = travel_details['cost']
                 multiplier = 1
@@ -3365,7 +3715,8 @@ class Game:
                     dest_loc_obj = self.WORLD_MAP.get(dest_choice)
                     if dest_loc_obj:
                         # Estimate distance from time (assuming 60km/h average for generic "time_hours" in data)
-                        estimated_distance = travel_details['time_hours'] * 60.0
+                        route_speed = {'plane': 800.0, 'train': 100.0}.get(public_mode, 60.0) if using_public_transit else 60.0
+                        estimated_distance = travel_details['time_hours'] * route_speed
 
                         transport_mode = selected_vehicle if selected_vehicle else public_mode
 
@@ -3486,13 +3837,13 @@ class Game:
             levels_gained = int(player.hair_growth_progress // player.HAIR_POINTS_PER_LENGTH_LEVEL)
             player.hair_length = min(player.MAX_HAIR_LENGTH, player.hair_length + levels_gained)
             player.hair_growth_progress %= player.HAIR_POINTS_PER_LENGTH_LEVEL
-            if levels_gained > 0 and self.GAME_LOG: self.GAME_LOG.add_message(f"DEBUG: Your hair grew! New length: {player.hair_length}/{player.MAX_HAIR_LENGTH}")
+            if levels_gained > 0 and self.GAME_LOG: self.GAME_LOG.add_message("Your hair is getting longer.")
 
         if player.beard_growth_progress >= player.BEARD_POINTS_PER_LENGTH_LEVEL:
             levels_gained = int(player.beard_growth_progress // player.BEARD_POINTS_PER_LENGTH_LEVEL)
             player.beard_length = min(player.MAX_BEARD_LENGTH, player.beard_length + levels_gained)
             player.beard_growth_progress %= player.BEARD_POINTS_PER_LENGTH_LEVEL
-            if levels_gained > 0 and self.GAME_LOG: self.GAME_LOG.add_message(f"DEBUG: Your beard grew! New length: {player.beard_length}/{player.MAX_BEARD_LENGTH}")
+            if levels_gained > 0 and self.GAME_LOG: self.GAME_LOG.add_message("Stubble is becoming a beard.")
 
     def update_npc_locations(self, gt_obj):
         time_slot_key = self._get_time_slot_key(gt_obj)
@@ -3664,18 +4015,21 @@ class Game:
     def handle_phone_menu(self):
         if self.phone_menu_state == "main":
             phone_menu_opts = {
-                "news": "Read News Feed",
-                "schedule": "Schedule",
-                "music": "Music",
-                "contacts": "Contacts",
-                "web": "Web",
+                "news": "[SOCIAL] News & Scene Feed",
+                "schedule": "[WORK] Calendar & Upcoming Gigs",
+                "contacts": "[CONTACT] Known Musician Contacts",
+                "scene": "[CONTACT] Artists in Town",
+                "work": "Local shift listings",
+                "live": "Live bookings & settlements",
+                "staff": "[WORK] Support Team (Crew & Security)",
+                "web": "[SOCIAL] Internet, Social Media & Web",
             }
             if self.player.has_manager:
-                phone_menu_opts["agent"] = "Call Agent"
+                phone_menu_opts["agent"] = "[CONTACT] Call Booking Agent"
 
             # Add dynamic opportunities
             if self.player.pending_contracts:
-                phone_menu_opts["label_offers"] = f"View Record Deal Offer ({len(self.player.pending_contracts)})"
+                phone_menu_opts["label_offers"] = f"[GIG] Record Deal Offers ({len(self.player.pending_contracts)})"
 
             for opp_id, opp_details in self.player.active_opportunities.items():
                 if opp_details["status"] == "available":
@@ -3683,20 +4037,43 @@ class Game:
                         npc_id = opp_id.replace('guest_feature_', '')
                         npc = self.NPC_REGISTRY.get(npc_id)
                         if npc:
-                            phone_menu_opts[opp_id] = f"Accept feature request from {npc.name}"
+                            phone_menu_opts[opp_id] = f"[GIG] Feature Request from {npc.name}"
                     elif opp_id.startswith('tour_offer_'):
                         tour_id = opp_id.replace('tour_offer_', '')
                         tour_data = next((t for t in self.TOURS if t['tour_id'] == tour_id), None)
                         if tour_data:
-                            phone_menu_opts[opp_id] = f"Accept tour offer: '{tour_data['name']}'"
+                            phone_menu_opts[opp_id] = f"[TOUR] Tour Offer: '{tour_data['name']}'"
                     else:
                         opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
                         if opp_data and opp_data.get("type") == "phone":
-                            phone_menu_opts[opp_id] = opp_data["action_text"]
+                            phone_menu_opts[opp_id] = f"[GIG] {opp_data['action_text']}"
 
-            phone_menu_opts["back"] = "Back"
+            phone_menu_opts["back"] = "Back to Main Menu"
 
-            choice = self.ui.present_choices(phone_menu_opts, "Phone")
+            context = {
+                "eyebrow": "Smartphone & Communications",
+                "subtitle": "Check feeds, respond to offers, contact peers, and browse the web.",
+                "panel_title": "Network Overview",
+                "details": [
+                    f"Contacts in Phone: {len(self.player.contacts)}",
+                    f"Active Opportunities: {sum(1 for o in self.player.active_opportunities.values() if o['status'] == 'available')}",
+                    f"Pending Record Deals: {len(self.player.pending_contracts)}",
+                    f"Support Staff: {len(self.player.staff)} crew members",
+                ],
+                "option_descriptions": {
+                    "news": "Read music publications, billboard news, and city scene buzz.",
+                    "schedule": "View upcoming gigs, tours, rehearsal blocks, and calendar dates.",
+                    "contacts": "Reach out to musicians and industry connections in your address book.",
+                    "staff": "Hire or manage roadies, sound engineers, and security personnel.",
+                    "web": "Browse online music platforms, social media, and digital releases.",
+                    "agent": "Call your talent agent to review tours, festival slots, and corporate gigs.",
+                    "label_offers": "Review and sign pending record deal contracts.",
+                    "back": "Return to the main command hub.",
+                },
+                "accent": (52, 211, 153)
+            }
+
+            choice = self.ui.present_choices(phone_menu_opts, "Phone & Network", context=context)
 
             if choice == "back":
                 self.game_state = "main_menu"
@@ -3715,26 +4092,34 @@ class Game:
                 self.phone_menu_state = "news"
             else:
                 self.phone_menu_state = choice
+        elif self.phone_menu_state == "live":
+            from game.live_bookings import booking_desk
+            booking_desk(self)
+            self.phone_menu_state = "main"
+        elif self.phone_menu_state == "work":
+            from game.career_actions import shift_listings
+            shift_listings(self)
+            self.phone_menu_state = "main"
+        elif self.phone_menu_state == "scene":
+            from game.career_actions import scene_network
+            scene_network(self)
+            self.phone_menu_state = "main"
         elif self.phone_menu_state == "news":
-            feed = get_news_feed()
-            if not feed:
-                info = "No news yet."
-            else:
-                info = "--- LATEST NEWS ---\n" + "\n".join(feed[:10])
-
-            self.ui.present_choices({"back": "Back"}, info)
+            from game.career_actions import report
+            feed = list(reversed(self.dynamic_musicians.world_event_logs[-15:])) + get_news_feed()[:10]
+            report(self, "The music pages", "\n\n".join(feed) or "Nothing in the music pages today.")
             self.phone_menu_state = "main"
 
         elif self.phone_menu_state == "agent":
             self.handle_agent_menu()
-        elif self.phone_menu_state == "contacts":
+        elif self.phone_menu_state == "staff":
+            self.handle_staff_management_menu()
+        elif self.phone_menu_state in {"contacts", "contact_details"}:
             self.handle_contacts_menu()
         elif self.phone_menu_state == "schedule":
-            upcoming_events = self.player.schedule.get_upcoming_events(current_game_time, limit=5)
-            self.ui.draw_schedule_screen(upcoming_events)
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.phone_menu_state = "main"
+            from game.career_actions import report
+            report(self, "Calendar", "\n\n".join(str(e) for e in self.player.schedule.scheduled_items) or "No commitments.")
+            self.phone_menu_state = "main"
         elif self.phone_menu_state == "web":
             self.handle_web_menu()
         elif self.phone_menu_state == "label_offers":
@@ -3783,6 +4168,16 @@ class Game:
                 if pulled:
                     self.player.pending_contracts.pop(0)
                     self.phone_menu_state = "main"
+            elif choice == "manager_negotiate":
+                manager_role = self.delegation_system.get_role(self.player, "manager")
+                manager_skill = int(self.delegation_system.role_quality(manager_role) * 5) if manager_role else 1
+                self.GAME_LOG.add_log_message("Manager: 'Let me handle this. I'll push for better terms.'")
+                has_charisma = self.player.has_trait("charismatic")
+                success, msg, pulled = contract.negotiate(self.player.fame, has_charisma, manager_skill=manager_skill)
+                self.GAME_LOG.add_log_message(msg)
+                if pulled:
+                    self.player.pending_contracts.pop(0)
+                    self.phone_menu_state = "main"
             elif choice == "decline":
                 self.GAME_LOG.add_log_message(f"You declined the offer from {contract.label_name}.")
                 self.player.pending_contracts.clear()
@@ -3791,9 +4186,57 @@ class Game:
                 self.phone_menu_state = "main"
 
 
+    def handle_staff_management_menu(self):
+        self.delegation_system.ensure_player_support(self.player)
+        roles = self.player.delegation_roles
+
+        menu_opts = {}
+        for role_type, data in self.delegation_system.DEFAULTS.items():
+            role_obj = roles.get(role_type)
+            if role_obj and role_obj.active:
+                menu_opts[f"fire_{role_type}"] = f"Dismiss {role_type.capitalize()} (Upkeep ${role_obj.upkeep}/wk)"
+            else:
+                menu_opts[f"hire_{role_type}"] = f"Hire {role_type.capitalize()} (Est Upkeep ${data['upkeep']}/wk)"
+        menu_opts["back"] = "Back"
+
+        hired_summary = []
+        for r_type, r_obj in roles.items():
+            if r_obj.active:
+                quality = self.delegation_system.role_quality(r_obj)
+                hired_summary.append(f"- {r_type.capitalize()}: ${r_obj.upkeep}/wk | Quality {int(quality*100)}%")
+
+        info_header = "Support Team Management\n" + ("\n".join(hired_summary) if hired_summary else "No active support staff.")
+        choice = self.ui.present_choices(
+            menu_opts,
+            info_header,
+            context={
+                "eyebrow": "Team Roster",
+                "subtitle": "Hire specialized staff to boost booking leverage, logistics, safety, and travel.",
+                "panel_title": "Role Benefits",
+                "details": [
+                    "Manager: Improves contract negotiation & opens top gig slots",
+                    "Assistant: Helps satisfy venue prep & event requirements",
+                    "Driver: Speeds up inter-city transit & boosts travel rest",
+                    "Security: Reduces visibility/stress pressure at public events",
+                ],
+            },
+        )
+
+        if choice == "back":
+            self.phone_menu_state = "main"
+        elif choice.startswith("hire_"):
+            role_type = choice.replace("hire_", "")
+            self.delegation_system.add_or_update_role(self.player, role_type, active=True)
+            self.GAME_LOG.add_log_message(f"You hired a {role_type.capitalize()} for your support team.")
+        elif choice.startswith("fire_"):
+            role_type = choice.replace("fire_", "")
+            if role_type in self.player.delegation_roles:
+                self.player.delegation_roles[role_type].active = False
+                self.GAME_LOG.add_log_message(f"You dismissed your {role_type.capitalize()}.")
+
     def handle_agent_menu(self):
         opts = {
-            "find_gig": "Find Gig (Immediate)",
+            "find_gig": "Review local show offers",
             "seek_label": "Seek Record Deal",
             "plan_tour": "Plan Tour (Start Wizard)",
             "back": "Hang Up"
@@ -3803,42 +4246,8 @@ class Game:
         if choice == "back":
             self.phone_menu_state = "main"
         elif choice == "find_gig":
-            # Simplified gig finding logic
-            self.GAME_LOG.add_log_message("Agent: 'Let me make some calls...'")
-            self._advance_time_with_needs(60) # 1 hour
-
-            if random.random() < 0.5 + (self.player.fame / 500.0):
-                self.GAME_LOG.add_log_message("Agent: 'I found a slot at a club for tomorrow night!'")
-                candidate_venues = sorted(
-                    self.player.current_location.venues,
-                    key=lambda venue: venue.prestige + self._venue_memory_bias(getattr(venue, "venue_id", None)),
-                    reverse=True,
-                ) if self.player.current_location else []
-                if not candidate_venues:
-                    self.GAME_LOG.add_log_message("Agent: 'Actually, I couldn't lock down a venue in your current city.'")
-                    return
-
-                venue = candidate_venues[0]
-                booked_event = Event(
-                    name=f"Agent Booked Gig @ {venue.name}",
-                    event_type="OPEN_MIC" if self.player.fame < 50 else "CLUB_GIG",
-                    location=venue,
-                )
-                venue.add_event(booked_event)
-                gig_time = current_game_time.copy()
-                gig_time.add_days(1)
-                gig_time.hour = 20
-                gig_end_time = gig_time.copy()
-                gig_end_time.add_hours(2)
-                self.player.schedule.add_event(
-                    gig_time,
-                    gig_end_time,
-                    booked_event.name,
-                    "Gig",
-                    {"event_id": booked_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
-                )
-            else:
-                self.GAME_LOG.add_log_message("Agent: 'Sorry, nothing available right now.'")
+            from game.live_bookings import local_show_desk
+            local_show_desk(self)
 
         elif choice == "seek_label":
             self.GAME_LOG.add_log_message("Agent: 'Let me pitch your portfolio to some A&R reps. Give me a few hours.'")
@@ -3871,48 +4280,8 @@ class Game:
                 self.GAME_LOG.add_log_message("Agent: 'Sorry, none of the labels I pitched to are biting right now. Build up your fame and try again later.'")
 
         elif choice == "plan_tour":
-            self.GAME_LOG.add_log_message("Agent: 'Let me look at some routing options for a regional tour...'")
-            self._advance_time_with_needs(240) # 4 hours
-
-            if self.player.fame < 100:
-                self.GAME_LOG.add_log_message("Agent: 'You don't have enough pull yet for a multi-city tour. We need to build your local fame first.'")
-            else:
-                self.GAME_LOG.add_log_message("Agent: 'I've mapped out a short 3-stop regional tour!'")
-                # Find venues across different cities if possible, or just 3 decent venues
-                all_venues = []
-                for loc in self.WORLD_MAP.values():
-                    all_venues.extend(loc.venues)
-
-                if len(all_venues) >= 3:
-                    tour_venues = random.sample(all_venues, 3)
-                    start_time = current_game_time.copy()
-                    start_time.add_days(2) # Start in 2 days
-
-                    for i, venue in enumerate(tour_venues):
-                        gig_time = start_time.copy()
-                        gig_time.add_days(i * 2) # Every 2 days
-                        gig_time.hour = 20
-
-                        booked_event = Event(
-                            name=f"Tour Gig @ {venue.name}",
-                            event_type="CLUB_GIG",
-                            location=venue,
-                        )
-                        venue.add_event(booked_event)
-
-                        gig_end_time = gig_time.copy()
-                        gig_end_time.add_hours(2)
-
-                        self.player.schedule.add_event(
-                            gig_time,
-                            gig_end_time,
-                            f"Tour: {venue.name}",
-                            "Gig",
-                            {"event_id": booked_event.event_id, "venue_id": venue.venue_id, "destination_id": venue.venue_id, "requires_presence": True},
-                        )
-                    self.GAME_LOG.add_log_message("Check your Schedule for the new tour dates!")
-                else:
-                    self.GAME_LOG.add_log_message("Agent: 'Actually, I couldn't find enough suitable venues to string together a tour right now.'")
+            from game.live_bookings import booking_desk
+            booking_desk(self)
 
     def handle_web_menu(self):
         if self.web_menu_state == "main":
@@ -3989,6 +4358,45 @@ class Game:
 
 
     def handle_opportunity(self, opp_id):
+        if opp_id.startswith('tour_offer_'):
+            from game.live_bookings import propose_tour, review_proposal, commit_tour
+            proposal = propose_tour(self, opp_id.removeprefix('tour_offer_'))
+            if not proposal['ok']:
+                self.GAME_LOG.add_log_message(proposal['explanation'])
+                return
+            if review_proposal(self, proposal) == 'book':
+                result = commit_tour(self, proposal)
+                self.GAME_LOG.add_log_message(result['explanation'])
+                if result['ok']:
+                    self.player.active_opportunities.setdefault(opp_id, {})['status'] = 'completed'
+            return
+        if opp_id.startswith('guest_feature_'):
+            npc = self.NPC_REGISTRY.get(opp_id.removeprefix('guest_feature_'))
+            offer = self.player.active_opportunities.get(opp_id, {})
+            if not npc or offer.get('status') != 'available':
+                return
+            choice = self.ui.present_choices({'record': 'Record a remote guest part / 4 hours', 'back': 'Decide later'},
+                f'Feature request / {npc.name}', context={'details': [
+                    'Requires your home recording setup or a studio.', 'Session fee: $100 to $250, depending on playing skill.',
+                    'Four hours of recording will use energy and may overlap your commitments.']})
+            if choice != 'record':
+                return
+            if (self.game_state == 'travel_active' or getattr(self.player.current_poi, 'category', '') not in {'HOME', 'STUDIO_RECORDING'}):
+                self.GAME_LOG.add_log_message('Record this part at home or in a studio. The invitation remains open.')
+                return
+            if self.player.energy < 25:
+                self.GAME_LOG.add_log_message('You need at least 25 energy for this session.')
+                return
+            offer['status'] = 'completed'
+            skill = max(self.player.skills.values(), default=0)
+            money, fame = (250, 20) if skill > 10 else (100, 10)
+            self.player.energy = max(0, self.player.energy - 24)
+            self._advance_time_with_needs(240)
+            self.player.money += money
+            self.player.fame += fame
+            npc.update_relationship(3)
+            self.GAME_LOG.add_log_message(f'Guest part delivered to {npc.name}: ${money} session fee, {fame} fame.')
+            return
         opp_data = self.OPPORTUNITY_CATALOG.get(opp_id)
         if not opp_data:
             return
@@ -4026,58 +4434,61 @@ class Game:
             self._maybe_trigger_npc_cosign(best_song, "the blog feature")
             self.player.active_opportunities[opp_id]['status'] = "completed"
 
-        elif opp_id.startswith('guest_feature_'):
-            npc_id = opp_id.replace('guest_feature_', '')
-            npc = self.NPC_REGISTRY.get(npc_id)
-            if npc:
-                self.GAME_LOG.add_log_message(f"You agree to play on {npc.name}'s new song.")
-                self._advance_time_with_needs(240) # 4 hours studio time
-
-                # Simple skill check based on player's best skill
-                primary_skill = max(self.player.skills, key=self.player.skills.get)
-                skill_val = self.player.skills.get(primary_skill, 0)
-
-                if skill_val > 10:
-                    money_gain = 250
-                    fame_gain = 20
-                    self.GAME_LOG.add_log_message(f"You nailed your part! {npc.name} is impressed. (+${money_gain}, +{fame_gain} Fame)")
-                else:
-                    money_gain = 100
-                    fame_gain = 10
-                    self.GAME_LOG.add_log_message(f"You did a decent job on the track. (+${money_gain}, +{fame_gain} Fame)")
-
-                self.player.money += money_gain
-                self.player.fame += fame_gain
-                self.player.active_opportunities[opp_id]['status'] = "completed"
-        elif opp_id.startswith('tour_offer_'):
-            tour_id = opp_id.replace('tour_offer_', '')
-            self.schedule_tour(tour_id)
-            self.player.active_opportunities[opp_id]['status'] = "completed"
-            self.ui.draw_schedule_screen(self.player)
         elif opp_id == "autograph_signing":
-            self._advance_time_with_needs(120) # 2 hours
-            fame_gain = 10 + random.randint(0, 10)
-            money_gain = 50 + random.randint(0, 50)
-            self.player.fame += fame_gain
-            self.player.money += money_gain
-            self.GAME_LOG.add_log_message(f"The autograph signing was a success! (+${money_gain}, +{fame_gain} Fame)")
-            self.player.active_opportunities[opp_id]['status'] = "completed"
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.phone_menu_state = "main"
+            if hasattr(self.ui, 'enter_music_shop') and getattr(self.player.current_poi, 'category', '') == 'SHOP_MUSIC':
+                self.ui.enter_music_shop(self.player.current_poi)
+            else:
+                from game.public_appearances import run_signing
+                run_signing(self)
 
     def handle_music_menu(self):
         if self.music_menu_state == "main":
             music_menu_opts = {
-                "view_songs": "View Your Songs",
-                "release_song": "Release a Song (Single)",
-                "create_album": "Assemble Album (Needs 3+ Songs)",
-                "back": "Back to Phone"
+                "write_song": "[SONG] Write a New Song",
+                "view_songs": "[MUSIC] Song Catalog & Recording Status",
+                "release_song": "[CASH] Release Single ($15)",
+                "create_album": "[ALBUM] Sequence & Release an EP / Album",
+                "business": "[MUSIC] Distribution, Playlists & Pressing",
+                "produce_merch": "[MERCH] Produce DIY Band Merchandise",
+                "back": "Back to Main Menu"
             }
-            choice = self.ui.present_choices(music_menu_opts, "Music")
+
+            if self.song_in_progress.get("session_started"):
+                music_menu_opts["write_song"] = f"Resume draft: {self.song_in_progress.get('title', 'Untitled')}"
+
+            written_count = len(self.player.songs_written)
+            recorded_count = sum(1 for s in self.player.songs_written if s.is_recorded)
+            released_count = sum(1 for s in self.player.songs_written if s.is_released)
+
+            context = {
+                "eyebrow": "Creative Studio Hub",
+                "subtitle": "Write, record, produce, and distribute your original music.",
+                "panel_title": "Catalog Overview",
+                "details": [
+                    f"Songs Written: {written_count}",
+                    f"Recorded Tracks: {recorded_count}",
+                    f"Released Singles: {released_count}",
+                    f"Current Inspiration: {self.player.inspiration}/100",
+                    f"Band Lineup: {self.player.band.name if self.player.band else 'Solo Artist'}",
+                ],
+                "option_descriptions": {
+                    "write_song": "Write lyrics, melody and arrangement in separate sessions. Drafts can be saved and resumed. Fatigue affects the result.",
+                    "view_songs": "View your full composition catalog, acoustic qualities, and studio status.",
+                    "release_song": "Distribute a recorded master single to boost fame and streaming revenue.",
+                    "create_album": "Choose and sequence 3 to 16 recorded tracks. Distribution costs $50.",
+                    "business": "Streaming statements, editorial submissions, album reviews and physical records.",
+                    "produce_merch": "Design and press DIY band t-shirts and stickers to sell at shows.",
+                    "back": "Return to the main command hub.",
+                },
+                "accent": (192, 132, 252)
+            }
+
+            choice = self.ui.present_choices(music_menu_opts, "Music & Creative Studio", context=context)
             if choice == "back":
-                self.game_state = "phone"
-                self.phone_menu_state = "main"
+                self.game_state = "main_menu"
+            elif choice == "write_song":
+                from game.creative_work import open_notebook
+                open_notebook(self)
             else:
                 self.music_menu_state = choice
 
@@ -4119,59 +4530,48 @@ class Game:
 
                 self.player.money -= release_cost
                 selected_song.mark_as_released(current_game_time)
+                self.streaming_system.register_song_for_streaming(selected_song, self.player.fame)
                 self.GAME_LOG.add_log_message(f"You've self-released '{selected_song.title}' to the world! (-${release_cost})")
-                self.GAME_LOG.add_log_message(f"Current fame: {self.player.fame}. Consider marketing the single from the phone web menu.")
+                self.GAME_LOG.add_log_message(f"Current fame: {self.player.fame}. Distribution is active; royalties accrue as listeners find the song.")
                 self.music_menu_state = "main"
 
         elif self.music_menu_state == "create_album":
-            # 1. Select unreleased, recorded songs
-            candidates = [s for s in self.player.songs_written if s.is_recorded and not s.is_released]
+            from game.career_actions import assemble_release
+            assemble_release(self)
+            self.music_menu_state = "main"
 
-            if len(candidates) < 3:
-                self.GAME_LOG.add_log_message("You need at least 3 recorded, unreleased songs to make an album.")
-                self.music_menu_state = "main"
-                return
+        elif self.music_menu_state == "business":
+            from game.career_actions import catalog_business
+            catalog_business(self)
+            self.music_menu_state = "main"
 
-            # Simple selection: Select all? Or picking loop?
-            # For simplicity in this text UI, let's auto-select all candidates or offer to select subset?
-            # Let's offer a "Select All" or "Pick Top 5" approach.
-            # Real simulation would allow checkbox selection.
-
-            opts = {
-                "all": f"Use All {len(candidates)} Available Songs",
-                "back": "Cancel"
+        elif self.music_menu_state == "produce_merch":
+            merch_opts = {
+                "diy_stickers": "Print Band Stickers ($25 cost for 50)",
+                "diy_cassettes": "Dub Demo Cassettes ($60 cost for 20)",
+                "screenprint_tshirts": "Screenprint T-Shirts ($120 cost for 15)",
+                "limited_vinyl": "Press 7\" Vinyl ($150 cost for 10)",
+                "back": "Back",
             }
-            choice = self.ui.present_choices(opts, "Select tracks for album:")
-
-            if choice == "all":
-                album_title = self.ui.get_text_input("Enter Album Title:")
-                if not album_title: album_title = "Self-Titled"
-
-                release_cost = 50
-                if self.player.money < release_cost:
-                    self.GAME_LOG.add_log_message(f"You need ${release_cost} to distribute an album.")
-                    self.music_menu_state = "main"
-                    return
-
-                new_album = Album(album_title, self.player.name, candidates, release_date=current_game_time)
-
-                # Release Logic
-                self.player.money -= release_cost
-                self.player.albums_released.append(new_album)
-                for s in candidates:
-                    s.is_released = True
-                    s.release_date = current_game_time
-
-                self.GAME_LOG.add_log_message(f"You released '{new_album.title}'! (-${release_cost})")
-                self.GAME_LOG.add_log_message(f"Critics rate it: {int(new_album.quality * 100)}/100")
-
-                # Fame Bonus
-                fame_gain = int(new_album.quality * 50) + (len(candidates) * 5)
-                self.player.fame += fame_gain
-                self.GAME_LOG.add_log_message(f"Your fame increases by {fame_gain}! Total fame: {self.player.fame}")
-
+            choice = self.ui.present_choices(
+                merch_opts,
+                "DIY Merch Workshop",
+                context={
+                    "eyebrow": "Band Merchandise",
+                    "subtitle": "Produce merch to sell at venue booths after your shows.",
+                    "panel_title": "Scene Economy",
+                    "details": [
+                        "Merch sales depend on gig turnout, performance score, and Street Cred.",
+                        "Stickers and T-Shirts sell well at open mics and club shows.",
+                        "Demo cassettes build organic scene hype.",
+                    ],
+                },
+            )
+            if choice == "back":
                 self.music_menu_state = "main"
-            else:
+            elif choice in merch_opts:
+                res = self.merch_system.produce_merch(self.player, choice)
+                self.GAME_LOG.add_log_message(res["explanation"])
                 self.music_menu_state = "main"
 
     def handle_contacts_menu(self):
@@ -4202,39 +4602,58 @@ class Game:
                 self.phone_menu_state = "contacts"
                 return
 
-            self.ui.draw_contact_details_screen(npc)
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        self.phone_menu_state = "contacts"
+            from game.phone_actions import contact_card
+            contact_card(self, npc.npc_id)
+            self.phone_menu_state = "contacts"
 
     def handle_character_menu(self):
         if self.character_menu_state == "main":
             character_menu_opts = {
-                "career": "Career Overview",
-                "stats": "Stats",
-                "skills": "Skills",
-                "inventory": "Inventory",
-                "band": "Band",
-                "staff": "Staff (Roadies/Security)",
-                "merch": "Merchandise",
-                "back": "Back"
+                "stats": "[REST] Vitals, Health & Traits",
+                "skills": "[MUSIC] Musical Disciplines & Skills",
+                "inventory": "[SHOP] Gear Loadout & Inventory",
+                "career": "[WORK] Career Record",
+                "band": "[SOCIAL] Band Lineup & Chemistry",
+                "staff": "[WORK] Support Team (Crew & Security)",
+                "merch": "[CASH] Merchandise Catalog",
+                "back": "Back to Main Menu"
             }
-            choice = self.ui.present_choices(character_menu_opts, "Character")
+
+            context = {
+                "eyebrow": "Musician Status & Profile",
+                "subtitle": f"{self.player.name} • Fame: {self.player.fame} • Cred: {getattr(self.player, 'street_cred', 50)}",
+                "panel_title": "Profile Summary",
+                "details": [
+                    f"Health / Energy: {self.player.health}% / {self.player.energy}%",
+                    f"Stress / Hunger: {self.player.stress}% / {self.player.hunger}%",
+                    f"Carried Gear: {self.player.get_current_gear_load()}/{self.player.get_current_gear_capacity()}",
+                    f"Song Catalog: {len(self.player.songs_written)} tracks written",
+                    f"Band: {self.player.band.name if self.player.band else 'Solo Musician'}",
+                ],
+                "option_descriptions": {
+                    "stats": "View physical health, comfort, energy, vocal/wrist strain, and background traits.",
+                    "skills": "Inspect songwriting, guitar, vocals, stage presence, and electronic production masteries.",
+                    "inventory": "Check your instruments, audio equipment, supplies, and carried capacity.",
+                    "career": "Review your releases, performances, finances and reputation.",
+                    "band": "Review bandmate chemistry, member skills, and group cohesion.",
+                    "staff": "Manage road crew, technicians, and bodyguard protection.",
+                    "merch": "Inspect your printed merchandise stock and pricing.",
+                    "back": "Return to the main command hub.",
+                },
+                "accent": (88, 166, 255)
+            }
+
+            choice = self.ui.present_choices(character_menu_opts, "Character & Status", context=context)
             if choice == "back":
                 self.game_state = "main_menu"
             else:
                 self.character_menu_state = choice
         elif self.character_menu_state == "career":
             self.ui.draw_career_overview(self._get_career_overview_data())
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.character_menu_state = "main"
+            self.character_menu_state = "main"
         elif self.character_menu_state == "stats":
             self.ui.draw_character_stats(self.player)
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.character_menu_state = "main"
+            self.character_menu_state = "main"
 
         elif self.character_menu_state == "staff":
             if not self.player.staff:
@@ -4433,9 +4852,7 @@ class Game:
                              self.band_menu_state = "main"
         elif self.character_menu_state == "skills":
             self.ui.draw_skills_screen(self.player)
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.character_menu_state = "main"
+            self.character_menu_state = "main"
         elif self.character_menu_state == "inventory":
             # Check if at home
             at_home = self.player.current_poi and self.PLAYER_HOME_POI_ID_GLOBAL and self.player.current_poi.poi_id == self.PLAYER_HOME_POI_ID_GLOBAL
@@ -4508,71 +4925,79 @@ class Game:
                 msg = self.player.auto_pack()
                 self.GAME_LOG.add_log_message(msg)
 
-    def save_game(self, filename="savegame.dat"):
-        save_data = {
-            'player': self.player,
-            'game_time': current_game_time,
-            'world_map': self.WORLD_MAP,
-            'npc_registry': self.NPC_REGISTRY,
-            'active_charts': self.ACTIVE_CHARTS,
-            'last_chart_update_day': self.LAST_CHART_UPDATE_DAY,
-        }
-        try:
-            with open(filename, 'wb') as f:
-                pickle.dump(save_data, f)
-            self.GAME_LOG.add_log_message("Game saved successfully.")
-        except Exception as e:
-            self.GAME_LOG.add_log_message(f"Error saving game: {e}")
+    def quick_save(self):
+        if self.game_state in {"performance", "travel_active", "appearance", "character_creation"} or (
+            self.game_state == "explore" and self.explore_menu_state == "write_song_menu"
+        ):
+            self.GAME_LOG.add_log_message("Finish the current session before saving. F5 is available between sessions.")
+            return False
+        return self.save_game()
 
-    def load_game(self, filename="savegame.dat"):
-        if not os.path.exists(filename):
-            self.GAME_LOG.add_log_message("No save file found.")
-            return
+    def save_game(self, filename="savegame.json"):
+        return JSONSaveManager.save_game(self, filename)
 
-        try:
-            with open(filename, 'rb') as f:
-                save_data = pickle.load(f)
-
-            self.player = save_data['player']
-            self.WORLD_MAP = save_data['world_map']
-            self.NPC_REGISTRY = save_data['npc_registry']
-            self.ACTIVE_CHARTS = save_data['active_charts']
-            self.LAST_CHART_UPDATE_DAY = save_data['last_chart_update_day']
-
-            # Restore game time
-            loaded_time = save_data['game_time']
-            current_game_time.year = loaded_time.year
-            current_game_time.month = loaded_time.month
-            current_game_time.day = loaded_time.day
-            current_game_time.hour = loaded_time.hour
-            current_game_time.minute = loaded_time.minute
-
-            # Re-initialize transient data
+    def load_game(self, filename="savegame.json"):
+        res = JSONSaveManager.load_game(self, filename)
+        if res:
             self._build_poi_venue_id_map()
             self._normalize_opportunity_state()
             self._reset_transient_runtime_state()
+            from game.live_bookings import reconcile_bookings
+            reconcile_bookings(self)
+            if hasattr(self.ui, "log_messages"):
+                self.ui.log_messages = list(getattr(self, "journal", []))
             self.game_state = "main_menu"
-
-            self.GAME_LOG.add_log_message("Game loaded successfully.")
-
-        except Exception as e:
-            self.GAME_LOG.add_log_message(f"Error loading game: {e}")
+            if getattr(self.player.current_poi, 'shop_life', {}).get('active'):
+                self.game_state = 'explore'
+                self.explore_menu_state = 'location'
+        return res
 
     def handle_system_menu(self):
+        has_save = os.path.exists("savegame.json")
         system_menu_opts = {
-            "save": "Save",
-            "load": "Load",
-            "back": "Back"
+            "save": "[WORK] Quick Save Game",
+            "load": "[WORK] Load Last Saved Game" if has_save else "[WORK] Load Game (No save found)",
+            "title": "[EVENT] Return to Title Screen",
+            "quit": "[REST] Exit to Desktop",
+            "back": "Back to Main Menu"
         }
-        choice = self.ui.present_choices(system_menu_opts, "System")
+
+        context = {
+            "eyebrow": "Game & System Settings",
+            "subtitle": "Manage your session save states and game options.",
+            "panel_title": "System Status",
+            "details": [
+                f"Current Session: {self.player.name}",
+                f"Date: {get_current_time_str(date_only=True)}",
+                f"Save File Available: {'Yes' if has_save else 'No'}",
+                "Progress is saved locally on disk.",
+            ],
+            "option_descriptions": {
+                "save": "Save your current character progress, inventory, songs, and world state.",
+                "load": "Reload the most recent save file from disk.",
+                "title": "Return to the main title screen to start a new run or switch saves.",
+                "quit": "Safely exit Music-Life and return to your operating system.",
+                "back": "Return to the main command hub.",
+            },
+            "accent": (120, 134, 154)
+        }
+
+        choice = self.ui.present_choices(system_menu_opts, "System & Save Game", context=context)
         if choice == "back":
             self.game_state = "main_menu"
         elif choice == "save":
             self.save_game()
-            self.game_state = "main_menu" # Go back to main menu after saving
+            self.game_state = "main_menu"
         elif choice == "load":
-            self.load_game()
-            self.game_state = "main_menu" # Go back to main menu after loading
+            if has_save:
+                self.load_game()
+            else:
+                self.GAME_LOG.add_log_message("No existing save file found on disk.")
+            self.game_state = "main_menu"
+        elif choice == "title":
+            self.game_state = "title_screen"
+        elif choice == "quit":
+            self.running = False
 
     def handle_text_viewer(self):
         self.ui.draw_text_viewer(self.text_to_view)
@@ -4614,7 +5039,7 @@ class Game:
             self.GAME_LOG.add_log_message(message)
 
         self.GAME_LOG.add_log_message(
-            f"Transit update: {result.get('remaining_minutes', 0)}m remaining after {self.transit_session.chunks_completed} chunk(s)."
+            f"Journey: about {result.get('remaining_minutes', 0)} minutes remaining."
         )
 
         if result.get("arrived"):
@@ -4629,11 +5054,29 @@ class Game:
             self.transit_session = None
             self.game_state = "main_menu"
 
+    def _start_live_performance(self):
+        from game.live_bookings import prepare_stage, settle_show
+        if not prepare_stage(self):
+            settle_show(self, self.active_performance, 'cancelled', reason='Stage equipment unavailable or rental declined')
+            self.active_performance = None
+            self.performance_setlist = []
+            self.performance_stage = None
+            self.game_state = 'explore'
+            return
+        self.active_performance.song_to_perform = self.performance_setlist[0]
+        self.performance_manager = PerformanceManager(self, self.active_performance, self.performance_setlist[0], self.ui)
+        self.performance_manager.state = 'player_input'
+        self.performance_stage = 'playing'
+
     def handle_performance_scene(self):
         # 1. Selection Phase
         if self.performance_stage == "choose_song":
             if not self.player.songs_written:
+                from game.live_bookings import settle_show
+                settle_show(self, self.active_performance, 'missed', reason='No material for the set')
                 self.GAME_LOG.add_log_message("You have no songs to perform!")
+                self.active_performance = None
+                self.performance_stage = None
                 self.game_state = "explore"
                 return
 
@@ -4642,10 +5085,23 @@ class Game:
                 self.GAME_LOG.add_log_message(
                     f"You need at least {songs_required} songs to play this event."
                 )
+                from game.live_bookings import settle_show
+                settle_show(self, self.active_performance, 'missed', reason='Insufficient material for the booked set')
                 self.game_state = "explore"
                 self.active_performance = None
                 self.performance_stage = None
                 return
+
+            if getattr(self.active_performance, 'booking_id', None):
+                ready, reason, _ = self.active_performance.can_perform(self.player)
+                if not ready:
+                    from game.live_bookings import settle_show
+                    settle_show(self, self.active_performance, 'missed', reason=reason)
+                    self.GAME_LOG.add_log_message(reason)
+                    self.game_state = 'explore'
+                    self.active_performance = None
+                    self.performance_stage = None
+                    return
 
             song_options = {str(i): f"'{s.title}' (Q: {s.song_quality:.2f})" for i, s in enumerate(self.player.songs_written)}
             song_options["back"] = "Cancel"
@@ -4653,43 +5109,69 @@ class Game:
             choice = self.ui.present_choices(song_options, title)
 
             if choice == "back":
+                from game.live_bookings import settle_show
+                settle_show(self, self.active_performance, 'cancelled', reason='Artist declined the stage')
                 self.game_state = "explore"
                 self.active_performance = None
                 self.performance_stage = None
             else:
                 selected_song = self.player.songs_written[int(choice)]
-                remaining_songs = [song for song in self.player.songs_written if song.song_id != selected_song.song_id]
-                remaining_songs.sort(key=lambda song: song.song_quality, reverse=True)
-                self.performance_setlist = [selected_song] + remaining_songs[: max(0, songs_required - 1)]
-                self.active_performance.song_to_perform = selected_song
-                # Initialize Manager
-                self.performance_manager = PerformanceManager(self, self.active_performance, selected_song, self.ui)
-                self.performance_manager.state = "player_input" # Start game
-                self.performance_stage = "playing"
+                self.performance_setlist = [selected_song]
+                if songs_required > 1:
+                    self.performance_stage = "build_setlist"
+                    return
+                self._start_live_performance()
 
         # 2. Playing Phase (Delegated to Manager)
+        elif self.performance_stage == "build_setlist":
+            required = self.active_performance.songs_required_count
+            options = {str(i): f"{'Selected / ' if song in self.performance_setlist else ''}{song.title}"
+                       for i, song in enumerate(self.player.songs_written)}
+            if len(self.performance_setlist) == required:
+                options['play'] = 'Take the stage with this set'
+            options['back'] = 'Withdraw from the show'
+            choice = self.ui.present_choices(options, f'Setlist / {len(self.performance_setlist)} of {required} songs',
+                context={'subtitle': 'Selection order is the running order. Select a chosen track to remove it.',
+                         'details': [f'{i + 1}. {song.title}' for i, song in enumerate(self.performance_setlist)]})
+            if choice == 'back':
+                from game.live_bookings import settle_show
+                settle_show(self, self.active_performance, 'cancelled', reason='Artist withdrew before the set')
+                self.performance_setlist = []
+                self.active_performance = None
+                self.performance_stage = None
+                self.game_state = 'explore'
+            elif choice == 'play':
+                self._start_live_performance()
+            else:
+                song = self.player.songs_written[int(choice)]
+                if song in self.performance_setlist: self.performance_setlist.remove(song)
+                elif len(self.performance_setlist) < required: self.performance_setlist.append(song)
+
         elif self.performance_stage == "playing":
             if self.performance_manager.state == "player_input":
                 # Present choices via main loop's UI helper
                 actions = {
-                    "safe": "Play it Safe (Low Risk)",
-                    "hype": "Hype the Crowd (Med Risk, High Hype)",
-                    "solo": "Improvise Solo (High Risk, High Reward)"
+                    "safe": "Stay with the arrangement",
+                    "hype": "Work the crowd",
+                    "solo": "Improvise a solo"
                 }
-                self.performance_manager.draw_screen()
-                choice = self.ui.present_choices(actions, f"Action for {self.performance_manager.get_current_section()}:")
+                choice = self.ui.present_choices(actions, f"{self.performance_manager.song.title} / {self.performance_manager.get_current_section()}", context={
+                    "eyebrow": f"Live at {self.active_performance.location.name}",
+                    "subtitle": f"Crowd {self.performance_manager.crowd_hype}/100 / Stamina {self.performance_manager.band_energy}/100",
+                    "details": self.performance_manager.log[:5],
+                    "option_descriptions": {"safe": "Stay with the arrangement. Conserves energy, but repetition wears thin.", "hype": "Work the room. Stage presence and stamina affect the response.", "solo": "Step outside the arrangement. Musicianship and fatigue matter."},
+                })
                 self.performance_manager.handle_input(choice)
 
             elif self.performance_manager.state == "resolution":
-                self.performance_manager.draw_screen()
                 # Wait for user acknowledgment
                 # We can use a simple wait loop or a present_choice with just "Continue"
-                self.ui.present_choices({"ok": "Continue"}, "Result")
+                if not (hasattr(self.ui, 'enter_live_club') and getattr(self.active_performance.location, 'club_life', None)):
+                    self.ui.present_choices({"ok": "Next section"}, "On stage", context={"subtitle": self.performance_manager.turn_result, "details": self.performance_manager.log[:6]})
                 self.performance_manager.handle_input("ok") # Advance state
 
             elif self.performance_manager.state == "summary":
-                self.performance_manager.draw_screen()
-                self.ui.present_choices({"finish": "Finish Show"}, "Performance Complete")
+                self.ui.present_choices({"finish": "Leave the stage"}, "The final note", context={"subtitle": f"Crowd response: {self.performance_manager.crowd_hype}/100", "details": self.performance_manager.log[:6]})
                 self.performance_stage = "finish"
 
         # 3. Completion Phase
@@ -4697,7 +5179,7 @@ class Game:
             # Calculate Rewards based on final hype
             final_hype = self.performance_manager.crowd_hype
             reward_outcome = self._resolve_gig_rewards(self.active_performance, final_hype)
-            money_gain = reward_outcome["money_gain"]
+            money_gain = max(reward_outcome["money_gain"], getattr(self.active_performance, "guaranteed_payout", 0))
             fame_gain = reward_outcome["fame_gain"]
 
             self.player.money += money_gain
@@ -4715,27 +5197,29 @@ class Game:
                 strongest_song.buzz_score += max(2, int(final_hype / 8))
                 self._maybe_trigger_npc_cosign(strongest_song, f"the show at {self.active_performance.location.name}")
 
+            # Shady Promoter Hazard Check
+            if not getattr(self.active_performance, "booking_id", None) and random.random() < 0.12 and money_gain > 50:
+                shady_cut = int(money_gain * 0.3)
+                money_gain -= shady_cut
+                self.player.money -= shady_cut
+                self.GAME_LOG.add_log_message(f"PROMOTER HAZARD: The venue manager claimed 'door count was low' and withheld ${shady_cut} of your payout!")
+
             # Merch Sales Logic
-            if self.player.merch_stock:
-                total_merch_sales = 0
-                for item in self.player.merch_stock:
-                    if item.stock > 0:
-                        # Buyers based on hype
-                        potential_buyers = int(final_hype / 2) # e.g. 100 hype -> 50 buyers max
-                        # Buying chance based on fame?
-                        actual_sales = 0
-                        for _ in range(potential_buyers):
-                            if item.stock > 0 and random.random() < 0.2: # 20% buy rate
-                                item.stock -= 1
-                                total_merch_sales += item.sale_price
-                                actual_sales += 1
+            room_context = getattr(self.active_performance, 'club_performance_context', None)
+            if room_context is not None:
+                room_context['final_hype'] = final_hype
+            if getattr(self.player, "merch_stock", None) and (room_context is None or room_context['merch_ready']):
+                turnout = room_context['attendance'] if room_context is not None else int(final_hype * 1.5)
+                merch_result = self.merch_system.resolve_gig_merch_booth(self.player, gig_turnout=turnout, performance_score=final_hype / 5.0)
+                for log_msg in merch_result.get("logs", []):
+                    self.GAME_LOG.add_log_message(log_msg)
 
-                        if actual_sales > 0:
-                            self.GAME_LOG.add_log_message(f"Sold {actual_sales} {item.name}s.")
+            from game.live_bookings import settle_show
+            settle_show(self, self.active_performance, "played", money_gain)
+            self.active_performance.location.weeks_without_events = 0
 
-                if total_merch_sales > 0:
-                    self.player.money += total_merch_sales
-                    self.GAME_LOG.add_log_message(f"Merch Income: +${total_merch_sales}")
+            # A venue slot can only be played once in a day.
+            self.active_performance.last_played_day = current_game_time.day_index()
 
             # Cleanup
             self.performance_manager = None

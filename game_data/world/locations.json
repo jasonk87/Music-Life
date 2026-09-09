@@ -1,22 +1,26 @@
 [
   {
-    "id": "your_hometown",
-    "name": "Your Hometown",
-    "description": "A quiet place, good for starting out.",
-    "poi_definition_file": "your_hometown_pois.json",
+    "id": "asbury_park_nj",
+    "name": "Asbury Park, NJ",
+    "description": "Iconic Jersey Shore music town. Home of boardwalk buskers and legendary rock roots.",
+    "poi_definition_file": "asbury_park_nj_pois.json",
     "travel_connections": [
-      {"to_location_id": "city_center", "cost": 20, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "philadelphia_pa", "cost": 20, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "new_york_ny", "cost": 30, "time_hours": 2, "method": "Bus"},
       {"to_location_id": "austin_tx", "cost": 120, "time_hours": 10, "method": "Bus"}
     ]
   },
   {
-    "id": "city_center",
-    "name": "City Center",
-    "description": "A bustling hub with more opportunities.",
-    "poi_definition_file": "city_center_pois.json",
+    "id": "philadelphia_pa",
+    "name": "Philadelphia, PA",
+    "description": "Major East Coast music metropolis with legendary venues, studios, and PR agencies.",
+    "poi_definition_file": "philadelphia_pa_pois.json",
     "travel_connections": [
-      {"to_location_id": "your_hometown", "cost": 20, "time_hours": 2, "method": "Bus"},
-      {"to_location_id": "austin_tx", "cost": 60, "time_hours": 6, "method": "Bus"}
+      {"to_location_id": "asbury_park_nj", "cost": 20, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "new_york_ny", "cost": 40, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "austin_tx", "cost": 160, "time_hours": 6, "method": "Plane"},
+      {"to_location_id": "nashville_tn", "cost": 100, "time_hours": 8, "method": "Bus"},
+      {"to_location_id": "chicago_il", "cost": 70, "time_hours": 5, "method": "Bus"}
     ]
   },
   {
@@ -25,8 +29,143 @@
     "description": "The Live Music Capital of the World. Keep Austin Weird!",
     "poi_definition_file": "austin_tx_pois.json",
     "travel_connections": [
-      {"to_location_id": "your_hometown", "cost": 120, "time_hours": 10, "method": "Bus"},
-      {"to_location_id": "city_center", "cost": 60, "time_hours": 6, "method": "Bus"}
+      {"to_location_id": "asbury_park_nj", "cost": 120, "time_hours": 10, "method": "Bus"},
+      {"to_location_id": "philadelphia_pa", "cost": 160, "time_hours": 6, "method": "Plane"},
+      {"to_location_id": "nashville_tn", "cost": 110, "time_hours": 9, "method": "Bus"},
+      {"to_location_id": "new_orleans_la", "cost": 80, "time_hours": 6, "method": "Bus"},
+      {"to_location_id": "los_angeles_ca", "cost": 220, "time_hours": 4, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "nashville_tn",
+    "name": "Nashville, TN",
+    "description": "Music City! Country, Americana, and historic studio rows.",
+    "poi_definition_file": "nashville_tn_pois.json",
+    "travel_connections": [
+      {"to_location_id": "philadelphia_pa", "cost": 100, "time_hours": 8, "method": "Bus"},
+      {"to_location_id": "austin_tx", "cost": 110, "time_hours": 9, "method": "Bus"},
+      {"to_location_id": "memphis_tn", "cost": 40, "time_hours": 3, "method": "Bus"},
+      {"to_location_id": "atlanta_ga", "cost": 70, "time_hours": 4, "method": "Bus"},
+      {"to_location_id": "new_york_ny", "cost": 210, "time_hours": 3, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "seattle_wa",
+    "name": "Seattle, WA",
+    "description": "Rain City grunge, alternative rock, and iconic coffeehouse stages.",
+    "poi_definition_file": "seattle_wa_pois.json",
+    "travel_connections": [
+      {"to_location_id": "los_angeles_ca", "cost": 140, "time_hours": 3, "method": "Plane"},
+      {"to_location_id": "philadelphia_pa", "cost": 250, "time_hours": 5, "method": "Plane"},
+      {"to_location_id": "tokyo_jp", "cost": 650, "time_hours": 10, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "new_york_ny",
+    "name": "New York City, NY",
+    "description": "The Empire State. Punk clubs, Broadway, and major label headquarters.",
+    "poi_definition_file": "new_york_ny_pois.json",
+    "travel_connections": [
+      {"to_location_id": "asbury_park_nj", "cost": 30, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "philadelphia_pa", "cost": 40, "time_hours": 2, "method": "Bus"},
+      {"to_location_id": "nashville_tn", "cost": 210, "time_hours": 3, "method": "Plane"},
+      {"to_location_id": "los_angeles_ca", "cost": 350, "time_hours": 6, "method": "Plane"},
+      {"to_location_id": "london_uk", "cost": 550, "time_hours": 7, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "los_angeles_ca",
+    "name": "Los Angeles, CA",
+    "description": "City of Angels. Sunset Strip rock clubs, Hollywood sound stages, and superstardom.",
+    "poi_definition_file": "los_angeles_ca_pois.json",
+    "travel_connections": [
+      {"to_location_id": "austin_tx", "cost": 220, "time_hours": 4, "method": "Plane"},
+      {"to_location_id": "seattle_wa", "cost": 140, "time_hours": 3, "method": "Plane"},
+      {"to_location_id": "new_york_ny", "cost": 350, "time_hours": 6, "method": "Plane"},
+      {"to_location_id": "tokyo_jp", "cost": 700, "time_hours": 11, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "chicago_il",
+    "name": "Chicago, IL",
+    "description": "The Windy City. Blues, House music, and Clark Street indie venues.",
+    "poi_definition_file": "chicago_il_pois.json",
+    "travel_connections": [
+      {"to_location_id": "philadelphia_pa", "cost": 70, "time_hours": 5, "method": "Bus"},
+      {"to_location_id": "detroit_mi", "cost": 50, "time_hours": 4, "method": "Bus"},
+      {"to_location_id": "new_york_ny", "cost": 190, "time_hours": 3, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "new_orleans_la",
+    "name": "New Orleans, LA",
+    "description": "The Big Easy. Frenchmen Street jazz, brass bands, and Mardi Gras vibes.",
+    "poi_definition_file": "new_orleans_la_pois.json",
+    "travel_connections": [
+      {"to_location_id": "austin_tx", "cost": 80, "time_hours": 6, "method": "Bus"},
+      {"to_location_id": "memphis_tn", "cost": 90, "time_hours": 6, "method": "Bus"},
+      {"to_location_id": "atlanta_ga", "cost": 100, "time_hours": 7, "method": "Bus"}
+    ]
+  },
+  {
+    "id": "memphis_tn",
+    "name": "Memphis, TN",
+    "description": "Birthplace of Rock 'n' Roll and Soul music on Beale Street.",
+    "poi_definition_file": "memphis_tn_pois.json",
+    "travel_connections": [
+      {"to_location_id": "nashville_tn", "cost": 40, "time_hours": 3, "method": "Bus"},
+      {"to_location_id": "new_orleans_la", "cost": 90, "time_hours": 6, "method": "Bus"}
+    ]
+  },
+  {
+    "id": "detroit_mi",
+    "name": "Detroit, MI",
+    "description": "Motor City! Motown Soul, industrial Techno, and rock power.",
+    "poi_definition_file": "detroit_mi_pois.json",
+    "travel_connections": [
+      {"to_location_id": "chicago_il", "cost": 50, "time_hours": 4, "method": "Bus"},
+      {"to_location_id": "new_york_ny", "cost": 170, "time_hours": 2, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "atlanta_ga",
+    "name": "Atlanta, GA",
+    "description": "A-Town! Trap soundscapes, Southern Hip-Hop, and R&B lounges.",
+    "poi_definition_file": "atlanta_ga_pois.json",
+    "travel_connections": [
+      {"to_location_id": "nashville_tn", "cost": 70, "time_hours": 4, "method": "Bus"},
+      {"to_location_id": "new_orleans_la", "cost": 100, "time_hours": 7, "method": "Bus"},
+      {"to_location_id": "new_york_ny", "cost": 200, "time_hours": 3, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "london_uk",
+    "name": "London, UK",
+    "description": "Cross the Atlantic! Camden punk clubs, Abbey Road, and British rock royalty.",
+    "poi_definition_file": "london_uk_pois.json",
+    "travel_connections": [
+      {"to_location_id": "new_york_ny", "cost": 550, "time_hours": 7, "method": "Plane"},
+      {"to_location_id": "berlin_de", "cost": 120, "time_hours": 2, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "tokyo_jp",
+    "name": "Tokyo, Japan",
+    "description": "Shibuya lights, J-Rock, City Pop, and Nippon Budokan Hall.",
+    "poi_definition_file": "tokyo_jp_pois.json",
+    "travel_connections": [
+      {"to_location_id": "los_angeles_ca", "cost": 700, "time_hours": 11, "method": "Plane"},
+      {"to_location_id": "seattle_wa", "cost": 650, "time_hours": 10, "method": "Plane"}
+    ]
+  },
+  {
+    "id": "berlin_de",
+    "name": "Berlin, Germany",
+    "description": "The Electronic & Techno capital of the world. Berghain and industrial sound factories.",
+    "poi_definition_file": "berlin_de_pois.json",
+    "travel_connections": [
+      {"to_location_id": "london_uk", "cost": 120, "time_hours": 2, "method": "Plane"},
+      {"to_location_id": "new_york_ny", "cost": 580, "time_hours": 8, "method": "Plane"}
     ]
   }
 ]

@@ -13,6 +13,13 @@
       }
     },
     {
+      "poi_id": "hometown_transit_hub",
+      "name": "Hometown Auto & Transit Hub",
+      "description": "Buy/rent vehicles, hail city taxis, and pre-book tour transport.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
       "poi_id": "hometown_rehearsal_garage",
       "name": "Garage Rehearsal Space",
       "description": "A bit rough but it's cheap.",

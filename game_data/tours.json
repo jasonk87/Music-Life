@@ -9,8 +9,8 @@
     "gig_templates": [
       {
         "leg_number": 1,
-        "city_options": ["Your Hometown"],
-        "venue_type_options": ["HALL", "BAR_GIG"],
+        "city_options": ["Asbury Park, NJ"],
+        "venue_type_options": ["HALL", "BAR_GIG", "CLUB"],
         "event_type": "OPEN_MIC",
         "days_offset_min": 5,
         "days_offset_max": 10,
@@ -18,7 +18,7 @@
       },
       {
         "leg_number": 2,
-        "city_options": ["Your Hometown", "City Center"],
+        "city_options": ["Asbury Park, NJ", "Philadelphia, PA"],
         "venue_type_options": ["CLUB"],
         "event_type": "OPEN_MIC",
         "days_offset_min": 7,
@@ -37,7 +37,7 @@
     "gig_templates": [
       {
         "leg_number": 1,
-        "city_options": ["City Center"],
+        "city_options": ["Philadelphia, PA"],
         "venue_type_options": ["CLUB"],
         "event_type": "CLUB_GIG",
         "days_offset_min": 7,
@@ -56,7 +56,7 @@
       },
       {
         "leg_number": 3,
-        "city_options": ["Your Hometown", "City Center"],
+        "city_options": ["Asbury Park, NJ", "Philadelphia, PA"],
         "venue_type_options": ["CLUB", "HALL"],
         "event_type": "CLUB_GIG",
         "days_offset_min": 5,
@@ -85,7 +85,7 @@
       },
       {
         "leg_number": 2,
-        "city_options": ["City Center"],
+        "city_options": ["Philadelphia, PA"],
         "venue_type_options": ["CONCERT_HALL"],
         "event_type": "CONCERT",
         "days_offset_min": 7,
@@ -103,7 +103,7 @@
       },
       {
         "leg_number": 4,
-        "city_options": ["Your Hometown"],
+        "city_options": ["Asbury Park, NJ"],
         "venue_type_options": ["HALL", "CLUB"],
         "event_type": "CLUB_GIG",
         "days_offset_min": 5,

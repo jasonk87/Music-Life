@@ -57,6 +57,13 @@ class Event:
         return False
 
     def can_perform(self, player):
+        from game.game_time import current_game_time
+        if hasattr(self, 'booking_start') and current_game_time < self.booking_start:
+            return False, f"This booking starts {self.booking_start.get_time_string_for_schedule()}.", False
+        if hasattr(self, 'booking_end') and current_game_time > self.booking_end:
+            return False, "This booking's performance window has closed.", False
+        if getattr(self, "last_played_day", -1) == current_game_time.day_index():
+            return False, "You already played this slot today.", False
         if not self.is_active:
             return False, "This event is no longer active.", False
 

@@ -251,6 +251,7 @@ class Chart:
                     elif _contextual_roll(npc_score, 78):
                         chart_score += 8
 
+                chart_score *= 0.90 ** (max(0, days_since_release) / 7) if days_since_release != float("inf") else 0.5
                 self._add_or_update_song_entry(song, chart_score, artist_name)
 
         # 3. Finalize chart positions and generate feedback

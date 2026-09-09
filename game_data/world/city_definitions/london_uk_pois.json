@@ -1,0 +1,70 @@
+{
+  "location_id": "london_uk",
+  "points_of_interest": [
+    {
+      "poi_id": "london_transit_hub",
+      "name": "Heathrow & London Fleet Agency",
+      "description": "International UK transit hub for luxury bus rentals, black cabs, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "london_abbey_road",
+      "name": "Abbey Road Studios",
+      "description": "World famous recording studio in St. John's Wood.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $400)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.98,
+        "hourly_rate": 100
+      }
+    },
+    {
+      "poi_id": "london_pub",
+      "name": "Camden Town Pub",
+      "description": "Traditional British pub with fish & chips and open stage nights.",
+      "category": "RESTAURANT",
+      "interaction_options": ["Eat Fish & Chips ($15)", "Drink Pint ($6)"],
+      "properties": {
+        "menu_items": [{"item_id": "fishchips", "display_text": "Buy Fish & Chips ($15)", "cost": 15, "hunger_reduction": 45, "energy_boost": 20}]
+      }
+    },
+    {
+      "poi_id": "london_hotel",
+      "name": "The West End Grand Hotel",
+      "description": "Sophisticated hotel near Leicester Square.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($180)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "london_camden_club",
+      "name": "Camden Underworld Club",
+      "description": "Classic Camden indie, punk, and rock club.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 500,
+      "prestige": 4,
+      "genre_bias": {"Rock": 1.4, "Punk": 1.4, "Indie": 1.3},
+      "properties": {
+        "booking_fee": 150,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "london_o2_arena",
+      "name": "The London O2 Arena",
+      "description": "International 20,000-seat stadium for world tours.",
+      "venue_type": "ARENA",
+      "category": "VENUE",
+      "capacity": 20000,
+      "prestige": 5,
+      "genre_bias": {"Pop": 1.4, "Rock": 1.4, "Electronic": 1.3},
+      "properties": {
+        "booking_fee": 2600,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

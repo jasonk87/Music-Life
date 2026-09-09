@@ -3,23 +3,23 @@
     "npc_id": "joe001",
     "name": "Old Timer Joe",
     "personality_key": "old_timer_joe",
-    "home_location_poi_id": "hometown_music_shop_oldtimers",
-    "initial_current_location_poi_id": "hometown_music_shop_oldtimers",
+    "home_location_poi_id": "asbury_music_shop_oldtimers",
+    "initial_current_location_poi_id": "asbury_music_shop_oldtimers",
     "schedule": {
-      "Weekday_Morning": "hometown_music_shop_oldtimers",
-      "Weekday_Afternoon": "hometown_music_shop_oldtimers",
-      "Weekend_Morning": "hometown_music_shop_oldtimers",
-      "Weekend_Evening": "hometown_community_hall"
+      "Weekday_Morning": "asbury_music_shop_oldtimers",
+      "Weekday_Afternoon": "asbury_music_shop_oldtimers",
+      "Weekend_Morning": "asbury_music_shop_oldtimers",
+      "Weekend_Evening": "asbury_stone_pony"
     }
   },
   {
     "npc_id": "sarah001",
     "name": "Sarah",
     "personality_key": "potential_bandmate_bassist",
-    "home_location_location_id": "your_hometown",
-    "initial_current_location_location_id": "your_hometown",
+    "home_location_location_id": "asbury_park_nj",
+    "initial_current_location_location_id": "asbury_park_nj",
     "schedule": {
-      "open_mic_night_at_community_hall": "hometown_community_hall"
+      "open_mic_night_at_community_hall": "asbury_stone_pony"
     },
     "skills": {
       "bass": 15,
@@ -34,25 +34,25 @@
     "npc_id": "vic001",
     "name": "Vic Vega",
     "personality_key": "gruff_club_owner",
-    "home_location_poi_id": "citycenter_rustymug",
-    "initial_current_location_poi_id": "citycenter_rustymug",
+    "home_location_poi_id": "philly_rusty_mug",
+    "initial_current_location_poi_id": "philly_rusty_mug",
     "schedule": {
-      "Weekday_Afternoon": "citycenter_rustymug",
-      "Weekday_Evening": "citycenter_rustymug",
-      "Weekend_Evening": "citycenter_rustymug"
+      "Weekday_Afternoon": "philly_rusty_mug",
+      "Weekday_Evening": "philly_rusty_mug",
+      "Weekend_Evening": "philly_rusty_mug"
     }
   },
   {
     "npc_id": "alex001",
     "name": "Alex 'Shredder' Miles",
     "personality_key": "potential_bandmate_guitarist",
-    "home_location_poi_id": "citycenter_proaudio",
-    "initial_current_location_poi_id": "citycenter_proaudio",
+    "home_location_poi_id": "philly_proaudio",
+    "initial_current_location_poi_id": "philly_proaudio",
     "schedule": {
-      "Weekday_Afternoon": "citycenter_proaudio",
-      "Weekday_Evening": "citycenter_rustymug",
-      "Weekend_Afternoon": "citycenter_proaudio",
-      "Weekend_Evening": "citycenter_rustymug"
+      "Weekday_Afternoon": "philly_proaudio",
+      "Weekday_Evening": "philly_rusty_mug",
+      "Weekend_Afternoon": "philly_proaudio",
+      "Weekend_Evening": "philly_rusty_mug"
     },
     "skills": {
       "guitar": 25,
@@ -69,35 +69,35 @@
     "npc_id": "casey001",
     "name": "Casey 'The Cynic' Jones",
     "personality_key": "music_blogger_critical",
-    "home_location_poi_id": "citycenter_dailygrind_cafe",
-    "initial_current_location_poi_id": "citycenter_dailygrind_cafe",
+    "home_location_poi_id": "philly_daily_grind",
+    "initial_current_location_poi_id": "philly_daily_grind",
     "schedule": {
-      "Weekday_Morning": "citycenter_dailygrind_cafe",
-      "Weekday_Afternoon": "citycenter_dailygrind_cafe",
-      "Weekday_Evening": "citycenter_rustymug",
-      "Weekend_Evening": "citycenter_grandetheater"
+      "Weekday_Morning": "philly_daily_grind",
+      "Weekday_Afternoon": "philly_daily_grind",
+      "Weekday_Evening": "philly_rusty_mug",
+      "Weekend_Evening": "philly_grande_hall"
     }
   },
   {
     "npc_id": "brenda_reporter001",
     "name": "Brenda Reporter",
     "personality_key": "interviewer_professional",
-    "home_location_poi_id": "citycenter_chronicle_news",
-    "initial_current_location_poi_id": "citycenter_chronicle_news",
+    "home_location_poi_id": "philly_chronicle",
+    "initial_current_location_poi_id": "philly_chronicle",
     "schedule": {
-      "Weekday_Morning": "citycenter_chronicle_news",
-      "Weekday_Afternoon": "citycenter_chronicle_news"
+      "Weekday_Morning": "philly_chronicle",
+      "Weekday_Afternoon": "philly_chronicle"
     }
   },
   {
     "npc_id": "ms_sharp_pr001",
     "name": "Ms. Patricia Sharp",
     "personality_key": "pr_agent_evaluator",
-    "home_location_poi_id": "citycenter_sharp_pr",
-    "initial_current_location_poi_id": "citycenter_sharp_pr",
+    "home_location_poi_id": "philly_sharp_pr",
+    "initial_current_location_poi_id": "philly_sharp_pr",
     "schedule": {
-      "Weekday_Morning": "citycenter_sharp_pr",
-      "Weekday_Afternoon": "citycenter_sharp_pr"
+      "Weekday_Morning": "philly_sharp_pr",
+      "Weekday_Afternoon": "philly_sharp_pr"
     }
   },
   {
@@ -126,36 +126,36 @@
     "npc_id": "barber_bill_npc",
     "name": "Barber Bill",
     "personality_key": "friendly_shopkeeper",
-    "home_location_poi_id": "hometown_barber_shop",
-    "initial_current_location_poi_id": "hometown_barber_shop",
+    "home_location_poi_id": "asbury_barber",
+    "initial_current_location_poi_id": "asbury_barber",
     "schedule": {
-      "Weekday_Morning": "hometown_barber_shop",
-      "Weekday_Afternoon": "hometown_barber_shop",
-      "Weekend_Morning": "hometown_barber_shop"
+      "Weekday_Morning": "asbury_barber",
+      "Weekday_Afternoon": "asbury_barber",
+      "Weekend_Morning": "asbury_barber"
     }
   },
   {
     "npc_id": "stylist_antoine_npc",
     "name": "Antoine 'The Style' Dubois",
     "personality_key": "stylish_artistic",
-    "home_location_poi_id": "citycenter_trendy_salon",
-    "initial_current_location_poi_id": "citycenter_trendy_salon",
+    "home_location_poi_id": "philly_proaudio",
+    "initial_current_location_poi_id": "philly_proaudio",
     "schedule": {
-      "Weekday_Morning": "citycenter_trendy_salon",
-      "Weekday_Afternoon": "citycenter_trendy_salon",
-      "Weekday_Evening": "citycenter_trendy_salon",
-      "Weekend_Afternoon": "citycenter_trendy_salon"
+      "Weekday_Morning": "philly_proaudio",
+      "Weekday_Afternoon": "philly_proaudio",
+      "Weekday_Evening": "philly_proaudio",
+      "Weekend_Afternoon": "philly_proaudio"
     }
   },
   {
     "npc_id": "britney001",
     "name": "Britney Spears",
     "personality_key": "pop_superstar",
-    "home_location_poi_id": "citycenter_dailygrind_cafe",
-    "initial_current_location_poi_id": "citycenter_dailygrind_cafe",
+    "home_location_poi_id": "philly_daily_grind",
+    "initial_current_location_poi_id": "philly_daily_grind",
     "schedule": {
-      "Weekday_Afternoon": "citycenter_starlight_studio",
-      "Weekend_Evening": "citycenter_grandetheater"
+      "Weekday_Afternoon": "philly_starlight_studio",
+      "Weekend_Evening": "philly_grande_hall"
     },
     "skills": {
       "vocals": 95,

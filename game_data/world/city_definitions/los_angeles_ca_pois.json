@@ -1,0 +1,77 @@
+{
+  "location_id": "los_angeles_ca",
+  "points_of_interest": [
+    {
+      "poi_id": "la_transit_hub",
+      "name": "LAX Fleet & Transit Agency",
+      "description": "West Coast agency for vehicle sales, luxury tour bus rentals, taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "la_hollywood_sound_studios",
+      "name": "Hollywood Sunset Sound Studios",
+      "description": "Premier West Coast recording studio equipped with massive SSL mixing consoles.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $320)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.92,
+        "hourly_rate": 80
+      }
+    },
+    {
+      "poi_id": "la_beverly_hills_management",
+      "name": "Beverly Hills Talent Agency",
+      "description": "Glitzy talent agency representing chart-topping superstars and film composers.",
+      "category": "OFFICE_PR_AGENCY",
+      "interaction_options": ["Inquire about Superstar Management", "Talk to Talent Agent"]
+    },
+    {
+      "poi_id": "la_sunset_diner",
+      "name": "Sunset Strip 24/7 Diner",
+      "description": "Classic Hollywood diner where musicians grab late-night meals after shows.",
+      "category": "RESTAURANT",
+      "interaction_options": ["Eat Dinner ($18)", "Drink Milkshake ($6)"],
+      "properties": {
+        "menu_items": [{"item_id": "dinner", "display_text": "Buy Sunset Dinner ($18)", "cost": 18, "hunger_reduction": 50, "energy_boost": 25}]
+      }
+    },
+    {
+      "poi_id": "la_chateau_hotel",
+      "name": "Chateau Marmont Hotel",
+      "description": "Famous Hollywood hotel frequented by rockstars and celebrities.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($250)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "la_whiskey_club",
+      "name": "Sunset Strip Rock Club",
+      "description": "Historic West Hollywood venue that launched heavy metal and rock superstars.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 500,
+      "prestige": 4,
+      "genre_bias": {"Rock": 1.5, "Pop": 1.2, "Electronic": 1.1},
+      "properties": {
+        "booking_fee": 140,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "la_hollywood_bowl",
+      "name": "Hollywood Bowl Amphitheater",
+      "description": "Iconic 17,500-seat outdoor amphitheater in the Hollywood Hills.",
+      "venue_type": "AMPHITHEATER",
+      "category": "VENUE",
+      "capacity": 17500,
+      "prestige": 5,
+      "genre_bias": {"Pop": 1.4, "Rock": 1.4, "Electronic": 1.3},
+      "properties": {
+        "booking_fee": 2000,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

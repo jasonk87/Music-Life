@@ -69,7 +69,8 @@ class EarlyLifeLoop:
         if not location:
             return
         self._ensure_job_sites_for_location(location)
-        if not player.early_jobs:
+        first_listing = not player.early_jobs
+        if location:
             for job in self.JOB_CATALOG:
                 poi = self._find_job_site(location, job.job_id)
                 if not poi:
@@ -86,7 +87,7 @@ class EarlyLifeLoop:
                     "stress_cost": job.stress_cost,
                     "recurrence_days": job.recurrence_days,
                 }
-            if player.early_jobs:
+            if first_listing and player.early_jobs:
                 player.active_survival_job_id = sorted(player.early_jobs.keys())[0]
 
     def schedule_job_shift(self, player, job_id: Optional[str] = None, start_time=None):
@@ -116,6 +117,8 @@ class EarlyLifeLoop:
         return {"ok": True, "job_id": selected_job_id, "start": start, "end": end, "destination_id": job["location_id"]}
 
     def ensure_next_shift_exists(self, player):
+        if getattr(self.game, "recurring_work", True) is False:
+            return
         if not player or not hasattr(player, "schedule"):
             return
         upcoming_job = any(

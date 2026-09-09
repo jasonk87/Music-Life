@@ -17,7 +17,7 @@ class DummyGame:
     def __init__(self):
         self.player = Player("Hero")
         self.player.schedule = PlayerSchedule()
-        self.player.current_location = Location("City Center", "Metro")
+        self.player.current_location = Location("Philadelphia, PA", "Metro")
         self.player.current_poi = PointOfInterest("downtown", "Downtown", "Scene", category="POI_STREET")
         self.player.current_location.add_poi(self.player.current_poi)
 

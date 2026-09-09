@@ -26,16 +26,14 @@ class TransitLayer:
     """Lightweight travel-phase layer over the existing TravelManager flow."""
 
     BASE_ACTIONS: Dict[str, TransitAction] = {
-        "wait": TransitAction("wait", "Wait / Stay Focused", 60),
+        "wait": TransitAction("wait", "Travel for one hour", 60),
         "sleep": TransitAction("sleep", "Sleep / Rest", 60, requires_passenger_bandwidth=True),
-        "phone": TransitAction("phone", "Check Phone", 60, requires_passenger_bandwidth=True),
-        "news": TransitAction("news", "Review News & Signals", 60, requires_passenger_bandwidth=True),
-        "messages": TransitAction("messages", "Review Messages & Opportunities", 60, requires_passenger_bandwidth=True),
-        "call": TransitAction("call", "Call a Contact", 60, requires_passenger_bandwidth=True),
+        "phone": TransitAction("phone", "Open phone", 0, requires_passenger_bandwidth=True),
+        "call": TransitAction("call", "Call a contact / 15 min", 15, requires_passenger_bandwidth=True),
         "prepare": TransitAction("prepare", "Mental Preparation", 60),
         "gear_check": TransitAction("gear_check", "Check Gear / Prep", 60),
         "eat": TransitAction("eat", "Eat Meal", 60, money_cost=12),
-        "drink": TransitAction("drink", "Have a Drink", 60, money_cost=9),
+        "drink": TransitAction("drink", "Have a Drink", 60, money_cost=9, requires_passenger_bandwidth=True),
     }
 
     def start_session(self, travel_manager) -> TransitSession:
@@ -46,23 +44,30 @@ class TransitLayer:
     def estimate_remaining_minutes(self, tm) -> int:
         remaining_distance = max(0.0, tm.distance_total - tm.distance_covered)
         speed = max(5.0, float(getattr(tm, "current_speed", 60.0) or 60.0))
-        return max(0, int(ceil((remaining_distance / speed) * 60)))
+        return max(0, int(ceil((remaining_distance / speed) * 60))) + getattr(tm, "delay_minutes", 0)
 
     def available_actions(self, game, tm) -> Dict[str, str]:
         player = game.player
         can_passenger_multitask = self._is_passenger_context(player, tm)
 
-        actions: Dict[str, str] = {}
+        actions: Dict[str, str] = {"continue": "Continue until arrival or interruption"}
         for action_id, definition in self.BASE_ACTIONS.items():
             if definition.requires_passenger_bandwidth and not can_passenger_multitask:
                 continue
-            if action_id == "sleep" and getattr(tm, "transport_mode", None) in {"walk", "bike"}:
+            if action_id in {"sleep", "gear_check"} and not can_passenger_multitask:
                 continue
             if action_id == "eat" and player.money < definition.money_cost:
                 continue
             if action_id == "drink" and player.money < definition.money_cost:
                 continue
             actions[action_id] = definition.label
+        vehicle = getattr(tm, 'vehicle', None)
+        if vehicle and hasattr(vehicle, 'fuel'):
+            missing = max(0, vehicle.fuel_capacity - vehicle.fuel)
+            if missing > 0:
+                actions['refuel'] = f"Fuel stop / ${ceil(missing * 3)} / 30 min"
+            if vehicle.condition < 100:
+                actions['repair'] = f"Roadside repairs / ${ceil((100 - vehicle.condition) * 3)} / 2 hours"
         return actions
 
     def execute_chunk(self, game, tm, session: TransitSession, action_id: str) -> Dict:
@@ -72,16 +77,82 @@ class TransitLayer:
             action_id = "wait"
 
         logs: List[str] = []
+        # The departure city remains the route origin, but the player is no
+        # longer physically present in its station or venue.
+        player.current_poi = None
+        if action_id in {'phone', 'call', 'continue'}:
+            arrived = False
+            def spend(minutes):
+                nonlocal arrived
+                events, arrived, elapsed = self.advance_travel(game, tm, minutes)
+                logs.extend(events)
+                for line in events:
+                    game.GAME_LOG.add_log_message(line)
+                if action_id in {'phone', 'call'} and arrived and elapsed < minutes:
+                    player.current_location = tm.destination
+                    player.current_poi = game._get_arrival_poi(tm.destination, tm.transport_mode)
+                    game._advance_time_with_needs(minutes - elapsed)
+            if action_id == 'phone':
+                from game.phone_actions import onboard_phone
+                onboard_phone(game, tm, spend)
+            elif action_id == 'call':
+                from game.phone_actions import choose_contact
+                choose_contact(game, spend)
+            else:
+                for _ in range(48):
+                    upcoming = player.schedule.get_upcoming_events(current_game_time.copy(), limit=1) if hasattr(player, 'schedule') else []
+                    deadline = upcoming[0].start_time if upcoming else None
+                    minutes = min(60, max(1, round(deadline.days_difference(current_game_time) * 1440))) if deadline else 60
+                    spend(minutes)
+                    if arrived or logs or player.energy < 20 or player.hunger >= 75:
+                        if not arrived and not logs:
+                            logs.append('Journey paused: you need rest or food.')
+                        break
+                    if deadline and current_game_time >= deadline:
+                        logs.append('A calendar commitment is starting. You are still in transit.')
+                        break
+                    if hasattr(player, 'schedule'):
+                        upcoming = player.schedule.get_upcoming_events(current_game_time.copy(), limit=1)
+                        if upcoming and upcoming[0].start_time.days_difference(current_game_time) * 1440 <= 60:
+                            logs.append('A commitment starts within the hour. Check the calendar before continuing.')
+                            break
+            session.action_history.append(action_id)
+            session.chunks_completed += 1
+            return {'arrived': arrived, 'logs': logs, 'feed': [], 'action_id': action_id,
+                    'remaining_minutes': self.estimate_remaining_minutes(tm)}
+        if action_id in ('refuel', 'repair'):
+            vehicle = tm.vehicle
+            cost = (ceil(max(0, vehicle.fuel_capacity - vehicle.fuel) * 3) if action_id == 'refuel'
+                    else ceil(max(0, 100 - vehicle.condition) * 3))
+            if player.money < cost:
+                logs.append(f'This service costs ${cost}. No payment taken.')
+            else:
+                player.money -= cost
+                if action_id == 'refuel': vehicle.refuel(vehicle.fuel_capacity)
+                else: vehicle.repair()
+                minutes = 30 if action_id == 'refuel' else 120
+                game._advance_time_with_needs(minutes)
+                tm.travel_time_elapsed += minutes / 60
+                logs.append(f"{'Fuel stop' if action_id == 'refuel' else 'Roadside repairs'} complete. Paid ${cost}.")
+                session.chunks_completed += 1
+                session.action_history.append(action_id)
+            return {'arrived': False, 'logs': logs, 'feed': [], 'action_id': action_id,
+                    'remaining_minutes': self.estimate_remaining_minutes(tm)}
+        if action_id == 'gear_check':
+            from game.career_actions import report
+            report(game, 'Before the next stop', '\n'.join(self._run_prep_check(game)))
+            return {'arrived': False, 'logs': [], 'feed': [], 'action_id': action_id,
+                    'remaining_minutes': self.estimate_remaining_minutes(tm)}
         action = self.BASE_ACTIONS[action_id]
         session.action_history.append(action_id)
-        if hasattr(game, "ui_signals"):
-            feed = game.ui_signals.get_world_feed(limit=4)
-        else:
-            feed = self._collect_world_feed(game)
+        feed = []
 
         if action.money_cost > 0:
             player.money -= action.money_cost
             logs.append(f"Transit spend: ${action.money_cost} for {action.label.lower()}.")
+
+        events, arrived, elapsed = self.advance_travel(game, tm, 60)
+        logs.extend(events)
 
         # Action effects
         if action_id == "sleep":
@@ -90,32 +161,12 @@ class TransitLayer:
                 sleep_boost += 4
             if game.delegation_system.get_role(player, "driver"):
                 sleep_boost += 3
-            player.energy = min(100, player.energy + sleep_boost)
-            player.stress = max(0, player.stress - 3)
+            player.energy = min(100, player.energy + sleep_boost * elapsed / 60)
+            player.stress = max(0, player.stress - 3 * elapsed / 60)
             logs.append("You catch meaningful rest during transit.")
-        elif action_id == "phone":
-            player.stress = min(100, player.stress + 1)
-            logs.append("You stay plugged in on your phone.")
-        elif action_id == "news":
-            player.inspiration = min(100, player.inspiration + 2)
-            logs.append("You review public signals and industry chatter.")
-        elif action_id == "messages":
-            logs.append("You process incoming messages and opportunity pings.")
-        elif action_id == "call":
-            if player.contacts:
-                npc_id = random.choice(player.contacts)
-                npc = game.NPC_REGISTRY.get(npc_id)
-                if npc:
-                    npc.update_relationship(1)
-                    logs.append(f"You called {npc.name} and kept the relationship warm.")
-                else:
-                    logs.append("You made a quick relationship check-in call.")
-            else:
-                logs.append("No contacts to call right now.")
-            player.stress = max(0, player.stress - 1)
         elif action_id == "prepare":
-            player.stress = max(0, player.stress - 4)
-            player.inspiration = min(100, player.inspiration + 1)
+            player.stress = max(0, player.stress - 4 * elapsed / 60)
+            player.inspiration = min(100, player.inspiration + elapsed / 60)
             logs.append("You mentally rehearse and focus on execution.")
         elif action_id == "gear_check":
             logs.extend(self._run_prep_check(game))
@@ -134,17 +185,6 @@ class TransitLayer:
         logs.extend(interruption_logs)
         logs.extend(self._apply_transit_delegation_events(game, tm))
 
-        minutes = max(60, int(session.chunk_minutes))
-        arrived = False
-        hours = max(1, minutes // 60)
-        for _ in range(hours):
-            events, arrived = tm.advance_one_hour()
-            for event in events:
-                logs.append(event)
-            game._advance_time_with_needs(60)
-            if arrived:
-                break
-
         session.chunks_completed += 1
 
         return {
@@ -155,10 +195,19 @@ class TransitLayer:
             "remaining_minutes": self.estimate_remaining_minutes(tm),
         }
 
+    def advance_travel(self, game, tm, minutes):
+        if hasattr(tm, 'advance_minutes'):
+            events, arrived, elapsed = tm.advance_minutes(minutes)
+        else:  # Compatibility for older integrations with hourly managers.
+            events, arrived = tm.advance_one_hour()
+            elapsed = 60
+        game._advance_time_with_needs(elapsed)
+        return events, arrived, elapsed
+
     def _is_passenger_context(self, player, tm) -> bool:
+        if getattr(tm, "transport_mode", None) in {"walk", "bike"}:
+            return False
         if getattr(tm, "vehicle", None) is None:
-            return True
-        if getattr(tm.vehicle, "name", "") == "Custom Tour Bus":
             return True
         if player is None:
             return False

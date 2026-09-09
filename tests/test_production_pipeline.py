@@ -9,6 +9,7 @@ from game.organization_contracts import OrganizationContractSystem
 from game.player import Player
 from game.player_schedule import PlayerSchedule
 from game.poi import PointOfInterest
+from game.obligation_resolver import ObligationResolver
 from game.production_pipeline import ProductionPipelineSystem
 from game.visibility_system import VisibilitySystem
 from game.world_memory import WorldMemoryStore
@@ -18,9 +19,11 @@ class DummyGame:
     def __init__(self):
         self.player = Player("Hero")
         self.player.schedule = PlayerSchedule()
-        self.player.current_location = Location("City Center", "Metro")
+        self.player.current_location = Location("Philadelphia, PA", "Metro")
         self.player.current_poi = PointOfInterest("studio", "Home Studio", "Studio", category="HOME")
+        self.player.alt_poi = PointOfInterest("coffee", "Coffee Shop", "Cafe", category="POI_CAFE")
         self.player.current_location.add_poi(self.player.current_poi)
+        self.player.current_location.add_poi(self.player.alt_poi)
 
         self.world_memory = WorldMemoryStore()
         self.visibility_system = VisibilitySystem()
@@ -29,6 +32,12 @@ class DummyGame:
         self.travel_manager = None
 
         self.npc_identity = NPCIdentitySystem(self)
+
+    def get_poi_or_venue_by_id(self, target_id):
+        for poi in self.player.current_location.points_of_interest:
+            if getattr(poi, "poi_id", None) == target_id:
+                return poi
+        return None
 
 
 class TestProductionPipeline(unittest.TestCase):
@@ -66,6 +75,37 @@ class TestProductionPipeline(unittest.TestCase):
         self.assertTrue(ok)
         events = self.game.player.schedule.get_upcoming_events(current_game_time.copy(), limit=5)
         self.assertTrue(any((e.details or {}).get("project_id") == p.project_id for e in events))
+
+    def test_booked_creative_work_requires_poi_presence_not_just_city(self):
+        p = self.pipeline.create_project("song", self.game.player.name)
+        ok = self.pipeline.schedule_work_item(p.project_id, "Studio Writing Block", "Meeting", days_ahead=0, minutes=120)
+        self.assertTrue(ok)
+
+        event = self.game.player.schedule.scheduled_items[-1]
+        self.assertEqual(event.details.get("destination_id"), "studio")
+
+        # Same city, different POI should not count as already present.
+        self.game.player.current_poi = self.game.player.alt_poi
+        resolution = ObligationResolver(self.game)._evaluate_obligation(event, current_game_time.copy())
+        self.assertNotEqual(resolution.status, "reachable")
+
+    def test_schedule_work_item_resolves_destination_from_location_name_when_not_currently_at_poi(self):
+        p = self.pipeline.create_project("song", self.game.player.name)
+        self.game.player.current_poi = None
+
+        ok = self.pipeline.schedule_work_item(
+            p.project_id,
+            "Studio Recording Block",
+            "Studio Session",
+            days_ahead=1,
+            minutes=120,
+            location_name="Home Studio",
+            requires_presence=True,
+        )
+        self.assertTrue(ok)
+
+        event = self.game.player.schedule.scheduled_items[-1]
+        self.assertEqual(event.details.get("destination_id"), "studio")
 
     def test_quality_changes_from_time_pressure_and_resources(self):
         p_bad = self.pipeline.create_project("single", self.game.player.name)

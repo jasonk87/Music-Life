@@ -86,6 +86,7 @@ class TestPerformanceFlow(unittest.TestCase):
         game.active_performance = event
         game.performance_stage = "finish"
         game.player = type("PlayerStub", (), {})()
+        game.player.name = "Tester"
         game.player.money = 0
         game.player.fame = 0
         game.player.skills = {"stage_presence": 10}
@@ -105,7 +106,7 @@ class TestPerformanceFlow(unittest.TestCase):
 
         game.performance_manager = PerfStub()
 
-        with patch("game.game.random.randint", return_value=70):
+        with patch("game.game.random.randint", return_value=70), patch("game.game.random.random", return_value=1.0):
             game.handle_performance_scene()
 
         self.assertGreater(game.player.money, 50)

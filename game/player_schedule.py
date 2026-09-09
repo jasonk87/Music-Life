@@ -3,9 +3,12 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
 PRESENCE_REQUIRED_CATEGORIES = {"Gig", "Gig (Tour)", "Job", "Rehearsal", "Meeting", "Label Visit", "Studio Session"}
-import datetime # For date calculations, though GameTime is primary
 
 from game.game_time import GameTime # Assuming GameTime is in game_time.py
+
+def item_time_range_overlaps(item, first_day, last_day):
+    return item.start_time.day_index() <= last_day and item.end_time.day_index() >= first_day
+
 
 @dataclass
 class ScheduledItem:
@@ -62,12 +65,8 @@ class PlayerSchedule:
 
     def _event_overlaps_date(self, event: ScheduledItem, year: int, month: int, day: int) -> bool:
         """Checks if an event (which can span multiple days) overlaps with the given single date."""
-        event_start_date = datetime.date(event.start_time.year, event.start_time.month, event.start_time.day)
-        event_end_date = datetime.date(event.end_time.year, event.end_time.month, event.end_time.day)
-        check_date = datetime.date(year, month, day)
-
-        # Event starts on or before the check_date AND ends on or after the check_date
-        return event_start_date <= check_date <= event_end_date
+        check_day = GameTime(year, month, day).day_index()
+        return item_time_range_overlaps(event, check_day, check_day)
 
     def get_events_for_day(self, year: int, month: int, day: int) -> List[ScheduledItem]:
         # Returns events that START on this day, or are ongoing through this day.
@@ -79,38 +78,14 @@ class PlayerSchedule:
         return sorted(daily_events) # Ensure they are sorted by start time
 
     def get_events_for_week(self, year: int, month: int, day: int, week_starts_on_monday=True) -> List[ScheduledItem]:
-        """ Returns events that fall within the week starting from the given date.
-            Note: GameTime doesn't have weekday, so we use datetime for date logic here.
-        """
-        weekly_events = []
-        try:
-            start_date_dt = datetime.date(year, month, day)
-        except ValueError:
-            print(f"Error: Invalid date provided for week calculation: {year}-{month}-{day}")
-            return []
-
-        # Determine start of the week (e.g., Monday)
-        if week_starts_on_monday:
-            # 0 is Monday, 6 is Sunday for datetime.weekday()
-            days_to_subtract = start_date_dt.weekday()
-            week_start_dt = start_date_dt - datetime.timedelta(days=days_to_subtract)
-        else: # Week starts on Sunday
-            days_to_subtract = (start_date_dt.weekday() + 1) % 7
-            week_start_dt = start_date_dt - datetime.timedelta(days=days_to_subtract)
-
-        week_end_dt = week_start_dt + datetime.timedelta(days=6)
-
-        for item in self.scheduled_items:
-            # Check if any part of the event falls within the week range
-            event_start_dt = datetime.date(item.start_time.year, item.start_time.month, item.start_time.day)
-            event_end_dt = datetime.date(item.end_time.year, item.end_time.month, item.end_time.day)
-
-            # Overlap condition: event_start <= week_end AND event_end >= week_start
-            if event_start_dt <= week_end_dt and event_end_dt >= week_start_dt:
-                weekly_events.append(item)
-
-        return sorted(weekly_events)
-
+        """Use the same 30-day calendar as travel, bookings and living costs."""
+        index = GameTime(year, month, day).day_index()
+        # The starting career date (2024-01-01) is a Monday.
+        weekday = (index - GameTime(2024, 1, 1).day_index()) % 7
+        offset = weekday if week_starts_on_monday else (weekday + 1) % 7
+        first = index - offset
+        return sorted(item for item in self.scheduled_items
+                      if item_time_range_overlaps(item, first, first + 6))
 
     def get_next_presence_obligation(self, current_time: GameTime, cutoff_time: Optional[GameTime] = None) -> Optional[ScheduledItem]:
         for item in self.scheduled_items:

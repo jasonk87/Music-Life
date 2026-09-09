@@ -22,7 +22,8 @@ class TravelManager:
 
     def _get_speed(self):
         if self.vehicle:
-            return self.vehicle.speed
+            # Early vehicle catalogs stored road-speed multipliers.
+            return self.vehicle.speed * 60 if self.vehicle.speed <= 5 else self.vehicle.speed
         if self.transport_mode == "plane": return 800.0
         if self.transport_mode == "train": return 100.0
         if self.transport_mode == "bus": return 60.0
@@ -31,80 +32,65 @@ class TravelManager:
         return 60.0
 
     def advance_one_hour(self):
+        events, arrived, _ = self.advance_minutes(60)
+        return events, arrived
+
+    def advance_minutes(self, minutes):
+        """Return events, arrival and actual elapsed minutes, including delays.
+
+        Road events are checked per hour of movement, independent of how often
+        the player opens the phone. Partial final legs stop at arrival.
         """
-        Simulates 1 hour of travel.
-        Returns (events_list, arrived_bool)
-        """
-        if self.is_finished:
-            return [], True
-
-        events = []
-        # Update speed (variance)
-        speed = self.current_speed * random.uniform(0.9, 1.1)
-        dist_leg = speed # 1 hour
-
-        # Cap at remaining
-        if self.distance_covered + dist_leg >= self.distance_total:
-            dist_leg = self.distance_total - self.distance_covered
-            self.is_finished = True
-
-        # Resource Consumption & Vehicle Logic
-        if self.vehicle:
-            result = self.vehicle.travel(dist_leg)
-            if not result['success']:
-                if result.get('breakdown'):
-                    events.append(f"BREAKDOWN: {result['message']}")
-                    # Breakdown adds delay?
-                    # In this turn-based system, delay means "distance doesn't increase but time passes"?
-                    # Or we explicitly add delay hours.
-                    # Let's say breakdown effectively halts progress for this turn AND adds extra time to 'elapsed' counter conceptually,
-                    # but since we are stepping 1 hour at a time, maybe we just set is_finished=False and don't advance distance?
-                    # Simpler: Breakdown stops distance gain this turn.
-                    dist_leg = 0 # No progress
-                    self.player.stress += 10
-                elif "fuel" in result.get('message', '').lower():
-                    events.append("Out of fuel! Called tow truck ($200).")
-                    self.player.money -= 200
-                    self.vehicle.refuel(10)
-                    dist_leg = 0
-
-            # Vehicle wear/fuel is handled inside vehicle.travel
-
-        # Player Stats (Fatigue/Stress)
-        # Class multipliers
-        stress_mult = 1.0
-        if self.ticket_class == "business": stress_mult = 0.5
-        elif self.ticket_class == "first": stress_mult = 0.0
-
-        self.player.energy = max(0, self.player.energy - 2) # Constant drain
-        self.player.stress = min(100, self.player.stress + (1 * stress_mult))
-
-        # Random Road Events
-        # We pass "car", "plane", etc.
-        mode_str = "car" if self.vehicle else self.transport_mode
-        evt_desc, delay, stress_mod, money_mod, stop = generate_road_event(self.player, self.vehicle, dist_leg, mode_str)
-
-        if evt_desc:
-            events.append(f"EVENT: {evt_desc}")
-            self.player.stress = min(100, self.player.stress + (stress_mod * stress_mult))
-            self.player.money += money_mod
-            # Delay in "Interactive Travel" means we just don't progress distance, or we progress less?
-            # If delay > 0, effectively we spend hours not moving.
-            # But advance_one_hour is 1 hour.
-            # We can handle delay by adding to a "delay_pool" that must drain before moving?
-            # Or just ignore exact hour tracking for events and just say "You lost 2 hours" (and manually advance game time elsewhere?)
-            # Let's keep it simple: Events are flavor + stat changes. Progress continues unless 'stop' is True.
-            if stop:
-                dist_leg = 0
-                events.append("Travel halted for this hour.")
-
-        self.distance_covered += dist_leg
-        self.travel_time_elapsed += 1
-
-        if self.distance_covered >= self.distance_total:
-            self.is_finished = True
-
-        return events, self.is_finished
+        from math import ceil
+        events, elapsed = [], 0
+        self.delay_minutes = getattr(self, 'delay_minutes', 0)
+        self.road_check_in = getattr(self, 'road_check_in', 60)
+        while elapsed < minutes and not self.is_finished:
+            if self.delay_minutes > 0:
+                step = min(minutes - elapsed, self.delay_minutes)
+                self.delay_minutes -= step
+            else:
+                if self.road_check_in <= 0:
+                    self.road_check_in = 60
+                    mode = 'car' if self.vehicle else self.transport_mode
+                    desc, delay, stress, money, stop = generate_road_event(self.player, self.vehicle, 60 * self.current_speed / 60, mode)
+                    if desc:
+                        events.append(f'EVENT: {desc}')
+                        self.player.stress = max(0, min(100, self.player.stress + stress))
+                        self.player.money += money
+                        self.delay_minutes = max(ceil(delay * 60), 60 if stop else 0)
+                        if self.delay_minutes:
+                            events.append(f'Delay: {self.delay_minutes} minutes before moving again.')
+                            continue
+                remaining = max(0, self.distance_total - self.distance_covered)
+                if remaining < 0.000001:
+                    self.is_finished = True
+                    break
+                step = min(minutes - elapsed, self.road_check_in, max(1, ceil(remaining / self.current_speed * 60)))
+                distance = min(remaining, self.current_speed * step / 60)
+                if self.vehicle:
+                    result = self.vehicle.travel(distance)
+                    if not result['success']:
+                        distance = 0
+                        if result.get('breakdown'):
+                            events.append(f"BREAKDOWN: {result['message']}")
+                            self.player.stress = min(100, self.player.stress + 10)
+                        else:
+                            events.append('Out of fuel! Called tow truck ($200).')
+                            self.player.money -= 200
+                            self.vehicle.refuel(10)
+                self.distance_covered += distance
+                self.road_check_in -= step
+            elapsed += step
+            self.player.energy = max(0, self.player.energy - 2 * step / 60)
+            stress_rate = {'business': .5, 'first': 0}.get(self.ticket_class, 1)
+            self.player.stress = max(0, min(100, self.player.stress + stress_rate * step / 60))
+            self.is_finished = self.distance_covered >= self.distance_total and self.delay_minutes <= 0
+            # Hand control back after trouble; never silently run through it.
+            if events:
+                break
+        self.travel_time_elapsed += elapsed / 60
+        return events, self.is_finished, elapsed
 
     def get_progress_percent(self):
         if self.distance_total == 0: return 1.0

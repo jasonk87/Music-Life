@@ -11,7 +11,12 @@ class PerformanceManager:
 
         self.state = "setup" # setup, section_intro, player_input, resolution, summary
         self.sections = ["Intro", "Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge", "Chorus", "Outro"]
+        self.setlist = list(getattr(game_ref, 'performance_setlist', [])) or [song]
+        if len(self.setlist) > 1:
+            self.sections = [section for _ in self.setlist for section in ('Verse', 'Chorus', 'Closing')]
+        self.section_songs = ([s for s in self.setlist for _ in range(3)] if len(self.setlist) > 1 else [song] * len(self.sections))
         self.current_section_index = 0
+        self.action_streak = 0
 
         # Stats
         self.crowd_hype = 50 # 0-100
@@ -30,8 +35,11 @@ class PerformanceManager:
             bias_mult = self.event.location.genre_bias.get(self.song.genre, 1.0)
 
         self.crowd_hype = int(self.crowd_hype * bias_mult)
+        room = getattr(event, 'club_performance_context', {})
+        self.crowd_hype = max(0, min(100, self.crowd_hype + room.get('crowd_bonus', 0) + room.get('sound_bonus', 0)))
+        self.sound_bonus = room.get('sound_bonus', 0)
 
-        self.band_energy = 100 # 0-100
+        self.band_energy = getattr(game_ref.player, "energy", 100) # arrive with the stamina you actually have
         self.performance_quality = 0 # Accumulator
 
         self.log = []
@@ -50,7 +58,13 @@ class PerformanceManager:
 
     def handle_input(self, choice_key):
         if self.state == "player_input":
+            if choice_key not in ('safe', 'hype', 'solo'):
+                return
+            self.song = self.section_songs[self.current_section_index]
             self.resolve_action(choice_key)
+            self.game._advance_time_with_needs(3)
+            self.game.player.energy = max(0, self.game.player.energy - (1 if choice_key == 'safe' else 3))
+            self.game.GAME_LOG.add_log_message(self.turn_result)
             self.state = "resolution"
             self.current_section_index += 1
             if self.current_section_index >= len(self.sections):
@@ -62,6 +76,7 @@ class PerformanceManager:
                 pass
         elif self.state == "resolution":
             self.state = "player_input"
+            self.song = self.section_songs[self.current_section_index]
 
     def resolve_action(self, action):
         # Find best working guitar
@@ -77,7 +92,7 @@ class PerformanceManager:
 
         # Apply durability damage
         if best_guitar:
-            damage = random.randint(1, 5) # 1-5% damage per section
+            damage = random.randint(0, 2) # 1-5% damage per section
             best_guitar.take_damage(damage)
             if best_guitar.is_broken:
                 self.turn_result = f"SNAP! Your {best_guitar.name} broke during the {self.get_current_section()}! Disaster!"
@@ -95,14 +110,21 @@ class PerformanceManager:
             base_skill -= 30 # Huge penalty for no instrument
             self.turn_result = "You're trying to perform without an instrument!" # Warning in log
 
-        roll = random.randint(0, 100) + base_skill
+        fatigue = max(0, (35 - self.band_energy) * 0.8)
+        stage_skill = self.game.player.skills.get('stage_presence', 0)
+        material = (self.song.song_quality - 0.5) * 20
+        self.action_streak = self.action_streak + 1 if action == self.last_action else 1
+        self.last_action = action
+        roll = random.randint(0, 100) + base_skill + material - fatigue + self.sound_bonus
+        if action == 'hype': roll += stage_skill * 0.5
 
         section = self.get_current_section()
 
         if action == "safe":
-            self.crowd_hype += 2
+            self.crowd_hype += (2 if self.action_streak < 3 else -1) - int(fatigue / 10)
             self.band_energy -= 2
-            self.turn_result = f"You played the {section} cleanly. The crowd nods along."
+            self.turn_result = (f"You play the {section} cleanly. The room settles into the song." if self.action_streak < 3
+                                else "The familiar arrangement is starting to lose the room.")
         elif action == "hype":
             if roll > 50:
                 self.crowd_hype += 10
@@ -123,6 +145,9 @@ class PerformanceManager:
                 self.turn_result = f"You fumbled the solo in the {section}. Ouch."
         # Trend Bonus Check
         # Assuming we can access trend manager via self.game.trend_manager
+        if self.action_streak >= 3 and action != 'safe':
+            self.crowd_hype -= 3
+            self.turn_result += " The repeated move is wearing thin."
         if hasattr(self.game, 'trend_manager'):
             trend_mult = self.game.trend_manager.get_popularity(self.song.genre)
             if trend_mult > 1.2 and action == "hype":
@@ -133,6 +158,15 @@ class PerformanceManager:
         self.band_energy = max(0, min(100, self.band_energy))
         self.log.insert(0, self.turn_result)
 
+        # Trigger audio SFX
+        if hasattr(self.game, 'sound_manager'):
+            if self.crowd_hype > 60:
+                self.game.sound_manager.play_cheer_sound()
+            elif self.crowd_hype < 35:
+                self.game.sound_manager.play_boo_sound()
+            else:
+                self.game.sound_manager.play_rhythm_beat()
+
     def draw_screen(self):
         self.ui.clear_screen()
 
@@ -140,8 +174,11 @@ class PerformanceManager:
         self.ui.draw_text(f"Live at {self.event.location.name}", self.ui.FONT_TITLE, (255, 255, 255), 640, 50, centered=True)
         self.ui.draw_text(f"Playing: {self.song.title}", self.ui.FONT_DEFAULT, (200, 200, 200), 640, 90, centered=True)
 
-        # Meters
-        self.ui.draw_text(f"Crowd Hype: {self.crowd_hype}/100", self.ui.FONT_DEFAULT, (255, 255, 0), 100, 150)
+        # Hype Gauge & Energy
+        if hasattr(self.ui, 'draw_crowd_hype_gauge'):
+            self.ui.draw_crowd_hype_gauge(self.crowd_hype, 100, 140, width=320, height=28)
+        else:
+            self.ui.draw_text(f"Crowd Hype: {self.crowd_hype}/100", self.ui.FONT_DEFAULT, (255, 255, 0), 100, 150)
         self.ui.draw_text(f"Band Energy: {self.band_energy}/100", self.ui.FONT_DEFAULT, (0, 255, 255), 900, 150)
 
         # Main Display

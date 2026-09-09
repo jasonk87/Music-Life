@@ -32,13 +32,25 @@ class PlayerUIShell:
         tags = self.game.ui_signals.get_condition_tags() if hasattr(self.game, "ui_signals") else []
         tags = [self._clean_text(t) for t in tags]
 
+        player = getattr(self.game, "player", None)
+        if player:
+            cred = getattr(player, "street_cred", 50)
+            fame = getattr(player, "fame", 0)
+            money = getattr(player, "money", 0)
+            tags.insert(0, f"Street Cred {cred}")
+            tags.insert(1, f"Fame {fame}")
+            tags.insert(2, f"Cash ${money}")
+            if getattr(player, "vehicle", None):
+                v = player.vehicle
+                tags.insert(3, f"{getattr(v, 'name', 'Vehicle')}: {getattr(v, 'fuel_current', 0.0):.0f}/{getattr(v, 'fuel_capacity', 0.0):.0f}L (Eng {getattr(v, 'engine_condition', 100.0):.0f}%)")
+
         return {
             "headline": self._clean_text(context.get("label", "Unknown Place")),
             "city": context.get("city"),
             "state": context.get("state", "grounded"),
             "clock": get_current_time_str(),
             "day": f"Day {current_game_time.day}",
-            "tags": tags[:6],
+            "tags": tags[:8],
         }
 
     def schedule_panel(self) -> Dict[str, List[str]]:

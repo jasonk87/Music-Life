@@ -18,7 +18,7 @@ class DummyGame:
     def __init__(self):
         self.player = Player("Hero")
         self.player.schedule = PlayerSchedule()
-        self.player.current_location = Location("City Center", "Metro")
+        self.player.current_location = Location("Philadelphia, PA", "Metro")
         self.player.current_poi = PointOfInterest("downtown", "Downtown", "Scene", category="POI_STREET")
         self.player.current_location.add_poi(self.player.current_poi)
 
@@ -41,7 +41,7 @@ class TestOrganizationContracts(unittest.TestCase):
 
         self.game = DummyGame()
         self.system = OrganizationContractSystem(self.game)
-        self.system.create_organization("label_a", "Apex Records", home_city="City Center", tier=0.8)
+        self.system.create_organization("label_a", "Apex Records", home_city="Philadelphia, PA", tier=0.8)
 
         self.contact = NPC("rep_1", "Mara", "manager")
         self.contact.relationship_score = 35

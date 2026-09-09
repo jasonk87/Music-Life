@@ -12,6 +12,13 @@
       }
     },
     {
+      "poi_id": "austin_transit_hub",
+      "name": "Austin Transport & Fleet Center",
+      "description": "Austin's main transport agency for vehicle purchases, rentals, taxis, and tour fleet bookings.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
       "poi_id": "austin_kaus_radio",
       "name": "KAUS Austin Radio",
       "description": "Independent Austin radio, playing local and eclectic sounds.",

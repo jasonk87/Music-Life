@@ -12,6 +12,13 @@
       }
     },
     {
+      "poi_id": "citycenter_transit_hub",
+      "name": "City Center Fleet & Transit Agency",
+      "description": "Metropolitan hub for vehicle sales, daily rentals, city taxis, and manager fleet bookings.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
       "poi_id": "citycenter_sharp_pr",
       "name": "Sharp PR Solutions",
       "description": "A modern office for a boutique PR agency. They look like they mean business.",
