@@ -337,7 +337,7 @@ class TestEventFlow(unittest.TestCase):
 
     def test_arrival_poi_prefers_transport_hub(self):
         game = Game(DummyUI())
-        destination = Location("City Center", "Hub city")
+        destination = Location("Philadelphia, PA", "Hub city")
         airport = PointOfInterest("airport", "Airport", "Flights", category="TRANSPORT_AIRPORT")
         cafe = PointOfInterest("cafe", "Cafe", "Coffee", category="POI_CAFE")
         destination.add_poi(cafe)

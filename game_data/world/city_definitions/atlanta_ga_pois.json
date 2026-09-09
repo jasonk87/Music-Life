@@ -1,0 +1,46 @@
+{
+  "location_id": "atlanta_ga",
+  "points_of_interest": [
+    {
+      "poi_id": "atlanta_transit_hub",
+      "name": "Peachtree Fleet & Transit Agency",
+      "description": "Vehicle sales, rentals, city taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "atlanta_trap_studios",
+      "name": "Trap Sound Recording Complex",
+      "description": "State-of-the-art studio producing chart-topping hip-hop beats.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $300)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.93,
+        "hourly_rate": 75
+      }
+    },
+    {
+      "poi_id": "atlanta_motel",
+      "name": "Midtown Atlanta Plaza Hotel",
+      "description": "Modern hotel in downtown Atlanta.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($120)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "atlanta_peachtree_lounge",
+      "name": "Peachtree Music Lounge",
+      "description": "Vibrant club with R&B, hip-hop, and trap live sets.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 750,
+      "prestige": 4,
+      "genre_bias": {"Hip-Hop": 1.5, "Pop": 1.3, "Electronic": 1.2},
+      "properties": {
+        "booking_fee": 160,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

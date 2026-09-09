@@ -76,7 +76,7 @@ class Song:
             print(f"Error: Song '{self.title}' must be recorded before it can be released.")
             return False
         self.is_released = True
-        self.release_date = release_date_obj # Expects a GameTime object
+        self.release_date = release_date_obj.copy() if hasattr(release_date_obj, "copy") else release_date_obj
         self.released_by_label_id = released_by_label_id
 
         release_method = f"via Label ID: {self.released_by_label_id}" if self.released_by_label_id else "self-released"

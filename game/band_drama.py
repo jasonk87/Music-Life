@@ -77,3 +77,30 @@ def resolve_weekly_wages(player, band):
         report.append(f"Paid total wages of ${total_wages}.")
 
     return "\n".join(report)
+
+
+def check_creative_friction(player, band, action_type: str) -> str:
+    """
+    Triggers creative friction when commercial/indie decisions clash with band member values.
+    """
+    if not band or len(band.members) <= 1:
+        return ""
+
+    messages = []
+    if action_type == "signed_major_label":
+        for member in band.members:
+            if member == player:
+                continue
+            if getattr(member, "indie_authenticity_preference", 0.7) > 0.6:
+                member.satisfaction = max(0, member.satisfaction - 15)
+                messages.append(f"{member.name} hates signing with a major label ('We sold out!').")
+        band.update_chemistry(-10)
+    elif action_type == "diy_gig_success":
+        for member in band.members:
+            if member == player:
+                continue
+            member.satisfaction = min(100, member.satisfaction + 5)
+        band.update_chemistry(5)
+
+    return "\n".join(messages)
+

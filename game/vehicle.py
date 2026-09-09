@@ -49,13 +49,13 @@ class Vehicle:
         breakdown_chance = (100.0 - self.condition) / 200.0 # e.g. 50% condition -> 0.25 (25%) chance per "trip segment"?
         # Let's scale it by distance. A long trip has higher risk.
         # Say chance is per 100km.
-        risk_segments = max(1, int(distance / 100))
+        risk_segments = max(0, distance / 100)
 
         # Base reliability modifier. High reliability reduces breakdown chance.
         # reliability 1.0 -> chance * 0.5? reliability 0.5 -> chance * 1.5?
         chance_modifier = 2.0 - self.reliability
 
-        final_breakdown_chance = breakdown_chance * chance_modifier * risk_segments
+        final_breakdown_chance = 1 - (1 - min(0.8, breakdown_chance * chance_modifier)) ** risk_segments
 
         # Cap chance
         final_breakdown_chance = min(0.8, final_breakdown_chance)

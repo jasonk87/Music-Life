@@ -1,0 +1,80 @@
+{
+  "location_id": "nashville_tn",
+  "points_of_interest": [
+    {
+      "poi_id": "nashville_transit_hub",
+      "name": "Nashville Transport & Fleet Agency",
+      "description": "Vehicle purchases, touring van rentals, taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "nashville_guitar_emporium",
+      "name": "Nashville Vintage Guitars",
+      "description": "Rare vintage Telecasters, acoustics, and steel guitars.",
+      "category": "SHOP_MUSIC",
+      "interaction_options": ["Browse items for sale", "Repair Gear", "Talk to Staff"],
+      "properties": {
+        "shop_inventory_item_ids": ["basic_electric_guitar", "pro_electric_guitar", "practice_amp_small", "guitar_strings_basic"]
+      }
+    },
+    {
+      "poi_id": "nashville_rca_studios",
+      "name": "RCA Studio Row",
+      "description": "Historic recording studio row where legends tracked classic albums.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $200)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.85,
+        "hourly_rate": 50
+      }
+    },
+    {
+      "poi_id": "nashville_songwriters_lounge",
+      "name": "Nashville Songwriters Lounge",
+      "description": "A quiet acoustic lounge for co-writing and pitching songs to publishers.",
+      "category": "COFFEE_SHOP",
+      "interaction_options": ["Write Songs", "Pitch Song to Publisher", "Drink Coffee ($4)"],
+      "properties": {
+        "menu_items": [{"item_id": "coffee", "display_text": "Buy Coffee ($4)", "cost": 4, "hunger_reduction": 5, "energy_boost": 25}]
+      }
+    },
+    {
+      "poi_id": "nashville_motel",
+      "name": "Honky Tonk Road Motel",
+      "description": "Comfortable motel steps away from Broadway's music strip.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($45)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "nashville_honky_tonk_bar",
+      "name": "Broadway Honky Tonk Bar",
+      "description": "A lively two-story venue with country and rock sets going all night.",
+      "venue_type": "BAR",
+      "category": "VENUE",
+      "capacity": 250,
+      "prestige": 3,
+      "genre_bias": {"Country": 1.4, "Folk": 1.2, "Rock": 1.0},
+      "properties": {
+        "booking_fee": 60,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "nashville_ryman_auditorium",
+      "name": "The Ryman Grand Stage",
+      "description": "The Mother Church of Country Music. Pure prestige.",
+      "venue_type": "AUDITORIUM",
+      "category": "VENUE",
+      "capacity": 2300,
+      "prestige": 5,
+      "genre_bias": {"Country": 1.5, "Americana": 1.4, "Folk": 1.3},
+      "properties": {
+        "booking_fee": 400,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

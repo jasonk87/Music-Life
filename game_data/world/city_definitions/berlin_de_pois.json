@@ -1,0 +1,70 @@
+{
+  "location_id": "berlin_de",
+  "points_of_interest": [
+    {
+      "poi_id": "berlin_transit_hub",
+      "name": "Brandenburg Fleet & Transit Agency",
+      "description": "European transport agency for touring vans, taxis, and fleet management.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "berlin_industrial_studios",
+      "name": "Industrial Sound Factory Studio",
+      "description": "Converted power station studio specializing in analog synths and heavy bass production.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $280)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.91,
+        "hourly_rate": 70
+      }
+    },
+    {
+      "poi_id": "berlin_currywurst_diner",
+      "name": "Kreuzberg Currywurst Stand",
+      "description": "Famous Berlin street food for late night energy.",
+      "category": "RESTAURANT",
+      "interaction_options": ["Eat Currywurst ($7)", "Drink Club-Mate ($4)"],
+      "properties": {
+        "menu_items": [{"item_id": "currywurst", "display_text": "Buy Currywurst ($7)", "cost": 7, "hunger_reduction": 30, "energy_boost": 20}]
+      }
+    },
+    {
+      "poi_id": "berlin_hotel",
+      "name": "Mitte Art Hotel",
+      "description": "Stylish hotel near Alexanderplatz.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($100)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "berlin_berghain_club",
+      "name": "Berghain Techno Temple",
+      "description": "World-famous industrial techno club with strict door policy.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 1500,
+      "prestige": 5,
+      "genre_bias": {"Electronic": 1.6, "Industrial": 1.4},
+      "properties": {
+        "booking_fee": 300,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "berlin_tempelhof_stage",
+      "name": "Tempelhof Airfield Stage",
+      "description": "Massive outdoor festival airfield stage (25,000 capacity).",
+      "venue_type": "FESTIVAL_GROUNDS",
+      "category": "VENUE",
+      "capacity": 25000,
+      "prestige": 5,
+      "genre_bias": {"Electronic": 1.4, "Rock": 1.3, "Pop": 1.3},
+      "properties": {
+        "booking_fee": 3000,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

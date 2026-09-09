@@ -1,0 +1,70 @@
+{
+  "location_id": "tokyo_jp",
+  "points_of_interest": [
+    {
+      "poi_id": "tokyo_transit_hub",
+      "name": "Haneda & Shibuya Fleet Agency",
+      "description": "Tokyo fleet center for bus rentals, city taxis, and tour bookings.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "tokyo_electric_studio",
+      "name": "Shibuya Electric Sound Studio",
+      "description": "Futuristic recording studio specializing in crisp pop, synthwave, and J-rock mastering.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $320)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.94,
+        "hourly_rate": 80
+      }
+    },
+    {
+      "poi_id": "tokyo_ramen_bar",
+      "name": "Shibuya Midnight Ramen",
+      "description": "Steaming hot ramen bowls for late-night musicians.",
+      "category": "RESTAURANT",
+      "interaction_options": ["Eat Tonkotsu Ramen ($12)", "Drink Green Tea ($3)"],
+      "properties": {
+        "menu_items": [{"item_id": "ramen", "display_text": "Buy Tonkotsu Ramen ($12)", "cost": 12, "hunger_reduction": 45, "energy_boost": 20}]
+      }
+    },
+    {
+      "poi_id": "tokyo_capsule_hotel",
+      "name": "Shinjuku Tower Hotel",
+      "description": "High-tech hotel in the heart of Tokyo.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($110)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "tokyo_shibuya_underground",
+      "name": "Shibuya Underground Stage",
+      "description": "Trending basement venue for J-rock and electronic bands.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 600,
+      "prestige": 4,
+      "genre_bias": {"Pop": 1.4, "Rock": 1.3, "Electronic": 1.4},
+      "properties": {
+        "booking_fee": 140,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "tokyo_budokan_hall",
+      "name": "Nippon Budokan Grand Hall",
+      "description": "Legendary octagonal arena famous for live album recordings.",
+      "venue_type": "ARENA",
+      "category": "VENUE",
+      "capacity": 14000,
+      "prestige": 5,
+      "genre_bias": {"Pop": 1.5, "Rock": 1.4, "Electronic": 1.3},
+      "properties": {
+        "booking_fee": 1800,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

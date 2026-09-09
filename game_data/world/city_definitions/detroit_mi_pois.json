@@ -1,0 +1,60 @@
+{
+  "location_id": "detroit_mi",
+  "points_of_interest": [
+    {
+      "poi_id": "detroit_transit_hub",
+      "name": "Motor City Fleet Agency",
+      "description": "Vehicle sales, touring van rentals, taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "detroit_motown_studio",
+      "name": "Motown Hits Studio A",
+      "description": "The legendary 'Hitsville USA' recording studio.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $240)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.90,
+        "hourly_rate": 60
+      }
+    },
+    {
+      "poi_id": "detroit_motel",
+      "name": "Motor City Park Motel",
+      "description": "Clean, reliable lodging near Woodward Ave.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($45)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "detroit_techno_factory",
+      "name": "Underground Industrial Techno Club",
+      "description": "Raw warehouse club where electronic beatmakers perform.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 600,
+      "prestige": 3,
+      "genre_bias": {"Electronic": 1.5, "Rock": 1.1},
+      "properties": {
+        "booking_fee": 110,
+        "allows_player_booking": true
+      }
+    },
+    {
+      "venue_id": "detroit_fox_theater",
+      "name": "The Fox Grand Theater",
+      "description": "Ornate 5,000-seat theater host to national headliners.",
+      "venue_type": "THEATER",
+      "category": "VENUE",
+      "capacity": 5000,
+      "prestige": 5,
+      "genre_bias": {"Pop": 1.3, "Rock": 1.3, "Electronic": 1.2},
+      "properties": {
+        "booking_fee": 800,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

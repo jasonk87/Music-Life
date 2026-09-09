@@ -14,6 +14,12 @@ class Band:
             self.chemistry = max(0, self.chemistry - 10)
             print(f"{new_member.name} has joined {self.name}!")
 
+    def remove_member(self, member):
+        if member in self.members and member != self.members[0]: # Cannot remove leader
+            self.members.remove(member)
+            self.recalculate_skills()
+            self.chemistry = max(0, self.chemistry - 5)
+
     def update_chemistry(self, amount):
         self.chemistry = max(0, min(100, self.chemistry + amount))
 
@@ -40,3 +46,22 @@ class Band:
     def __str__(self):
         member_names = [member.name for member in self.members]
         return f"Band: {self.name} (Members: {', '.join(member_names)})"
+
+
+class BandMember:
+    def __init__(self, name: str, role: str = "Guitar", skill_level: int = 5, wage_demand: int = 50):
+        self.name = name
+        self.role = role
+        self.skills = {
+            "songwriting": skill_level,
+            "guitar": skill_level,
+            "vocals": skill_level,
+            "stage_presence": skill_level,
+            "electronic": skill_level,
+        }
+        self.satisfaction = 70
+        self.ego = 50
+        self.creative_control_desire = 50
+        self.wage_demand = wage_demand
+        self.indie_authenticity_preference = 0.7
+

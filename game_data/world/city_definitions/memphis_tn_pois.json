@@ -1,0 +1,46 @@
+{
+  "location_id": "memphis_tn",
+  "points_of_interest": [
+    {
+      "poi_id": "memphis_transit_hub",
+      "name": "Beale Street Transit & Fleet Depot",
+      "description": "Vehicle sales, rentals, city taxis, and tour fleet booking.",
+      "category": "TRANSPORT_HUB",
+      "interaction_options": ["Buy Vehicle", "Rent Vehicle", "Hail Taxi ($15)", "Hire Dedicated Driver", "Manager Pre-Book Fleet"]
+    },
+    {
+      "poi_id": "memphis_sun_studio",
+      "name": "Sun Recording Studio",
+      "description": "The birthplace of Rock 'n' Roll where early legends recorded.",
+      "category": "STUDIO_RECORDING",
+      "interaction_options": ["Book Studio Time (4 hours, $200)", "Record a song"],
+      "properties": {
+        "studio_quality": 0.86,
+        "hourly_rate": 50
+      }
+    },
+    {
+      "poi_id": "memphis_motel",
+      "name": "Beale Street River Motel",
+      "description": "Comfortable lodging close to blues bars.",
+      "category": "HOTEL",
+      "interaction_options": ["Book Night Rest ($40)", "Sleep in Van ($0)"]
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "memphis_beale_club",
+      "name": "Beale Street Blues Club",
+      "description": "Authentic Memphis blues joint with electric guitar jams.",
+      "venue_type": "CLUB",
+      "category": "VENUE",
+      "capacity": 400,
+      "prestige": 3,
+      "genre_bias": {"Rock": 1.4, "Country": 1.2, "Folk": 1.2},
+      "properties": {
+        "booking_fee": 90,
+        "allows_player_booking": true
+      }
+    }
+  ]
+}

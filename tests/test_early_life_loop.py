@@ -54,8 +54,8 @@ class TestEarlyLifeLoop(unittest.TestCase):
         self.player.hunger = 10
         self.player.stress = 5
 
-        self.location = Location("Your Hometown")
-        home = PointOfInterest("hometown_home", "Home", "Home", category="HOME", parent_location_id="Your Hometown")
+        self.location = Location("Asbury Park, NJ")
+        home = PointOfInterest("asbury_home", "Home", "Home", category="HOME", parent_location_id="Asbury Park, NJ")
         self.location.add_poi(home)
         self.player.current_location = self.location
         self.player.current_poi = home
@@ -142,7 +142,7 @@ class TestEarlyLifeLoop(unittest.TestCase):
         self.loop.bootstrap_player_jobs(self.player)
         result = self.loop.schedule_job_shift(self.player, "warehouse_distribution", start_time=GameTime(2024, 1, 1, 8, 0))
         event = self.player.schedule.scheduled_items[-1]
-        other_city = Location("City Center")
+        other_city = Location("Philadelphia, PA")
         self.player.current_location = other_city
         self.player.current_poi = SimpleNamespace(poi_id="citycenter_square")
 

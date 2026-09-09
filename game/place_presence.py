@@ -6,6 +6,13 @@ from game.game_time import current_game_time
 
 
 CATEGORY_TO_PLACE_TYPE = {
+    "HOTEL": "hotel",
+    "ACCOMMODATION_CHEAP": "motel",
+    "ACCOMMODATION_LUXURY": "hotel",
+    "SHOP_PAWN": "pawn_shop",
+    "PUBLIC_PARK": "street",
+    "BUS_STOP": "transit",
+    "AIRPORT": "transit",
     "PAWN_SHOP": "pawn_shop",
     "ACCOMMODATION_HOTEL": "hotel",
     "ACCOMMODATION_MOTEL": "motel",
@@ -184,7 +191,7 @@ class LocationActionEngine:
         if not canonical:
             return None
 
-        if requested_id.startswith("practice_music"):
+        if requested_id.startswith("practice_music") or requested_id == "sleep_rest":
             minutes = max(1, int(requested_action.minutes))
             return LocalAction(
                 action_id=requested_id,

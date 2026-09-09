@@ -6,6 +6,9 @@ class GameTime:
         self.hour = start_hour        # 0-23
         self.minute = start_minute    # 0-59
 
+    def day_index(self):
+        return self.year * 360 + (self.month - 1) * 30 + self.day - 1
+
     def advance_time(self, minutes=0):
         if minutes < 0:
             print("Warning: Cannot advance time backwards.")
@@ -97,12 +100,10 @@ class GameTime:
 # Global game time instance
 current_game_time = GameTime()
 
-def advance_game_time(minutes=0):
-    """Helper function to advance the global game time by a number of minutes."""
-    current_game_time.advance_time(minutes=minutes)
-    # Optional: print time advancement details here, or let main loop handle it.
-    # For now, keeping it less verbose. Callers can print if needed.
-    # print(f"Time advanced by {minutes} minutes. Current time: {current_game_time}")
+def advance_game_time(minutes=0, hours=0, days=0):
+    """Helper function to advance the global game time by minutes, hours, and/or days."""
+    total_minutes = minutes + (hours * 60) + (days * 24 * 60)
+    current_game_time.advance_time(minutes=total_minutes)
 
 
 def get_current_time_str(date_only=False):
